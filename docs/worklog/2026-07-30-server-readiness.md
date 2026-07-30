@@ -479,3 +479,29 @@
   единственный active owner — `auction/admin_lifecycle`.
 - Проверки: `tests/test_phase5_regressions.py -q -p no:cacheprovider` —
   8 passed; `git diff --check` — успешно.
+
+## Продолжение: transactional non-auction delivery and callback safety
+
+- Улучшаемая существующая функция: ежедневные и card-day уведомления, а также
+  админская рассылка. Это не новая предметная логика: отправка перенесена в
+  существующий Telegram outbox, чтобы рестарт процесса не оставлял частично
+  отправленную или повторённую рассылку.
+- Card-day marker и outbox row теперь создаются единым repository transaction
+  во всех трёх путях уведомления. Прямой Telegram send и старый отдельный
+  marker из worker-а удалены.
+- Daily announcement ставится в outbox с dedupe scope даты; длинный текст
+  делится на Telegram-safe chunks, каждый со своей idempotency identity.
+  Админская broadcast использует queued `copy_message`, а UI сообщает число
+  поставленных в очередь получателей, а не неподтверждённую доставку.
+- Исправлен unbound datetime после ошибки парсинга времени аукциона и
+  безопасный callback answer при отписке. Старые warning handlers окончательно
+  сняты с compatibility router, поэтому active owner не дублируется.
+- Phase-6 static checks перенесены на фактические production owners после
+  bootstrap/market split. Compatibility `auction_comments` сохранён в пределах
+  migration budget; его остаточный presentation code — отдельный дальнейший
+  рефакторинговый срез, не блокирующий deployment-контракт.
+- Проверки: `tests/test_phase6_regressions.py -q -p no:cacheprovider` —
+  13 passed; `git diff --check` — успешно.
+- Статус: частично. Следующий шаг: выполнить full pytest от текущего
+  checkpoint, исправлять только подтверждённые runtime/owner-contract failures
+  и затем повторно проверить Linux Compose/image build.

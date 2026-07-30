@@ -543,8 +543,7 @@ async def _legacy_admin_stop_auction(message: types.Message):
     )
 
 
-@router.message(F.text.lower().startswith('макс размут'))
-async def admin_unmute(message: types.Message):
+async def _legacy_admin_unmute(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
         return
@@ -950,8 +949,7 @@ def _legacy_parse_bid(text: str) -> int | None:
     return None
 
 
-@router.message(F.text.lower().startswith('макс бан'))
-async def admin_ban_user(message: types.Message):
+async def _legacy_admin_ban_user(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
         return
@@ -3312,8 +3310,7 @@ def _format_result(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-@router.message(Command("prune_warns"))
-async def cmd_prune_warns(message: Message, command: CommandObject, bot: Bot) -> None:
+async def _legacy_cmd_prune_warns(message: Message, command: CommandObject, bot: Bot) -> None:
     """
     /prune_warns [--dry|-n] [--user|-u <id>|<id>]
     Примеры:
@@ -3443,8 +3440,7 @@ async def prune_old_warns(*, target_user_id: int | None = None, dry: bool = Fals
     )
 
 
-@router.message(Command("prune_warns"), F.chat.type.in_({"private", "supergroup", "group"}))
-async def cmd_prune_warns(message: Message, bot: Bot, command: CommandObject):
+async def _legacy_cmd_prune_warns_compat(message: Message, bot: Bot, command: CommandObject):
     """
     /prune_warns                — глобальная чистка старше 30 дней у всех с <4 предами
     /prune_warns --dry          — показать, что удалится, без удаления

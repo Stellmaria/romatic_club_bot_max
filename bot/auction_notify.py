@@ -18,12 +18,11 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dateutil import parser as _parser
 from dateutil import tz
 
-from bot.handlers.admin.helper.new.helper import notify_users
 from bot.handlers.helper.helpers_users import get_user_ids_from_usernames, format_today_lots_fancy
 from bot.services.outbox import TelegramOutboxService
 from bot.utils import currency_emoji
 from db.legacy import get_settings, set_settings, get_card_by_id, get_card_subscribers, get_auctions_by_date, \
-    mark_card_day_notified, list_auctions, get_auction_owner_id, get_users_with_pref, \
+    list_auctions, get_auction_owner_id, get_users_with_pref, \
     get_auction_winner, subscribers_for_lot_title, get_card_full_by_id, find_card_by_name_hero, subscribers_for_deck, \
     subscribers_for_rarity
 
@@ -222,6 +221,25 @@ def build_card_day_text(lot: dict, now: datetime) -> tuple[str, bool]:
     return text, True
 
 
+async def _enqueue_card_day_notification(
+    *,
+    user_id: int,
+    card_id: int,
+    day,
+    text: str,
+) -> None:
+    """Atomically claim a card-day reminder and queue it for delivery."""
+    try:
+        await (await TelegramOutboxService.create()).enqueue_card_day_notification(
+            user_id=user_id,
+            card_id=card_id,
+            day=day,
+            text=text,
+        )
+    except DBError as err:
+        logger.warning("card-day outbox enqueue(%s, %s, %s) failed: %s", user_id, card_id, day, err)
+
+
 async def notify_card_day_subscribers(bot):
     now = datetime.now(MSK)
     today = now.date()
@@ -240,8 +258,9 @@ async def notify_card_day_subscribers(bot):
             continue
 
         for uid in subs:
-            if await mark_card_day_notified(uid, card_id, today):
-                await notify_users(bot, [uid], text)
+            await _enqueue_card_day_notification(
+                user_id=int(uid), card_id=int(card_id), day=today, text=text
+            )
 
 
 def _to_str(v) -> str:
@@ -265,8 +284,9 @@ async def notify_new_subscriber_today(bot, user_id: int, card_id: int) -> None:
         if not ok:
             continue
 
-        if await mark_card_day_notified(user_id, card_id, today):
-            await notify_users(bot, [user_id], text)
+        await _enqueue_card_day_notification(
+            user_id=user_id, card_id=card_id, day=today, text=text
+        )
         break
 
 
@@ -514,13 +534,9 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                 continue
 
             for uid in subs:
-                try:
-                    first_time_today: bool = await mark_card_day_notified(uid, cid, today)
-                except DBError as err:
-                    logger.warning("mark_card_day_notified(%s, %s, %s) failed: %s", uid, cid, today, err)
-                    first_time_today = False
-                if first_time_today:
-                    await notify_users(bot, [uid], text)
+                await _enqueue_card_day_notification(
+                    user_id=int(uid), card_id=cid, day=today, text=text
+                )
 
         try:
             auctions: List[Dict[str, Any]] = await list_auctions(["active"])
@@ -623,8 +639,8 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
             users_1min = await pref("notify_bid_reminder")
             users_end = await pref("notify_auction_end")
 
-            st_dt: Optional[datetime]
-            et_dt: Optional[datetime]
+            st_dt: Optional[datetime] = None
+            et_dt: Optional[datetime] = None
             try:
                 st_dt = to_msk_dt(auction.get("start_time"))
                 et_dt = to_msk_dt(auction.get("end_time"))
@@ -742,12 +758,30 @@ async def send_daily_announce(bot: Bot):
             items.append(f"• {html.escape(a.get('card_name', '-'))} ({html.escape(a.get('hero_name', '-'))}) в {t}")
         msg = "📅 <b>Анонс на сегодня</b>\n" + "\n".join(items)
 
-    for uid in uids:
-        try:
-            await bot.send_message(uid, msg, parse_mode="HTML", disable_web_page_preview=True, protect_content=False)
-        except TelegramAPIError:
-            continue
-        await asyncio.sleep(0.05)
+    for chunk_index, chunk in enumerate(_telegram_text_chunks(msg), start=1):
+        await (await TelegramOutboxService.create()).enqueue_messages(
+            topic="daily",
+            dedupe_scope=f"{today.isoformat()}:{chunk_index}",
+            messages={int(uid): chunk for uid in uids},
+        )
+
+
+def _telegram_text_chunks(text: str, *, limit: int = 4096) -> list[str]:
+    """Split a Telegram text on line boundaries while preserving every character."""
+    if len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = text
+    while len(remaining) > limit:
+        split_at = remaining.rfind("\n", 0, limit + 1)
+        if split_at <= 0:
+            split_at = limit
+        chunks.append(remaining[:split_at])
+        remaining = remaining[split_at:].lstrip("\n")
+    if remaining:
+        chunks.append(remaining)
+    return chunks
 
 
 async def _sleep_until(hour: int, minute: int, tz: ZoneInfo):

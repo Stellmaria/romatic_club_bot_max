@@ -1,12 +1,11 @@
 from aiogram import Router, F, types
-from aiogram.exceptions import TelegramForbiddenError, TelegramNotFound, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 
-from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES
 from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.services.outbox import TelegramOutboxService
 from db.legacy import get_all_users, log_audit_action
 from bot.legacy_fsm import BroadcastFSM
 
@@ -44,19 +43,16 @@ def register_broadcast_handlers(router: Router):
                 reply_markup=types.ReplyKeyboardRemove()
             )
             return
-        count = 0
-        for user in users:
-            try:
-                await message.bot.copy_message(
-                    chat_id=user["user_id"],
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id
-                )
-                count += 1
-            except (TelegramForbiddenError, TelegramNotFound, TelegramBadRequest):
-                continue
+        result = await (await TelegramOutboxService.create()).enqueue_copy_message_broadcast(
+            topic="admin-broadcast",
+            dedupe_scope=f"{message.chat.id}:{message.message_id}",
+            recipients=(int(user["user_id"]) for user in users),
+            from_chat_id=message.chat.id,
+            message_id=message.message_id,
+        )
+        count = result.queued
         await message.answer(
-            ADMIN_MESSAGES["broadcast_done"].format(count=count),
+            f"Рассылка поставлена в очередь для {count} пользователей.",
             reply_markup=types.ReplyKeyboardRemove()
         )
         text = format_admin_action_log(
@@ -70,5 +66,5 @@ def register_broadcast_handlers(router: Router):
             user_id=message.from_user.id,
             action_type="broadcast",
             auction_id=None,
-            details=f"Текст рассылки: {message.text} | Получателей: {count}"
+            details=f"Текст рассылки: {message.text} | Поставлено в очередь: {count}"
         )

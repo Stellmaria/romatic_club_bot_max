@@ -443,7 +443,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
     async def unsubscribe_card_cb(call: types.CallbackQuery):
         sub_id = int(call.data.split("_")[1])
         await unsubscribe_from_card(sub_id, call.from_user.id)
-        await call.answer("Подписка удалена")
+        await safe_call_answer(call, "Подписка удалена")
 
     @router.callback_query(F.data == "sub:back_cards")
     async def back_cards_universal(call: types.CallbackQuery, state: FSMContext):
