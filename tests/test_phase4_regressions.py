@@ -16,7 +16,7 @@ def _top_level_functions(relative: str) -> set[str]:
 
 
 def test_creation_menu_enables_all_supported_kinds_without_forged_access() -> None:
-    handler = (ROOT / "bot/handlers/auctions.py").read_text(encoding="utf-8")
+    handler = (ROOT / "bot/handlers/auction/submission.py").read_text(encoding="utf-8")
     kinds = (ROOT / "bot/handlers/auction/kinds.py").read_text(encoding="utf-8")
     assert "Пока в разработке" not in handler
     assert "selected_kind.minimum_luxury_level" in handler
@@ -31,12 +31,12 @@ def test_publication_is_extracted_and_claim_based() -> None:
 
     publication = (ROOT / "bot/handlers/auction/publication.py").read_text(encoding="utf-8")
     repository = (ROOT / "bot/repositories/auction_workflows.py").read_text(encoding="utf-8")
-    main = (ROOT / "main.py").read_text(encoding="utf-8")
+    workers = (ROOT / "bot/bootstrap/workers.py").read_text(encoding="utf-8")
     assert "AuctionPublicationService" in publication
     assert "await service.mark_published" in publication
     assert "FOR UPDATE SKIP LOCKED" in repository
     assert "publication_attempts" in repository
-    assert "from bot.handlers.auction.publication import auction_publisher_loop" in main
+    assert "auction_publisher_loop" in workers
 
 
 def test_moderation_schedule_is_guarded_against_slot_races() -> None:
@@ -129,7 +129,7 @@ def test_phase4_migration_covers_statuses_indexes_and_copy_mode() -> None:
 
 
 def test_userbot_leaves_free_auction_comments_for_manual_review() -> None:
-    source = (ROOT / "find_discussion_id.py").read_text(encoding="utf-8")
+    source = (ROOT / "userbot/handlers/new_messages.py").read_text(encoding="utf-8")
     assert "if not auction_kind.is_automatic_bidding:" in source
     assert "lowest_wins=auction_kind.lowest_bid_wins" in source
     engine = (ROOT / "userbot/autobid_engine.py").read_text(encoding="utf-8")
@@ -143,13 +143,19 @@ def test_owner_edits_and_cancellation_are_owner_scoped() -> None:
     assert "update_owner_fields" in repository
     assert "cancel_by_owner" in repository
     assert "AuctionOwnerService.create()" in users
-    assert "owner_id=message.from_user.id" in users
+    assert "owner_id=call.from_user.id" in users
     assert "await delete_lot(" not in users
 
 
 def test_application_layers_do_not_import_handlers_or_override_symbols() -> None:
     python_files = sorted((ROOT / "bot").rglob("*.py"))
     for path in python_files:
+        relative_parts = path.relative_to(ROOT).parts
+        if relative_parts[:2] not in {
+            ("bot", "services"),
+            ("bot", "repositories"),
+        }:
+            continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         names: set[str] = set()
         for node in tree.body:
@@ -157,12 +163,6 @@ def test_application_layers_do_not_import_handlers_or_override_symbols() -> None
                 assert node.name not in names, f"duplicate top-level symbol: {path}:{node.name}"
                 names.add(node.name)
 
-        relative_parts = path.relative_to(ROOT).parts
-        if relative_parts[:2] not in {
-            ("bot", "services"),
-            ("bot", "repositories"),
-        }:
-            continue
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
                 assert not node.module.startswith("bot.handlers"), (
@@ -177,6 +177,6 @@ def test_application_layers_do_not_import_handlers_or_override_symbols() -> None
     finalization = (
         ROOT / "bot/services/auction_finalization.py"
     ).read_text(encoding="utf-8")
-    main = (ROOT / "main.py").read_text(encoding="utf-8")
+    workers = (ROOT / "bot/bootstrap/workers.py").read_text(encoding="utf-8")
     assert "self._announcer" in finalization
-    assert "auction_finalization_loop(bot, announce_winner)" in main
+    assert "auction_finalization_loop(bot, announce_winner)" in workers

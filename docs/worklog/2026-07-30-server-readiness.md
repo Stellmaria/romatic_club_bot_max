@@ -450,3 +450,20 @@
 - Проверки: `tests/test_phase3_regressions.py -q` — 8 passed. Локальный ruff
   не завершился только потому, что sandbox не позволяет создать temp-файл в
   существующей `.ruff_cache`; CI lint ранее проходит в чистом Linux runner.
+
+## Продолжение: owner-scoped auction actions and autobid kind guard
+
+- Userbot autobid engine теперь не планирует snipe для типов аукционов, где
+  autobid запрещён доменной моделью. Это исключает автоматические ставки на
+  free/reverse и других неподдерживаемых сценариях.
+- Удаление pending-лота из пользовательского callback переведено на
+  `AuctionOwnerService`: ownership проверяется до изменения, а отмена остаётся
+  атомарной repository operation. Старый `delete_lot` больше не вызывается
+  из этого user flow.
+- Убраны дубли `_one_line`, `_truncate`, `_admin_dict`, `_fmt_age`, `_mask_uid`,
+  найденные static regression scan; phase-4 test ограничен application layers
+  (`services`/`repositories`), как заявляет его название.
+- Проверки: `tests/test_phase4_regressions.py -q -p no:cacheprovider` —
+  10 passed; `git diff --check` — успешно. Python cache files нельзя
+  записывать в текущей sandbox, поэтому compileall здесь не является
+  достоверной проверкой и оставлен для CI/Linux runner.

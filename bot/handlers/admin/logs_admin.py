@@ -167,13 +167,6 @@ async def send_lot_edit_log(
     )
 
 
-def _admin_dict(user: object) -> dict:
-    user_id = getattr(user, "id", None)
-    username = getattr(user, "username", None)
-    full_name = getattr(user, "full_name", None)
-    return {"id": user_id, "username": username or full_name or str(user_id)}
-
-
 def _short_media_id(v: object) -> str:
     """Чтобы логи не превращались в простыню из file_id на 300 символов."""
     if v is None:

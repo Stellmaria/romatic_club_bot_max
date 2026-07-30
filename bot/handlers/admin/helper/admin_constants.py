@@ -343,22 +343,6 @@ def _truncate(s: str, max_len: int) -> str:
     return s[: max_len - 1].rstrip() + "…"
 
 
-import html
-
-MAX_TG_CAPTION_LEN = 1024  # лимит подписи к фото
-
-
-def _one_line(s: str) -> str:
-    return " ".join(str(s).replace("\r", "\n").splitlines()).strip()
-
-
-def _truncate(s: str, max_len: int) -> str:
-    s = str(s)
-    if len(s) <= max_len:
-        return s
-    return s[: max_len - 1].rstrip() + "…"
-
-
 def render_auction_caption(
         auction: dict,
         *,

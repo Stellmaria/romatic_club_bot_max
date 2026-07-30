@@ -146,31 +146,6 @@ def _fmt_tiers_for_view(tiers: list[dict]) -> str:
 
 
 def _fmt_age(dt: datetime) -> str:
-    if dt.tzinfo is None:
-        now = datetime.utcnow()
-    else:
-        now = datetime.now(tz=dt.tzinfo)
-    delta = now - dt
-    secs = int(delta.total_seconds())
-    if secs < 60:
-        return f"{secs} сек."
-    mins = secs // 60
-    if mins < 60:
-        return f"{mins} мин."
-    hours = mins // 60
-    if hours < 24:
-        return f"{hours} ч."
-    days = hours // 24
-    if days < 30:
-        return f"{days} дн."
-    months = days // 30
-    if months < 12:
-        return f"{months} мес."
-    years = months // 12
-    return f"{years} г."
-
-
-def _fmt_age(dt: datetime) -> str:
     if not dt:
         return "—"
     now = datetime.now(tz=timezone.utc if dt.tzinfo else None)

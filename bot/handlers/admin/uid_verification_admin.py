@@ -63,13 +63,6 @@ def _uidv_user_line(req: dict) -> str:
     return f"id{req.get('user_id')}"
 
 
-def _mask_uid(uid: str) -> str:
-    s = (uid or "").strip()
-    if len(s) <= 8:
-        return s
-    return f"{s[:4]}…{s[-4:]}"
-
-
 def _parse_ban_reason_and_until(text: str):
     s = (text or "").strip()
     if not s or s in ("-", "—"):

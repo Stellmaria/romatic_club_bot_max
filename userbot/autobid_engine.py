@@ -3,6 +3,7 @@ import logging
 import time
 from datetime import datetime
 
+from bot.domain.auctions import AuctionKind
 from db.legacy import (
     get_lot_by_id,
     get_top_bid_for_auction,
@@ -354,6 +355,9 @@ async def _snipe_task(client, *, discussion_chat_id: int | None, auction_id: int
 async def maybe_place_autobid(client, *, discussion_chat_id: int | None, auction_id: int) -> None:
     auction = await get_lot_by_id(int(auction_id))
     if not auction or str(auction.get("status")) != "active":
+        return
+    kind = AuctionKind.from_raw(auction.get("auction_kind"))
+    if not kind.supports_autobid:
         return
 
     await schedule_snipe(client, discussion_chat_id=discussion_chat_id, auction=auction)

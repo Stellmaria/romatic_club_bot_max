@@ -24,9 +24,9 @@ from bot.handlers.helper.helpers_users import (
     user_edit_lot_keyboard,
 )
 from bot.keyboards.keyboards import back_to_menu_keyboard, currency_choice_keyboard
+from bot.services.auction_workflows import AuctionOwnerService
 from db.legacy import (
     add_delete_request,
-    delete_lot,
     get_auctions_by_date,
     get_lot_by_id,
     get_settings,
@@ -729,13 +729,17 @@ async def cb_my_lots_view(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("delete_lot|"))
 async def user_delete_lot(call: types.CallbackQuery, state: FSMContext):
     lot_id = int(call.data.split("|")[1])
-    lot = await get_lot_by_id(lot_id)
+    owner_service = await AuctionOwnerService.create()
+    try:
+        lot = await owner_service.get_owned(lot_id, owner_id=call.from_user.id)
+    except LookupError:
+        lot = None
     if not lot:
-        await call.answer("Лот не найден.", show_alert=True)
+        await call.answer("Лот не найден или недоступен.", show_alert=True)
         return
 
     if lot["status"] == "pending":
-        await delete_lot(lot_id)
+        await owner_service.cancel(lot_id, owner_id=call.from_user.id)
         await call.message.answer("Лот удалён.")
         owners_text = await get_pretty_owners_for_log(lot_id)
         log_text = format_admin_action_log(
