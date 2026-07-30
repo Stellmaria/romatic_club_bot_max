@@ -138,24 +138,7 @@ async def _send_media_any(
 
 
 async def _progress(request_id: int) -> dict:
-    rows = await fetch(
-        """
-        SELECT r.user_id,
-               r.created_at,
-               (SELECT count(*)
-                FROM uid_verification_confirmations c
-                WHERE c.request_id = r.id
-                  AND c.status = 'confirmed')                                          AS confirmed_cnt,
-               (SELECT count(*)
-                FROM uid_verification_confirmations c
-                WHERE c.request_id = r.id
-                  AND c.status IN ('pending', 'confirmed', 'rejected', 'unreachable')) AS total_cnt
-        FROM uid_verification_requests r
-        WHERE r.id = $1
-        """,
-        int(request_id),
-    )
-    return dict(rows[0]) if rows else {}
+    return await (await UIDVerificationService.create()).progress(request_id) or {}
 
 
 async def _notify_request_owner(bot: Bot, request_id: int, actor: types.User, action: str) -> None:
@@ -1080,15 +1063,7 @@ async def send_uid_verification_confirmation_request(bot: Bot, request_id: int, 
             break
 
     # кто подал заявку (для текста)
-    owner_row = await fetchrow(
-        """
-        SELECT u.username, u.full_name, r.user_id
-        FROM public.uid_verification_requests r
-        LEFT JOIN public.users u ON u.user_id = r.user_id
-        WHERE r.id = $1
-        """,
-        int(request_id),
-    )
+    owner_row = req
     owner_tag = None
     if owner_row:
         ou = (owner_row.get("username") or "").strip()
@@ -1142,16 +1117,7 @@ import html
 
 @router.callback_query(F.data == "uidv|start")
 async def uidv_start(call: types.CallbackQuery, state: FSMContext) -> None:
-    row = await fetchrow(
-        """
-        SELECT id, status, revision_flags, revision_reason
-        FROM uid_verification_requests
-        WHERE user_id=$1
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        int(call.from_user.id),
-    )
+    row = await (await UIDVerificationService.create()).get_latest_request(call.from_user.id)
     if not row:
         await call.answer("Заявок нет. Начни заново: /verify_uid", show_alert=True)
         return
@@ -1234,22 +1200,11 @@ async def uidv_fix_start(call: types.CallbackQuery, state: FSMContext) -> None:
 async def uidv_show_my_request(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
-    rows = await fetch(
-        """
-        SELECT id, status, revision_flags, revision_reason, admin_comment, created_at
-        FROM uid_verification_requests
-        WHERE user_id=$1
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        int(call.from_user.id),
-    )
-
-    if not rows:
+    req = await (await UIDVerificationService.create()).get_latest_request(call.from_user.id)
+    if not req:
         await call.message.answer("У тебя нет заявки. Отправить новую: /verify_uid", protect_content=False)
         return
 
-    req = dict(rows[0])
     rid = int(req["id"])
     st = (req.get("status") or "").strip().lower()
 
@@ -1288,23 +1243,13 @@ async def uidv_start_btn(call: types.CallbackQuery, state: FSMContext):
         return
 
     # если у пользователя есть заявка, покажем кратко; если нет — стартуем /verify_uid
-    rows = await fetch(
-        """
-        SELECT id, uid, status, revision_reason, revision_flags
-        FROM public.uid_verification_requests
-        WHERE user_id=$1
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        call.from_user.id,
-    )
-    if not rows:
+    r = await (await UIDVerificationService.create()).get_latest_request(call.from_user.id)
+    if not r:
         await verify_uid_start(call.message, state)
         return
 
-    r = rows[0]
     rid = int(r["id"])
-    uid = (r.get("uid") or "—")
+    uid = f"••••{r.get('uid_last4') or ''}" if r.get("uid_last4") else "—"
     st = (r.get("status") or "—")
     rev_reason = (r.get("revision_reason") or "").strip()
     rev_flags = r.get("revision_flags") or []

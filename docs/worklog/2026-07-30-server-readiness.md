@@ -207,6 +207,14 @@
   `MarketRepository` read model, listings/items/tiers owners. Boundary сокращён
   до 3 файлов; import render-модуля проходит.
 
+## Продолжение: UID request read models
+
+- Progress, owner details и latest request lookups перенесены в
+  `UIDVerificationRepository`. Исторический UI теперь показывает только
+  `uid_last4`, а не полный UID.
+- Общий handler SQL boundary сокращён до 2 файлов (`market_add_flow` и
+  `auction_comments`); import UID handler проходит.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,

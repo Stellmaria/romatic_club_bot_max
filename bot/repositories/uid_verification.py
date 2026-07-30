@@ -212,6 +212,22 @@ class UIDVerificationRepository:
             )
         return dict(row) if row else None
 
+    async def progress(self, request_id: int) -> dict[str, Any] | None:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT r.user_id, r.created_at,
+                       count(c.id) FILTER (WHERE c.status = 'confirmed')::int AS confirmed_cnt,
+                       count(c.id) FILTER (WHERE c.status IN ('pending', 'confirmed', 'rejected', 'unreachable'))::int AS total_cnt
+                FROM public.uid_verification_requests r
+                LEFT JOIN public.uid_verification_confirmations c ON c.request_id = r.id
+                WHERE r.id = $1
+                GROUP BY r.id
+                """,
+                int(request_id),
+            )
+        return dict(row) if row else None
+
     async def approve_request(
         self,
         *,

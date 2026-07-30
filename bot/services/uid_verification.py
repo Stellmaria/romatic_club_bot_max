@@ -85,6 +85,9 @@ class UIDVerificationService:
     async def get_latest_request(self, user_id: int) -> dict[str, Any] | None:
         return await self.repository.get_latest_request(user_id)
 
+    async def progress(self, request_id: int) -> dict[str, Any] | None:
+        return await self.repository.progress(request_id)
+
     async def get_request(self, request_id: int) -> dict[str, Any] | None:
         return await self.repository.get_request(request_id)
 
