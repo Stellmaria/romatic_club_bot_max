@@ -9,7 +9,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.handlers.admin.services.market_constants import BUMP_COOLDOWN, TIER_RE, MAP_PAY
-from db.legacy import market_get_listing, market_add_rate_tiers
+from bot.services.market import get_cards_ids_by_deck, market_replace_price
+from db.legacy import market_get_listing
 
 
 async def can_publish_more(_: Bot, user_id: int) -> Tuple[bool, int]:
@@ -79,34 +80,13 @@ def _normalize_pay_type(pay_type: str, cash_code: str | None = None) -> tuple[st
 
 
 async def _upsert_price(lid: int, pay_type: str, price: float | None, cash_code: str | None = None) -> None:
-    import importlib
     pay_type, cash_code = _normalize_pay_type(pay_type, cash_code)
-    dbmod = importlib.import_module("db.db")
-    pool = getattr(dbmod, "db_pool", None)
-    if pool is None:
-        return
-
-    delete_sql = """
-                 DELETE
-                 FROM market_rate_tiers
-                 WHERE listing_id = $1
-                   AND pay_type = $2
-                   AND COALESCE(cash_code, '') = COALESCE($3, '') \
-                 """
-    try:
-        await pool.execute(delete_sql, lid, pay_type, cash_code)  # type: ignore[attr-defined]
-    except AttributeError:
-        async with pool.acquire() as conn:
-            await conn.execute(delete_sql, lid, pay_type, cash_code)
-
-    if price is None:
-        return
-
-    tier = [{
-        "label": None, "qty": None, "pay_type": pay_type,
-        "cash_code": cash_code, "price": float(price), "sort_order": 999
-    }]
-    await market_add_rate_tiers(lid, tier)
+    await market_replace_price(
+        int(lid),
+        pay_type=pay_type,
+        cash_code=cash_code,
+        price=float(price) if price is not None else None,
+    )
 
 
 def parse_tiers(text: str) -> list[dict]:
@@ -176,18 +156,7 @@ def validate_price_by_currency(cur: str, value: float) -> tuple[bool, str | None
 
 
 async def fetch_deck_card_ids(deck_id: int) -> list[int]:
-    import importlib
-    dbmod = importlib.import_module("db.db")
-    pool = getattr(dbmod, "db_pool", None)
-    sql = "SELECT card_id FROM cards WHERE deck_id=$1 ORDER BY card_id"
-    if pool is None:
-        return []
-    try:
-        rows = await pool.fetch(sql, deck_id)
-    except AttributeError:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, deck_id)
-    return [int(r["card_id"]) for r in rows]
+    return await get_cards_ids_by_deck(int(deck_id))
 
 
 async def safe_edit_text(msg: Message, text: str, **kwargs) -> None:

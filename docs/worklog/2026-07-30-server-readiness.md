@@ -169,3 +169,10 @@
   pending confirmations в transaction. Импорт `main` проходит.
 - В UID handler осталось пять отдельных legacy SQL-операций для следующего
   repository-среза; общий boundary по-прежнему содержит 7 файлов.
+
+## Продолжение: market utility repository adoption
+
+- Замена и удаление price tier, а также выбор card ids по deck переведены на
+  существующие `MarketService`/`MarketRepository` operations.
+- `market_utils` больше не содержит SQL; общий handler SQL boundary сокращён
+  до 6 файлов. Импорт utility-модуля проходит.
