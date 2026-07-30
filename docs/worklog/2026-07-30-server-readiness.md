@@ -307,3 +307,9 @@
 - Проверки: `ruff check .` — успешно; `compileall` — успешно; architecture,
   DB modularization и feature import tests — 15 passed; server preflight для
   bot+userbot — успешно. Следующий CI должен подтвердить это на Linux.
+
+### Примечание CI
+
+- Первый Linux unit run показал отсутствие `pytest` и `pytest-asyncio` в
+  `requirements-dev.txt`; оба test runner dependencies зафиксированы в
+  development contract до следующего запуска CI.
