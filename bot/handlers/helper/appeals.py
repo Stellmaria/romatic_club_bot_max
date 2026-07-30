@@ -16,7 +16,7 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.handlers.admin.helper.new.admin_actions import send_admin_log
+from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.auction_comments import build_thanks_kb
 from bot.handlers.auctions import admin_tag

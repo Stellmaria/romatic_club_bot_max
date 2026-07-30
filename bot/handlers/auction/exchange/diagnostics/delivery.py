@@ -5,7 +5,7 @@ from collections import defaultdict
 from aiogram import Router, types
 from aiogram.filters import Command
 
-from bot.handlers.admin.helper.new.admin_actions import _safe_user_mention
+from bot.handlers.admin.action_support.compat import _safe_user_mention
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.admin_thanks import admin_tag, build_thanks_kb
 from bot.services.exchange_diagnostics import ExchangeDiagnosticsService

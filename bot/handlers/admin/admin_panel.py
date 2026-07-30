@@ -30,7 +30,7 @@ from bot.handlers.admin.helper.admin_service import (
     parse_auction_and_date_from_callback, get_free_slots_and_schedule_for_lot
 )
 from bot.handlers.admin.helper.new.Types import Owner
-from bot.handlers.admin.helper.new.admin_actions import (admin_add_remove,
+from bot.handlers.admin.action_support.compat import (admin_add_remove,
                                                          owner_or_secret_required, show_delete_requests_for_moderation,
                                                          show_pendinglots,
                                                          start_preview_schedule, start_edit_schedule,
@@ -39,7 +39,7 @@ from bot.handlers.admin.helper.new.admin_actions import (admin_add_remove,
                                                          process_universal_cancel_callback, _do_trusted_action,
                                                          safe_answer_photo,
                                                          )
-from bot.handlers.admin.helper.new.admin_actions import send_lot_card_safe
+from bot.handlers.admin.action_support.compat import send_lot_card_safe
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log, format_pending_lot
 from bot.handlers.admin.helper.new.keyboards import build_lot_keyboard  # если у тебя этот импорт уже есть
 from bot.handlers.admin.helper.new.keyboards import (

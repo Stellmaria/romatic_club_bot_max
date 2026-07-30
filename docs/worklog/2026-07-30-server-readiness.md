@@ -41,3 +41,18 @@
 - Следующий конкретный шаг: вынести admin actions в целевые модули без смены
   handler-контрактов, затем прогнать полный pytest и проверить Compose на
   Linux-хосте или Docker-enabled runner.
+
+## Продолжение: admin action facade
+
+- `admin_actions.py` заменён тонким compatibility-фасадом; 117 прежних
+  символов принадлежат шести существующим модулям `action_support`.
+- Production-потребители больше не импортируют retired facade; добавлен
+  временный мост `action_support.compat`, ссылающийся только на владельцев
+  действий.
+- `formatting.py` очищен от Telegram/БД workflow-дубликатов; logging и owner
+  lookups делегированы сервисам. Разорван цикл `formatting ↔ logs_admin`.
+- Проверки: `tests/test_admin_actions_decomposition.py`,
+  `tests/test_admin_architecture.py` и lifecycle test проходят (7 + 4 + 3).
+- Новый остаток полного pytest: `bot/handlers/admin/admin_panel.py` содержит
+  3659 строк при контракте thin facade <80 строк. Его разбиение — следующий
+  отдельный срез; в этом checkpoint не выполнялось.

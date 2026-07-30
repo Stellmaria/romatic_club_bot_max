@@ -34,7 +34,7 @@ from flask import Flask, request
 
 from bot.domain.auctions import AuctionKind, Currency
 from bot.handlers.admin.helper.admin_constants import WARN_TEXTS
-from bot.handlers.admin.helper.new.admin_actions import send_admin_log
+from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from config import DISCUSSION_CHAT_ID, ADMINS, BOT_TOKEN, LOG_CHAT_ID, AUCTION_CHANNEL_USERNAME, AUCTION_CHANNEL_ID, \
     ADMIN_LOG_CHATS

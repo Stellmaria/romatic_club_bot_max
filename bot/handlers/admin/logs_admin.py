@@ -139,8 +139,8 @@ async def send_lot_edit_log(
       await log_audit_action(...)
     """
     # Ленивая загрузка, чтобы не ловить циклические импорты.
-    from bot.handlers.admin.helper.new.admin_actions import get_lot_owners_text
-    from bot.handlers.admin.helper.new.formatting import (
+    from bot.handlers.admin.action_support.compat import get_lot_owners_text
+    from bot.presentation.admin import (
         format_admin_action_log,
         format_field_change_block,
     )
@@ -204,8 +204,8 @@ async def _log_lot_field_changes(
       await log_audit_action(...)
     """
     # ⚠️ ВАЖНО: импорты внутри функции = нет циклических импортов при старте бота
-    from bot.handlers.admin.helper.new.admin_actions import get_lot_owners_text
-    from bot.handlers.admin.helper.new.formatting import (
+    from bot.handlers.admin.action_support.compat import get_lot_owners_text
+    from bot.presentation.admin import (
         format_admin_action_log,
         format_field_change_block,
     )

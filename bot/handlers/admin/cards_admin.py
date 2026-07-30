@@ -2,7 +2,7 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 
 from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES, ADD_CARD_FIELDS
-from bot.handlers.admin.helper.new.admin_actions import start_add_card_fsm, send_admin_log
+from bot.handlers.admin.action_support.compat import start_add_card_fsm, send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_card_caption, format_admin_action_log
 from bot.handlers.admin.helper.new.keyboards import confirm_keyboard, rarity_keyboard, \
     decks_menu_keyboard, decks_keyboard, back_keyboard

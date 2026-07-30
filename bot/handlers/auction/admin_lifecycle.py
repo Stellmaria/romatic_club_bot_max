@@ -11,7 +11,7 @@ from aiogram.types import Message
 
 from bot.core.time import to_moscow, utc_now
 from bot.domain.auctions import InvalidAuctionTransition
-from bot.handlers.admin.helper.new.admin_actions import send_admin_log
+from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.services.auction_admin import AuctionAdminService
 from bot.services.auction_workflows import AuctionLifecycleService

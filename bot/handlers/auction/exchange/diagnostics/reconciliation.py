@@ -8,7 +8,7 @@ from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from bot.handlers.admin.helper.new.admin_actions import _safe_user_mention
+from bot.handlers.admin.action_support.compat import _safe_user_mention
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.exchange_diagnostics import ExchangeDiagnosticsService
 from config import ADMINS

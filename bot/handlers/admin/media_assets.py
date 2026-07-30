@@ -7,7 +7,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from bot.handlers.admin.helper.new.admin_actions import send_admin_log
+from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.auction_media import (
     configure_media_asset,

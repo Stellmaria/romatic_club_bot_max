@@ -1,7 +1,7 @@
 from datetime import date
 
 from bot.handlers.admin.helper.admin_constants import ADMIN_ERRORS
-from bot.handlers.admin.helper.new.admin_actions import send_admin_log, remove_admin_role
+from bot.handlers.admin.action_support.compat import send_admin_log, remove_admin_role
 from bot.handlers.admin.helper.user_helpers import resolve_user_from_message, format_user_ref, \
     build_grouped_schedule_lines_with_prefixes, find_free_slots, filter_slots_by_user_type
 from config import ADMINS_OWNERS

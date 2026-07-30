@@ -11,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.domain.auctions import InvalidExchangeTransition
-from bot.handlers.admin.helper.new.admin_actions import format_exchange_moderation_log, notify_exchange_user_moderation, send_admin_log, show_pendinglots
+from bot.handlers.admin.action_support.compat import format_exchange_moderation_log, notify_exchange_user_moderation, send_admin_log, show_pendinglots
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.admin_thanks import admin_tag, build_thanks_kb
 from bot.services.exchange_media import get_exchange_cover_media as _get_exchange_cover_media

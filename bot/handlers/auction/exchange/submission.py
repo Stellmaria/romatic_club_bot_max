@@ -11,7 +11,7 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from bot.handlers.admin.helper.new.admin_actions import _safe_user_mention, send_admin_log
+from bot.handlers.admin.action_support.compat import _safe_user_mention, send_admin_log
 from bot.handlers.admin.services.market_utils import safe_edit_text
 from bot.services.exchanges import ExchangeService
 from bot.telegram.media import answer_media_any as _answer_media_any

@@ -22,7 +22,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.helper.admin_constants import render_auction_caption, load_full_auction_ctx
-from bot.handlers.admin.helper.new.admin_actions import send_admin_log, format_exchange_moderation_log, \
+from bot.handlers.admin.action_support.compat import send_admin_log, format_exchange_moderation_log, \
     notify_exchange_user_moderation, _safe_user_mention
 from bot.handlers.admin.helper.new.utils import is_luxury_member
 from bot.handlers.admin.helper.new.wrapper import admin_only

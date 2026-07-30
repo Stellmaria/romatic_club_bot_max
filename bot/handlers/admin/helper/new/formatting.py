@@ -4,8 +4,6 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Mapping, Optional, Tuple, List, Dict, Iterable
 from zoneinfo import ZoneInfo
 
-from aiogram import Bot
-
 from bot.handlers.admin.helper.admin_constants import (
     CURRENCY_EMOJI,
     RARITY_EMOJI,
@@ -13,8 +11,8 @@ from bot.handlers.admin.helper.admin_constants import (
 )
 from bot.handlers.admin.helper.new.utils import auction_kind_label
 from bot.domain.auctions import currency_choices_label
-from bot.handlers.admin.logs_admin import send_admin_log
-from db.db import get_lot_by_id, get_lot_owners
+from bot.services.admin_logging import log_delete_request
+from bot.services.admin_owners import get_lot_owners_with_levels
 
 DT_FMT = "%d.%m.%Y %H:%M:%S"
 D_FMT = "%d.%m.%Y"
@@ -782,85 +780,6 @@ def format_auction_log(event_type: str, data: dict) -> str:
     return f"ℹ️ {event_type}: {data}"
 
 
-async def log_delete_request(bot: Optional[Bot], req: Mapping[str, Any]) -> None:
-    raw_snapshot = req.get("snapshot")
-    snapshot: Mapping[str, Any] = (
-        raw_snapshot if isinstance(raw_snapshot, Mapping) else {}
-    )
-
-    candidates = [
-        req.get("auction_id"),
-        req.get("lot_id"),
-        snapshot.get("auction_id"),
-        snapshot.get("lot_id"),
-    ]
-    auction_id: Optional[int] = next(
-        (x for x in (_try_int(c) for c in candidates) if x is not None),
-        None,
-    )
-
-    if auction_id is None:
-        source_text = _as_str(req.get("source_text"), "")
-        caption_text = _as_str(req.get("caption"), "")
-        auction_id = extract_auction_id(source_text or caption_text)
-
-    if not auction_id:
-        await send_admin_log(
-            bot,
-            "❗️ Некорректный идентификатор лота в заявке.\n"
-            "Действие: request_delete_lot через бота.",
-        )
-        return
-
-    lot: Optional[Mapping[str, Any]] = await get_lot_by_id(auction_id)
-    src: Mapping[str, Any] = lot if lot else snapshot
-
-    card_name = _as_str(src.get("card_name"), "-")
-    owners_txt = _as_str(src.get("owners_text"), "-")
-    start_price = _as_str(src.get("start_price"), "-")
-    currency = _as_str(src.get("currency"), "-")
-
-    start = src.get("start_time")
-    end = src.get("end_time")
-
-    def _fmt_date_time(st: object, et: object) -> Tuple[str, str]:
-        st_dt: Optional[datetime] = st if isinstance(st, datetime) else None
-        et_dt: Optional[datetime] = et if isinstance(et, datetime) else None
-
-        if st_dt is not None:
-            dt_date = st_dt.strftime(D_FMT)
-        else:
-            dt_date = _as_str(src.get("date"), "-")
-
-        if st_dt is not None and et_dt is not None:
-            dt_time = f"{st_dt.strftime(T_FMT)}–{et_dt.strftime(T_FMT)}"
-        else:
-            dt_time = _as_str(src.get("time"), "-")
-
-        return dt_date, dt_time
-
-    date_str, time_str = _fmt_date_time(start, end)
-    warn = "" if lot else (
-        "\n⚠️ Лот не найден в текущем расписании "
-        "(возможно перенесён/удалён)."
-    )
-
-    text = (
-        "🗑️ Запрос на удаление лота\n"
-        f"🎴 Лот №{auction_id}: {html.escape(card_name)}\n"
-        f"🙍‍♂️ Владелец(ы): {html.escape(owners_txt)}\n"
-        f"💰 Старт: {html.escape(start_price)} {html.escape(currency)}\n"
-        f"📅 Дата выхода: {html.escape(date_str)}\n"
-        f"⏰ Время: {html.escape(time_str)} (МСК)\n"
-        f"❗️ Причина удаления: "
-        f"{html.escape(_as_str(req.get('reason'), '-'))}\n"
-        "Действие: request_delete_lot через бота."
-        f"{warn}"
-    )
-
-    await send_admin_log(bot, text)
-
-
 def owners_to_html_with_status(owners_any: Any) -> str:
     if owners_any is None:
         return "—"
@@ -914,20 +833,6 @@ def owners_to_html_with_status(owners_any: Any) -> str:
                 out.append(label + badge_str)
 
     return ", ".join(out) if out else "—"
-
-
-async def get_lot_owners_with_levels(bot: Bot, auction_id: int) -> list[dict]:
-    from bot.handlers.auctions import get_user_luxury_level  # локальный импорт, чтоб не словить цикл
-
-    owners = await get_lot_owners(int(auction_id))
-    for o in owners:
-        uid = int(o.get("user_id") or 0)
-        if uid:
-            try:
-                o["luxury_level"] = await get_user_luxury_level(bot, uid)
-            except Exception:
-                o["luxury_level"] = 1 if o.get("is_luxury") else 0
-    return owners
 
 
 def format_exchange_admin_log(

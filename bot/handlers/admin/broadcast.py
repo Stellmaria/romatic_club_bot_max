@@ -3,7 +3,7 @@ from aiogram.exceptions import TelegramForbiddenError, TelegramNotFound, Telegra
 from aiogram.fsm.context import FSMContext
 
 from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES
-from bot.handlers.admin.helper.new.admin_actions import send_admin_log
+from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only

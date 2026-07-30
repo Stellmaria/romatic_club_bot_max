@@ -10,7 +10,7 @@ from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from bot.handlers.admin.helper.new.admin_actions import send_admin_log
+from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.exchange_media import get_exchange_cover_media as _get_exchange_cover_media
 from bot.services.exchanges import ExchangeService

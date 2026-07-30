@@ -25,7 +25,7 @@ from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES, REJECT_LOT
 from bot.handlers.admin.helper.admin_keyboards import days_keyboard
 from bot.handlers.admin.helper.admin_keyboards import months_keyboard
 from bot.handlers.admin.helper.admin_service import get_free_slots_and_schedule_for_lot
-from bot.handlers.admin.helper.new.admin_actions import owner_or_secret_required, get_lot_owners_text, \
+from bot.handlers.admin.action_support.compat import owner_or_secret_required, get_lot_owners_text, \
     safe_edit_message, process_reject_action, admin_add_remove, send_admin_log, show_delete_requests_for_moderation, \
     add_deck_fsm_entry, start_preview_schedule, \
     start_edit_schedule, process_universal_cancel_text, owners_to_links_text, tg_clean, \
