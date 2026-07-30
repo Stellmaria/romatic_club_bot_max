@@ -215,6 +215,13 @@
 - Общий handler SQL boundary сокращён до 2 файлов (`market_add_flow` и
   `auction_comments`); import UID handler проходит.
 
+## Продолжение: auction winner read service
+
+- Повторяющиеся currency и discussion-message lookups в auction comments
+  переведены на `AuctionWinnerService`/repository. `main` import и
+  architecture tests проходят (10 passed); два крупных legacy файла ещё
+  остаются в общем SQL-boundary test.
+
 ## Контрольный runtime-аудит
 
 - `compileall` для bot/db/userbot/scripts, `import main` и

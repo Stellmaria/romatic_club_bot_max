@@ -36,6 +36,7 @@ from bot.domain.auctions import AuctionKind, Currency
 from bot.handlers.admin.helper.admin_constants import WARN_TEXTS
 from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
+from bot.services.auction_winners import AuctionWinnerService
 from bot.core.legacy_config import DISCUSSION_CHAT_ID, ADMINS, BOT_TOKEN, LOG_CHAT_ID, AUCTION_CHANNEL_USERNAME, AUCTION_CHANNEL_ID, \
     ADMIN_LOG_CHATS
 from db import db
@@ -2479,8 +2480,7 @@ async def msg_print_win_edit_single_field(message: types.Message, bot: Bot):
                 await message.answer("❌ Цена должна быть числом (пример: 6700 или 6k) или '-'.", parse_mode="HTML")
                 return
 
-            a = await fetchrow("SELECT currency FROM public.auctions WHERE auction_id = $1", auction_id) or {}
-            cur = (a.get("currency") or "").lower()
+            cur = (await _auction_currency(auction_id)).lower()
             if cur in {"алмазы", "diamond", "diamonds"} and val % 10 != 0:
                 await message.answer("Для 💎 ставка/цена должна быть кратной 10.", parse_mode="HTML")
                 return
@@ -3093,8 +3093,7 @@ async def handle_pending_edit(message: types.Message, bot: Bot):
             val = int(txt)
 
         # валидация по валюте
-        a = await fetchrow("SELECT currency FROM public.auctions WHERE auction_id = $1", auction_id) or {}
-        cur = (a.get("currency") or "").lower()
+        cur = (await _auction_currency(auction_id)).lower()
         if cur in {"алмазы", "diamond", "diamonds"} and val % 10 != 0:
             await message.answer("Для алмазов ставка должна быть кратной 10.");
             return
@@ -3167,8 +3166,11 @@ RULES_COMMENT = (
 
 
 async def _get_discussion_msg_id(auction_id: int) -> int | None:
-    row = await fetchrow("SELECT discussion_message_id FROM public.auctions WHERE auction_id = $1", auction_id)
-    return int(row["discussion_message_id"]) if row and row.get("discussion_message_id") else None
+    return await (await AuctionWinnerService.create()).discussion_message_id(auction_id)
+
+
+async def _auction_currency(auction_id: int) -> str:
+    return await (await AuctionWinnerService.create()).auction_currency(auction_id) or ""
 
 
 async def _post_rules_under_lot(bot: Bot, auction_id: int, retries: int = 5, delay: float = 1.5) -> None:
@@ -3238,8 +3240,7 @@ async def cb_winner_send(call: types.CallbackQuery, bot: Bot):
                                                                   override_amount=override_amount)
 
     now_str = _fmt_msk(_msk_now())
-    cur = (await fetchrow("SELECT currency FROM public.auctions WHERE auction_id=$1", auction_id)) or {}
-    cur_emoji = _emoji_by_currency(cur.get("currency"))
+    cur_emoji = _emoji_by_currency(await _auction_currency(auction_id))
 
     lines = [
         f"📨 Рассылка по лоту <b>{auction_id}</b> завершена ({now_str} МСК).",
@@ -3779,8 +3780,7 @@ async def cb_print_win_send_owner(call: types.CallbackQuery, bot: Bot):
         admin_user=call.from_user,
     )
 
-    cur = (await fetchrow("SELECT currency FROM public.auctions WHERE auction_id=$1", auction_id)) or {}
-    cur_emoji = _emoji_by_currency(cur.get("currency"))
+    cur_emoji = _emoji_by_currency(await _auction_currency(auction_id))
 
     lines = [
         f"👑 Рассылка владельцу по лоту <b>{auction_id}</b> завершена.",
@@ -3814,8 +3814,7 @@ async def cb_print_win_send_winner(call: types.CallbackQuery, bot: Bot):
         admin_user=call.from_user,
     )
 
-    cur = (await fetchrow("SELECT currency FROM public.auctions WHERE auction_id=$1", auction_id)) or {}
-    cur_emoji = _emoji_by_currency(cur.get("currency"))
+    cur_emoji = _emoji_by_currency(await _auction_currency(auction_id))
 
     lines = [
         f"🏆 Рассылка победителю по лоту <b>{auction_id}</b> завершена.",
@@ -3850,8 +3849,7 @@ async def cb_print_win_send_both(call: types.CallbackQuery, bot: Bot):
         admin_user=call.from_user,
     )
 
-    cur = (await fetchrow("SELECT currency FROM public.auctions WHERE auction_id=$1", auction_id)) or {}
-    cur_emoji = _emoji_by_currency(cur.get("currency"))
+    cur_emoji = _emoji_by_currency(await _auction_currency(auction_id))
 
     lines = [
         f"📨 Рассылка ОБОИМ по лоту <b>{auction_id}</b> завершена.",
