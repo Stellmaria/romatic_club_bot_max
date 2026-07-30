@@ -25,5 +25,8 @@ class AuctionCommentService:
     async def get_current_auction(self) -> dict[str, Any] | None:
         return await self._repository.get_current_auction()
 
+    async def auction_id_for_bid_message(self, discussion_message_id: int) -> int | None:
+        return await self._repository.auction_id_for_bid_message(discussion_message_id)
+
 
 __all__ = ["AuctionCommentService"]

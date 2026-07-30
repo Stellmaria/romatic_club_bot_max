@@ -49,5 +49,13 @@ class AuctionCommentRepository:
             )
         return dict(row) if row else None
 
+    async def auction_id_for_bid_message(self, discussion_message_id: int) -> int | None:
+        async with self._pool.acquire() as connection:
+            value = await connection.fetchval(
+                "SELECT auction_id FROM public.bids WHERE discussion_message_id = $1",
+                int(discussion_message_id),
+            )
+        return int(value) if value is not None else None
+
 
 __all__ = ["AuctionCommentRepository"]

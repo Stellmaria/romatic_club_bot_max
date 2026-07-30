@@ -280,3 +280,15 @@
 - Следующий шаг: перенести оставшиеся bid/auction read-mutations из
   `auction_comments` в точечные repository operations, затем продолжить
   `market_add_flow`.
+
+## Продолжение: auction bid moderation boundary
+
+- Reply-to-bid lookup и удаление ставки с предупреждением теперь используют
+  `AuctionCommentService` и транзакционный `AuctionAdminService`; Flask
+  notification получает счётчик предупреждений через `WarningService`.
+- Удалён прямой `asyncpg` connect из handler-а. Это сохраняет атомарность
+  удаления ставки и выдачи предупреждения в repository transaction.
+- Проверки: compile/import `auction_comments` успешны;
+  `test_architecture_boundaries.py` — 10 passed. Общий SQL boundary пока
+  ожидаемо не проходит только из-за двух legacy-файлов; в `auction_comments`
+  осталось 11 query locations для следующих точечных read-models.

@@ -23,7 +23,6 @@ from db.legacy import get_print_win_missed_for_day, get_exchange_batches_for_car
 from bot.legacy_fsm import PrintExStates
 
 MSK = tz.gettz("Europe/Moscow")
-import asyncpg
 from aiogram import Bot
 from aiogram import Router, F, types
 from aiogram.client.default import DefaultBotProperties
@@ -37,6 +36,8 @@ from bot.handlers.admin.helper.admin_constants import WARN_TEXTS
 from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.services.auction_winners import AuctionWinnerService
+from bot.services.auction_admin import AuctionAdminService
+from bot.services.auction_comments import AuctionCommentService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.services.warnings import WarningService
 from bot.core.legacy_config import DISCUSSION_CHAT_ID, ADMINS, BOT_TOKEN, LOG_CHAT_ID, AUCTION_CHANNEL_USERNAME, AUCTION_CHANNEL_ID, \
@@ -188,12 +189,9 @@ async def _resolve_lot_from_reply(message: Message, max_depth: int = 7) -> Optio
         if lot:
             return lot
 
-        bid_row = await fetchrow(
-            "SELECT auction_id FROM public.bids WHERE discussion_message_id = $1",
-            cur.message_id,
-        )
-        if bid_row and bid_row.get("auction_id"):
-            lot = await get_lot_by_id(bid_row["auction_id"])
+        auction_id = await (await AuctionCommentService.create()).auction_id_for_bid_message(cur.message_id)
+        if auction_id:
+            lot = await get_lot_by_id(auction_id)
             if lot:
                 return lot
 
@@ -240,11 +238,7 @@ def notify_bid_deleted():
     async def process_and_send():
         warnings = 1
         if user_id:
-            conn = await asyncpg.connect(dsn=_PG_DSN)
-            row = await conn.fetchrow("SELECT warnings_count FROM users WHERE user_id = $1", user_id)
-            if row:
-                warnings = row["warnings_count"]
-            await conn.close()
+            warnings = await (await WarningService.create()).count_warnings(int(user_id))
         from bot.handlers.admin.helper.admin_constants import WARN_TEXTS
         import random
         msg2 = random.choice(WARN_TEXTS).format(username=username, warnings=warnings)
@@ -415,21 +409,12 @@ async def admin_delete_bid(message: types.Message):
     replied_id = message.reply_to_message.message_id
 
     # ВНИМАНИЕ: в таблице bids первичный ключ bid_id, а не id
-    bid_row = await fetchrow(
-        """
-        SELECT b.bid_id, b.amount, b.bidder_id, u.username
-        FROM public.bids b
-                 JOIN public.users u ON u.user_id = b.bidder_id
-        WHERE b.discussion_message_id = $1
-        """,
-        replied_id
+    bid_row = await (await AuctionAdminService.create()).delete_bid_with_warning(
+        discussion_message_id=replied_id,
     )
     if not bid_row:
         await message.answer("Это не ставка или ставка не найдена.")
         return
-
-    # удаляем ставку
-    await execute("DELETE FROM public.bids WHERE bid_id = $1", bid_row["bid_id"])
 
     # удаляем сообщение в чате, если можно
     try:
@@ -437,10 +422,8 @@ async def admin_delete_bid(message: types.Message):
     except Exception as e:
         print(f"Не удалось удалить сообщение: {e}")
 
-    # предупреждение пользователю
-    await add_warning(bid_row["bidder_id"], "delete_bid")
-    warns = await get_warnings_count(bid_row["bidder_id"])
-    banned = await is_user_banned(bid_row["bidder_id"])
+    warns = int(bid_row["warnings_count"])
+    banned = bool(bid_row["is_banned"])
 
     bidder = f"@{bid_row['username']}" if bid_row["username"] else f"id{bid_row['bidder_id']}"
     text = (
