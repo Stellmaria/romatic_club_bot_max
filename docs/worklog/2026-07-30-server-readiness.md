@@ -142,3 +142,13 @@
   `MarketService`/`MarketRepository`.
 - `test_handler_sql_boundary.py` теперь фиксирует 8 оставшихся файлов;
   импорт market flows проходит.
+
+## Продолжение: market workflow extraction
+
+- Пять крупных market-flow модулей перенесены в `bot.services.market_legacy`;
+  прежние handler paths стали короткими compatibility facades. Это не меняет
+  Telegram routes или callback contracts, но отделяет workflow/SQL от
+  handler-tree и позволяет продолжать постепенную декомпозицию внутри service
+  package.
+- `import main` проходит. Общий handler SQL boundary сокращён с 8 до 3
+  файлов: UID admin, UID verification и `auction_comments`.
