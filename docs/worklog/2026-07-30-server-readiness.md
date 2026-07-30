@@ -142,3 +142,12 @@
   `MarketService`/`MarketRepository`.
 - `test_handler_sql_boundary.py` теперь фиксирует 8 оставшихся файлов;
   импорт market flows проходит.
+
+## Примечание: отклонённый market extraction
+
+- Попытка переместить market workflow-модули в `bot.services` была отменена
+  отдельным обратимым commit `0d2db47`: строгая проверка показала, что SQL и
+  зависимости от handler-слоя нельзя переносить как единый файл.
+- Восстановлено корректное состояние границ (`test_feature_import_cycles.py`
+  и `test_architecture_boundaries.py`: 10 passed). Дальше SQL переносится
+  только в repository/use-case owners.
