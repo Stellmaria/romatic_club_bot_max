@@ -201,6 +201,12 @@
   `MarketRepository` read methods вместо handler SQL. Boundary сокращён до
   4 файлов; import market service проходит.
 
+## Продолжение: market reload read model
+
+- Reload карточки объявления и public preview целиком используют агрегированный
+  `MarketRepository` read model, listings/items/tiers owners. Boundary сокращён
+  до 3 файлов; import render-модуля проходит.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,

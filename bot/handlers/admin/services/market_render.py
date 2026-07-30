@@ -11,8 +11,14 @@ from bot.handlers.admin.services.market_constants import STAR_DB_CODE, _EXTRAS_H
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_keyboards import my_listing_actions
 from bot.handlers.admin.services.market_utils import fiat_flag
-from bot.services.market import market_has_any_proof, market_price_map
-from db.legacy import market_get_rate_tiers, fetchrow, fetch
+from bot.services.market import (
+    market_get_listing,
+    market_has_any_proof,
+    market_listing_display_tiers,
+    market_listing_items,
+    market_listing_reload_view,
+    market_price_map,
+)
 
 try:
     import pymorphy2  # type: ignore
@@ -228,33 +234,8 @@ async def _reload_listing_inplace(src_msg_or_call, lid: int) -> None:
     message = getattr(src_msg_or_call, "message", None) or src_msg_or_call
     bot = message.bot
 
-    import importlib
-    dbmod = importlib.import_module("db.db")
-    pool = getattr(dbmod, "db_pool", None)
-
-    async def _fetchrow(sql: str, *args):
-        if pool is None:
-            return None
-        try:
-            return await pool.fetchrow(sql, *args)
-        except AttributeError:
-            async with pool.acquire() as conn:
-                return await conn.fetchrow(sql, *args)
-
-    row_st = await _fetchrow(
-        "SELECT status, description, cover_file_id, created_at "
-        "FROM public.market_listings WHERE listing_id=$1",
-        lid
-    )
-    status = (row_st.get("status") if row_st else "") or ""
-    desc = row_st.get("description") if row_st else None
-    cover_id = row_st.get("cover_file_id") if row_st else None
-    created_at = row_st.get("created_at") if row_st else None
-
-    row_item = await _fetchrow(
-        "SELECT card_id FROM public.market_listing_items WHERE listing_id=$1 LIMIT 1", lid
-    )
-    if not row_item:
+    view = await market_listing_reload_view(lid)
+    if not view or not view.get("card_id"):
         try:
             await bot.edit_message_text(
                 chat_id=message.chat.id, message_id=message.message_id,
@@ -263,39 +244,13 @@ async def _reload_listing_inplace(src_msg_or_call, lid: int) -> None:
         except Exception:
             pass
         return
-    cid = int(row_item["card_id"])
-
-    row_left = await _fetchrow(
-        "SELECT COALESCE(SUM(quantity),0) AS left "
-        "FROM public.market_listing_items WHERE listing_id=$1",
-        lid
-    )
-    qty_left = int(row_left["left"]) if row_left and row_left["left"] is not None else None
-
-    pr = await _fetchrow(
-        "SELECT cover_file_id FROM public.market_listings WHERE listing_id=$1", lid
-    )
-    cnt = await _fetchrow(
-        "SELECT COUNT(*) AS c "
-        "FROM public.market_listing_items "
-        "WHERE listing_id=$1 AND proof_file_id IS NOT NULL",
-        lid
-    )
-    has_proof = bool(pr and pr.get("cover_file_id")) or bool(cnt and int(cnt["c"]) > 0)
-
-    tiers = await market_get_rate_tiers(lid) or []
-    price_map: dict[str, float] = {}
-    for t in tiers:
-        ptype = (t.get("pay_type") or "").lower()
-        price = float(t.get("price") or 0)
-        if ptype == "cash":
-            code = (t.get("cash_code") or "").upper()
-            if code == STAR_DB_CODE:
-                price_map["tgstars"] = price
-            else:
-                price_map[f"cash:{code}"] = price
-        else:
-            price_map[ptype] = price
+    cid = int(view["card_id"])
+    status = view.get("status") or ""
+    desc = view.get("description")
+    created_at = view.get("created_at")
+    qty_left = int(view.get("quantity_left") or 0)
+    has_proof = bool(view.get("cover_file_id")) or int(view.get("item_proof_count") or 0) > 0
+    price_map = await market_price_map(lid)
 
     card = await fetch_card(cid)
     caption = build_card_preview_caption(
@@ -339,29 +294,13 @@ async def _reload_listing_inplace(src_msg_or_call, lid: int) -> None:
 
 
 async def send_listing_preview(bot: Bot, chat_id: int, listing_id: int):
-    listing = await fetchrow("""
-                             select listing_id, status, description, created_at, cover_file_id
-                             from market_listings
-                             where listing_id = $1
-                             """, listing_id)
+    listing = await market_get_listing(listing_id)
     if not listing:
         await bot.send_message(chat_id, "Лот не найден.")
         return
 
-    items = await fetch("""
-                        select mli.card_id, mli.quantity, c.hero_name, c.card_name, c.rarity, c.image_id
-                        from market_listing_items mli
-                                 join cards c on c.card_id = mli.card_id
-                        where mli.listing_id = $1
-                        order by c.hero_name, c.card_name
-                        """, listing_id)
-
-    tiers = await fetch("""
-                        select pay_type, cash_code, price, coalesce(qty, 1) as qty
-                        from market_rate_tiers
-                        where listing_id = $1
-                        order by sort_order, id
-                        """, listing_id)
+    items = await market_listing_items(listing_id)
+    tiers = await market_listing_display_tiers(listing_id)
 
     per_card_prices: dict[str, float | int] = {}
     for t in tiers or []:
