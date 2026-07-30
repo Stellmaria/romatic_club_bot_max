@@ -64,3 +64,19 @@ docker compose logs -f --tail=100 bot userbot
   восстанавливай проверенный дамп только при остановленных bot и userbot.
 - Telegram session хранится в `var/`; её утрата потребует повторной
   интерактивной авторизации userbot. Не переносить session через Git.
+
+## Резервные копии
+
+На Linux используй `scripts/backup_database.sh`: он создаёт custom dump,
+проверяет его через `pg_restore --list` и удаляет файлы старше 14 дней. Каталог
+`backups/` должен находиться на отдельном persistent disk или синхронизироваться
+в защищённое внешнее хранилище: один диск сервера не является backup-стратегией.
+
+Ежедневный запуск в 03:15 UTC через crontab:
+
+```cron
+15 3 * * * cd /opt/romatic-club-bot && BACKUP_KEEP_DAYS=14 ./scripts/backup_database.sh >> /var/log/romatic-club-backup.log 2>&1
+```
+
+Не включай одновременно bot/userbot с восстановлением. После restore сначала
+запусти preflight и мигратор, затем процессы ботов.
