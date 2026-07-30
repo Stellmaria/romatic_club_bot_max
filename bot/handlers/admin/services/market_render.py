@@ -11,7 +11,8 @@ from bot.handlers.admin.services.market_constants import STAR_DB_CODE, _EXTRAS_H
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_keyboards import my_listing_actions
 from bot.handlers.admin.services.market_utils import fiat_flag
-from db.legacy import db_pool, market_get_rate_tiers, fetchrow, fetch
+from bot.services.market import market_has_any_proof, market_price_map
+from db.legacy import market_get_rate_tiers, fetchrow, fetch
 
 try:
     import pymorphy2  # type: ignore
@@ -216,38 +217,11 @@ def render_cards_summary(deck_id: int | None, items_count: int | None, price_lin
 
 
 async def _collect_price_map(listing_id: int) -> dict:
-    async with db_pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT pay_type, cash_code, price FROM public.market_rate_tiers "
-            "WHERE listing_id=$1 ORDER BY sort_order, id",
-            listing_id
-        )
-    out: dict[str, int | float] = {}
-    for r in rows:
-        pay = (r["pay_type"] or "").lower()
-        if pay == "cash":
-            code = (r["cash_code"] or "").upper()
-            if code:
-                out[f"cash:{code}"] = float(r["price"])
-        else:
-            out[pay] = int(r["price"])
-    return out
+    return await market_price_map(listing_id)
 
 
 async def _has_any_proof(listing_id: int) -> bool:
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT cover_file_id FROM public.market_listings WHERE listing_id=$1",
-            listing_id
-        )
-        if row and row["cover_file_id"]:
-            return True
-        row2 = await conn.fetchrow(
-            "SELECT 1 FROM public.market_listing_items "
-            "WHERE listing_id=$1 AND proof_file_id IS NOT NULL LIMIT 1",
-            listing_id
-        )
-    return bool(row2)
+    return await market_has_any_proof(listing_id)
 
 
 async def _reload_listing_inplace(src_msg_or_call, lid: int) -> None:

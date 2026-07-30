@@ -183,6 +183,12 @@
   named `MarketService` operations вместо прямого pool SQL.
 - `test_architecture_boundaries.py` — 9 passed; import market service проходит.
 
+## Продолжение: market render read models
+
+- Сбор price map и наличие proof в рендере делегированы `MarketRepository`.
+  Это убрало прямой pool доступ из двух read helpers; import render-модуля
+  проходит.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,
