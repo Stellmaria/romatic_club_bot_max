@@ -1,5 +1,4 @@
 import html
-import importlib
 import re
 from typing import Optional
 
@@ -23,59 +22,27 @@ from bot.handlers.admin.services.market_service import _kb_proof_each_skip, _sen
 from bot.handlers.admin.services.market_utils import get_selected_ids, safe_delete, _normalize_pay_type, parse_tiers, \
     _distinct_cards_count, safe_edit_text, remove_selected_id, add_selected_id, currency_emoji, \
     validate_price_by_currency, _card_title
+from bot.services.market import (
+    market_delete_all_prices,
+    market_decrement_all_items_and_total,
+    market_get_cover_file_id,
+    market_hard_delete_listing,
+    market_has_any_proof,
+    market_listing_navigation_view,
+    market_replace_price,
+    market_search,
+    market_seller_listing_ids,
+    market_seller_listing_summaries,
+    market_set_cover,
+    market_set_description,
+    market_set_item_proof,
+    market_toggle_named_status,
+)
 from db.legacy import get_all_decks, market_create_listing, market_add_listing_item, market_add_rate_tiers, \
-    market_add_items, fetchrow, execute, market_get_rate_tiers, db_pool, market_set_item_qty, market_dec_item_qty, \
-    market_set_status, require_db_pool, get_cards_by_deck, fetch
+    market_add_items, market_get_rate_tiers, market_set_item_qty, market_dec_item_qty, \
+    market_set_status, get_cards_by_deck
 
 router = Router(name="market_flow")
-
-
-def _get_pool():
-    """Пытаемся найти живой пул независимо от того, где его инициализировали."""
-    for mod_name in ("db", "db.db"):
-        try:
-            mod = importlib.import_module(mod_name)
-            pool = getattr(mod, "db_pool", None)
-            if pool is not None:
-                return pool
-        except Exception:
-            continue
-    return None
-
-
-async def _db_fetch(sql: str, *args) -> list[dict]:
-    pool = _get_pool()
-    if pool is None:
-        raise RuntimeError("DB pool is not initialized")
-    try:
-        rows = await pool.fetch(sql, *args)  # type: ignore[attr-defined]
-    except AttributeError:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, *args)
-    return [dict(r) for r in rows]
-
-
-async def _db_fetchrow(sql: str, *args) -> Optional[dict]:
-    pool = _get_pool()
-    if pool is None:
-        raise RuntimeError("DB pool is not initialized")
-    try:
-        row = await pool.fetchrow(sql, *args)  # type: ignore[attr-defined]
-    except AttributeError:
-        async with pool.acquire() as conn:
-            row = await conn.fetchrow(sql, *args)
-    return dict(row) if row else None
-
-
-async def _db_exec(sql: str, *args) -> None:
-    pool = _get_pool()
-    if pool is None:
-        raise RuntimeError("DB pool is not initialized")
-    try:
-        await pool.execute(sql, *args)  # type: ignore[attr-defined]
-    except AttributeError:
-        async with pool.acquire() as conn:
-            await conn.execute(sql, *args)
 
 
 _MY = "my_sales"  # ключ в FSM
@@ -84,17 +51,7 @@ _MY = "my_sales"  # ключ в FSM
 async def _my_sales_set_filter_and_show(message: Message, state: FSMContext, tab: str):
     user_id = message.from_user.id
     statuses = ["active", "hidden", "sold", "archived"] if tab == "all" else [tab]
-    rows = await fetch(
-        """
-        SELECT ml.listing_id
-        FROM public.market_listings ml
-        WHERE ml.seller_id = $1
-          AND ml.status = ANY ($2::listing_status[])
-        ORDER BY ml.updated_at DESC NULLS LAST, ml.listing_id DESC
-        """,
-        user_id, statuses,
-    )
-    ids = [int(r["listing_id"]) for r in rows]
+    ids = await market_seller_listing_ids(user_id, statuses)
     await state.update_data({_MY: {"ids": ids, "idx": 0, "tab": tab}})
     # снизу — фильтры
     await message.answer("Фильтр применён.", reply_markup=my_sales_filters_reply_kb(tab))
@@ -126,48 +83,7 @@ async def _my_sales_render(target: Message | CallbackQuery, state: FSMContext, e
     lid = int(ids[idx])
 
     # Лот + первая карта из него
-    lot = await fetchrow("""
-                         SELECT ml.*,
-                                COALESCE(cnt.items_count, 0)::int AS items_count,
-                                mli.card_id
-                         FROM public.market_listings ml
-                                  LEFT JOIN LATERAL (
-                             SELECT card_id
-                             FROM public.market_listing_items
-                             WHERE listing_id = ml.listing_id
-                             ORDER BY id ASC
-                             LIMIT 1
-                             ) mli ON TRUE
-                                  LEFT JOIN (SELECT listing_id, COUNT(*) AS items_count
-                                             FROM public.market_listing_items
-                                             GROUP BY listing_id) cnt ON cnt.listing_id = ml.listing_id
-                         WHERE ml.listing_id = $1
-                         """, lid) or {}
-
-    # Карта (если есть) + колода; ВАЖНО: decks.id, а не decks.deck_id
-    card = {}
-    if lot.get("card_id"):
-        card = await fetchrow("""
-                              SELECT c.card_id,
-                                     COALESCE(c.card_name, c.hero_name, '—')                               AS title,
-                                     c.rarity,
-                                     c.deck_id,
-                                     d.name                                                                AS deck_name,
-                                     CASE WHEN c.obtain_type = 'diamonds' THEN c.obtain_amount ELSE 0 END  AS diamonds,
-                                     CASE WHEN c.obtain_type = 'cups' THEN c.obtain_amount ELSE 0 END      AS cups,
-                                     CASE WHEN c.obtain_type = 'treasures' THEN c.obtain_amount ELSE 0 END AS treasures
-                              FROM public.cards c
-                                       LEFT JOIN public.decks d ON d.id = c.deck_id
-                              WHERE c.card_id = $1
-                              """, int(lot["card_id"])) or {}
-
-    # Прайсы
-    tiers = await fetch("""
-                        SELECT pay_type, price, cash_code, label, qty
-                        FROM public.market_rate_tiers
-                        WHERE listing_id = $1
-                        ORDER BY sort_order NULLS LAST, price
-                        """, lid)
+    lot, card, tiers = await market_listing_navigation_view(lid)
 
     # Подпись
     title = card.get("title") or (lot.get("description") or "—").splitlines()[0]
@@ -659,11 +575,7 @@ async def cb_confirm_yes(call: CallbackQuery, state: FSMContext):
 
         proof_one = data.get("proof_file_id") or data.get("cover_file_id")
         if proof_one:
-            await execute(
-                "UPDATE public.market_listings "
-                "SET cover_file_id=$2, updated_at=now() WHERE listing_id=$1",
-                lid, proof_one
-            )
+            await market_set_cover(lid, proof_one, touch_updated_at=True)
 
         await state.clear()
         await call.message.answer("✅ Объявление по всей колоде создано (1 шт).")
@@ -693,11 +605,7 @@ async def cb_confirm_yes(call: CallbackQuery, state: FSMContext):
             await market_add_rate_tiers(lid, tiers_norm)
 
         if proof_one:
-            await execute(
-                "UPDATE public.market_listings "
-                "SET cover_file_id=$2, updated_at=now() WHERE listing_id=$1",
-                lid, proof_one
-            )
+            await market_set_cover(lid, proof_one, touch_updated_at=True)
 
         created += 1
 
@@ -737,21 +645,11 @@ async def _finalize_publish_listing(message: Message, state: FSMContext) -> None
     for card_id_str, fid in proof_map.items():
         try:
             cid = int(card_id_str)
-            await execute(
-                "UPDATE public.market_listing_items SET proof_file_id = $3 WHERE listing_id = $1 AND card_id = $2",
-                lid, cid, fid
-            )
+            await market_set_item_proof(lid, cid, fid)
         except Exception:
             pass
 
-    pr = await fetchrow("SELECT cover_file_id FROM public.market_listings WHERE listing_id=$1",
-                        lid)  # type: ignore[name-defined]
-    cnt = await fetchrow(
-        "SELECT COUNT(*) AS c FROM public.market_listing_items WHERE listing_id=$1 AND proof_file_id IS NOT NULL",
-        # type: ignore[name-defined]
-        lid
-    )
-    has_any_proof = bool(pr and pr.get("cover_file_id")) or bool(cnt and int(cnt["c"]) > 0)
+    has_any_proof = await market_has_any_proof(lid)
 
     first_cid = card_ids[0]
     tiers_now = await market_get_rate_tiers(lid) or []
@@ -872,30 +770,12 @@ async def do_delete_listing(call: CallbackQuery, state: FSMContext, bot: Bot):
     _, _, _, verdict, lid_str = call.data.split(":")
     lid = int(lid_str)
 
-    import importlib
-    dbmod = importlib.import_module("db.db")
-    pool = getattr(dbmod, "db_pool", None)
-
-    async def _exec(sql: str, *args):
-        if pool is None:
-            return
-        try:
-            await pool.execute(sql, *args)
-        except AttributeError:
-            async with pool.acquire() as conn:
-                await conn.execute(sql, *args)
-
     if verdict == "no":
         await safe_delete(call.message)
         await call.answer("Отменено")
         return
 
-    try:
-        await _exec("DELETE FROM market_rate_tiers    WHERE listing_id=$1", lid)
-        await _exec("DELETE FROM market_listing_items WHERE listing_id=$1", lid)
-        await _exec("DELETE FROM market_listings      WHERE listing_id=$1", lid)
-    except Exception:
-        await _exec("UPDATE market_listings SET status='archived' WHERE listing_id=$1", lid)
+    await market_hard_delete_listing(lid)
 
     data = await state.get_data()
     await safe_delete(bot=bot,
@@ -912,7 +792,7 @@ async def set_photo_message(message: Message, state: FSMContext):
     data = await state.get_data()
     lid = int(data.get("edit_lid"))
     fid = message.photo[-1].file_id
-    await db_pool.execute("UPDATE market_listings SET cover_file_id=$2 WHERE listing_id=$1", lid, fid)
+    await market_set_cover(lid, fid)
     await message.answer("Фото подтверждения обновлено.")
     await state.clear()
 
@@ -923,10 +803,7 @@ async def set_desc_message(message: Message, state: FSMContext):
     lid = int(data.get("edit_lid"))
     desc = (message.text or "").strip() or None
 
-    await _db_exec(
-        "UPDATE public.market_listings SET description=$2, updated_at=now() WHERE listing_id=$1",
-        lid, desc
-    )
+    await market_set_description(lid, desc)
     await message.answer("Описание обновлено.")
     await state.clear()
 
@@ -945,45 +822,11 @@ async def cb_mark_sold_yes(call: CallbackQuery):
     _, _, _, lid_str = call.data.split(":")
     lid = int(lid_str)
 
-    import importlib
-    dbmod = importlib.import_module("db.db")
-    pool = getattr(dbmod, "db_pool", None)
+    left = await market_decrement_all_items_and_total(lid)
 
-    async def _fetchrow(sql: str, *args):
-        if pool is None:
-            return None
-        try:
-            return await pool.fetchrow(sql, *args)
-        except AttributeError:
-            async with pool.acquire() as conn:
-                return await conn.fetchrow(sql, *args)
-
-    async def _exec(sql: str, *args):
-        if pool is None:
-            return
-        try:
-            await pool.execute(sql, *args)
-        except AttributeError:
-            async with pool.acquire() as conn:
-                await conn.execute(sql, *args)
-
-    await _exec(
-        "UPDATE market_listing_items "
-        "SET quantity = GREATEST(quantity - 1, 0) "
-        "WHERE listing_id=$1",
-        lid
-    )
-
-    row = await _fetchrow(
-        "SELECT COALESCE(SUM(quantity), 0) AS left "
-        "FROM market_listing_items WHERE listing_id=$1",
-        lid
-    )
-    left = int(row["left"]) if row and row["left"] is not None else None
-
-    if left is not None and left <= 0:
-        await _exec("UPDATE market_listings SET status='hidden'   WHERE listing_id=$1", lid)
-        await _exec("UPDATE market_listings SET status='archived' WHERE listing_id=$1", lid)
+    if left <= 0:
+        await market_set_status(lid, "hidden")
+        await market_set_status(lid, "archived")
 
     await call.answer("Обновлено")
 
@@ -1042,47 +885,17 @@ async def do_soldqty(call: CallbackQuery, state: FSMContext):
 
 
 async def _delete_all_prices(lid: int) -> None:
-    import importlib
-    dbmod = importlib.import_module("db.db")
-    pool = getattr(dbmod, "db_pool", None)
-    if pool is None:
-        return
-    try:
-        await pool.execute("DELETE FROM market_rate_tiers WHERE listing_id=$1", lid)  # type: ignore[attr-defined]
-    except AttributeError:
-        async with pool.acquire() as conn:
-            await conn.execute("DELETE FROM market_rate_tiers WHERE listing_id=$1", lid)
+    await market_delete_all_prices(lid)
 
 
 async def _upsert_price(lid: int, pay_type: str, price: float | None, cash_code: str | None = None) -> None:
-    import importlib
     pay_type, cash_code = _normalize_pay_type(pay_type, cash_code)
-    dbmod = importlib.import_module("db.db")
-    pool = getattr(dbmod, "db_pool", None)
-    if pool is None:
-        return
-
-    delete_sql = """
-                 DELETE
-                 FROM market_rate_tiers
-                 WHERE listing_id = $1
-                   AND pay_type = $2
-                   AND COALESCE(cash_code, '') = COALESCE($3, '') \
-                 """
-    try:
-        await pool.execute(delete_sql, lid, pay_type, cash_code)
-    except AttributeError:
-        async with pool.acquire() as conn:
-            await conn.execute(delete_sql, lid, pay_type, cash_code)
-
-    if price is None:
-        return
-
-    tier = [{
-        "label": None, "qty": None, "pay_type": pay_type,
-        "cash_code": cash_code, "price": float(price), "sort_order": 999
-    }]
-    await market_add_rate_tiers(lid, tier)
+    await market_replace_price(
+        lid,
+        pay_type=pay_type,
+        cash_code=cash_code,
+        price=price,
+    )
 
 
 @router.message(Command("find"), F.chat.type == "private")
@@ -1152,67 +965,6 @@ async def market_find_filters(message: Message, state: FSMContext):
             break
 
 
-@require_db_pool
-async def market_search(
-        *,
-        deck_id: Optional[int] = None,
-        rarity: Optional[str] = None,
-        q: Optional[str] = None,
-        currency: Optional[str] = None,
-        cash_code: Optional[str] = None,
-        offer_kind: Optional[str] = None,
-        price_min: Optional[float] = None,
-        price_max: Optional[float] = None,
-        limit: int = 20,
-        offset: int = 0,
-) -> list[dict]:
-    async with db_pool.acquire() as conn:
-        where, args = ["ml.status='active'"], []
-        if offer_kind:
-            where.append("ml.offer_kind=$%d" % (len(args) + 1))
-            args.append(offer_kind)
-        if currency:
-            where.append("ml.currency_type=$%d" % (len(args) + 1))
-            args.append(currency)
-        if cash_code:
-            where.append("ml.cash_code=$%d" % (len(args) + 1))
-            args.append(cash_code)
-        if price_min is not None:
-            where.append("ml.price_num >= $%d" % (len(args) + 1))
-            args.append(price_min)
-        if price_max is not None:
-            where.append("ml.price_num <= $%d" % (len(args) + 1))
-            args.append(price_max)
-        if deck_id is not None:
-            where.append("c.deck_id=$%d" % (len(args) + 1))
-            args.append(deck_id)
-        if rarity:
-            where.append("c.rarity=$%d" % (len(args) + 1))
-            args.append(rarity)
-        if q:
-            where.append(
-                "(c.card_name ILIKE $%d OR c.hero_name ILIKE $%d OR c.story ILIKE $%d)"
-                % (len(args) + 1, len(args) + 2, len(args) + 3)
-            )
-            args.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
-
-        sql = f"""
-        SELECT ml.listing_id, ml.seller_id, ml.currency_type, ml.cash_code, ml.price_num,
-               ml.description, ml.updated_at, ml.offer_kind,
-               c.card_id, c.deck_id, c.card_name, c.hero_name, c.rarity, c.image_id
-        FROM market_listings ml
-        JOIN market_listing_items mli ON mli.listing_id = ml.listing_id
-        JOIN cards c ON c.card_id = mli.card_id
-        WHERE {' AND '.join(where)}
-        ORDER BY ml.updated_at DESC, ml.listing_id DESC
-        LIMIT $%d OFFSET $%d
-        """ % (len(args) + 1, len(args) + 2)
-        args.extend([limit, offset])
-
-        rows = await conn.fetch(sql, *args)
-        return [dict(r) for r in rows]
-
-
 def fmt_search_row(row: dict) -> str:
     cur = row["currency_type"];
     price = row["price_num"]
@@ -1249,19 +1001,7 @@ async def _show_my_sales(
 
     statuses = ["active", "hidden", "sold", "archived"] if tab_norm == "all" else [tab_norm]
 
-    rows = await _db_fetch(
-        """
-        SELECT ml.*, COALESCE(cnt.items_count, 0) AS items_count
-        FROM public.market_listings ml
-                 LEFT JOIN (SELECT listing_id, COUNT(*) AS items_count
-                            FROM public.market_listing_items
-                            GROUP BY listing_id) cnt ON cnt.listing_id = ml.listing_id
-        WHERE ml.seller_id = $1
-          AND ml.status = ANY ($2::listing_status[])
-        ORDER BY ml.updated_at DESC NULLS LAST, ml.listing_id DESC
-        """,
-        user_id, statuses,
-    )
+    rows = await market_seller_listing_summaries(user_id, statuses)
 
     title_map = {
         "active": "Активные", "hidden": "Скрытые",
@@ -2196,13 +1936,12 @@ async def my_sales_actions(call: CallbackQuery, state: FSMContext):
     action = call.data.split(":")[2]
 
     if action == "proof":
-        row = await fetchrow("SELECT cover_file_id FROM public.market_listings WHERE listing_id=$1", lid) or {}
-        fid = row.get("cover_file_id")
+        fid = await market_get_cover_file_id(lid)
         await call.message.answer_photo(fid) if fid else await call.message.answer("Фото подтверждения отсутствует.")
         return
 
     if action == "delete":
-        await execute("DELETE FROM public.market_listings WHERE listing_id=$1", lid)
+        await market_hard_delete_listing(lid)
         # удаляем из списка и перелистываем
         ids.pop(idx)
         if not ids:
@@ -2214,30 +1953,15 @@ async def my_sales_actions(call: CallbackQuery, state: FSMContext):
         await _my_sales_render(call, state, edit=True)
         return
 
-    # стейт-машина статусов
+    # Стейт-машина статусов находится в marketplace use case.
     if action == "toggle_hidden":
-        await execute("""
-                      UPDATE public.market_listings
-                      SET status     = CASE WHEN status = 'hidden' THEN 'active' ELSE 'hidden' END,
-                          updated_at = now()
-                      WHERE listing_id = $1
-                      """, lid)
+        await market_toggle_named_status(lid, "hidden")
 
     if action == "toggle_archive":
-        await execute("""
-                      UPDATE public.market_listings
-                      SET status     = CASE WHEN status = 'archived' THEN 'active' ELSE 'archived' END,
-                          updated_at = now()
-                      WHERE listing_id = $1
-                      """, lid)
+        await market_toggle_named_status(lid, "archived")
 
     if action == "toggle_sold":
-        await execute("""
-                      UPDATE public.market_listings
-                      SET status     = CASE WHEN status = 'sold' THEN 'active' ELSE 'sold' END,
-                          updated_at = now()
-                      WHERE listing_id = $1
-                      """, lid)
+        await market_toggle_named_status(lid, "sold")
 
     # edit текущей карточки
     await _my_sales_render(call, state, edit=True)
@@ -2248,14 +1972,7 @@ async def _my_sales_enter(message: Message, state: FSMContext, tab: str):
     await message.answer("Фильтр объявлений", reply_markup=my_sales_filters_reply_kb(tab), disable_notification=True)
 
     statuses = ["active", "hidden", "sold", "archived"] if tab == "all" else [tab]
-    rows = await fetch("""
-                       SELECT ml.listing_id
-                       FROM public.market_listings ml
-                       WHERE ml.seller_id = $1
-                         AND ml.status = ANY ($2::listing_status[])
-                       ORDER BY ml.updated_at DESC NULLS LAST, ml.listing_id DESC
-                       """, message.from_user.id, statuses)
-    ids = [int(r["listing_id"]) for r in rows]
+    ids = await market_seller_listing_ids(message.from_user.id, statuses)
 
     await state.update_data({_MY: {"ids": ids, "idx": 0, "tab": tab}})
 
@@ -2273,47 +1990,7 @@ async def _my_sales_render(target: Message | CallbackQuery, state: FSMContext, e
     idx = int(s.get("idx") or 0)
     lid = int(ids[idx])
 
-    lot = await fetchrow("""
-                         SELECT ml.*,
-                                COALESCE(cnt.items_count, 0)::int AS items_count,
-                                mli.card_id
-                         FROM public.market_listings ml
-                                  LEFT JOIN LATERAL (
-                             SELECT card_id
-                             FROM public.market_listing_items
-                             WHERE listing_id = ml.listing_id
-                             ORDER BY id ASC
-                             LIMIT 1
-                             ) mli ON TRUE
-                                  LEFT JOIN (SELECT listing_id, COUNT(*) AS items_count
-                                             FROM public.market_listing_items
-                                             GROUP BY listing_id) cnt ON cnt.listing_id = ml.listing_id
-                         WHERE ml.listing_id = $1
-                         """, lid) or {}
-
-    card = {}
-    if lot.get("card_id"):
-        card = await fetchrow("""
-                              SELECT c.card_id,
-                                     c.card_name                                                           AS title,
-                                     c.rarity,
-                                     c.deck_id,
-                                     d.name                                                                AS deck_name,
-                                     CASE WHEN c.obtain_type = 'diamonds' THEN c.obtain_amount ELSE 0 END  AS diamonds,
-                                     CASE WHEN c.obtain_type = 'cups' THEN c.obtain_amount ELSE 0 END      AS cups,
-                                     CASE WHEN c.obtain_type = 'treasures' THEN c.obtain_amount ELSE 0 END AS treasures
-                              FROM public.cards c
-                                       LEFT JOIN public.decks d ON d.id = c.deck_id
-                              WHERE c.card_id = $1
-
-                              """, int(lot["card_id"])) or {}
-
-    tiers = await fetch("""
-                        SELECT pay_type, price, cash_code, label, qty
-                        FROM public.market_rate_tiers
-                        WHERE listing_id = $1
-                        ORDER BY sort_order NULLS LAST, price
-                        """, lid)
+    lot, card, tiers = await market_listing_navigation_view(lid)
 
     # подпись
     title = card.get("title") or (lot.get("description") or "—").splitlines()[0]

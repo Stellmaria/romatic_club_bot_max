@@ -336,3 +336,21 @@
 - Проверки: import `auction_comments` и compileall успешны;
   architecture tests — 10 passed. Общий `test_handler_sql_boundary.py` теперь
   показывает только один remaining legacy file: `market_add_flow.py`.
+
+## Продолжение: market handler SQL boundary completion
+
+- Поиск, seller summaries, навигационная карточка, получение cover, удаление
+  listing и status toggles в `market_add_flow` переведены на существующие
+  named операции `MarketService`. Локальные pool/SQL helpers и дублирующий
+  handler-local search query удалены.
+- Это улучшает существующий сценарий публикации и управления объявлениями:
+  Telegram handler больше не знает схему PostgreSQL, а lifecycle и
+  транзакционная семантика остаются у repository owner. Новая предметная
+  логика не добавлена; публичные callback/FSM контракты сохранены.
+- Проверки: `compileall` и import модуля успешны; `git diff --check` успешен;
+  `tests/test_handler_sql_boundary.py tests/test_architecture_boundaries.py -q`
+  — 11 passed; `ruff check` затронутых market-файлов — успешно.
+- Статус: частично. Полный pytest всё ещё содержит исторические failures
+  декомпозиции и compatibility assertions, поэтому готовность к production
+  пока не заявляется. Следующий шаг: разобрать эти реальные фасадные
+  контракты и сократить оставшиеся oversized legacy handlers.
