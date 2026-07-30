@@ -1,0 +1,2 @@
+# Optional one-off import/backfill tools; not required by bot or userbot.
+pandas==2.3.3

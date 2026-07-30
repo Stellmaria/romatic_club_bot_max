@@ -1,0 +1,2083 @@
+[
+  {
+    "name": "add_admin",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/admin_actions.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "add_delete_request",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "add_warning",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/auction/bidding.py",
+      "bot/handlers/auction/warnings.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "ban_user",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/auction/warnings.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "count_pending_delete_requests_by_kind",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_admin_logs",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_all_trusted_users",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_auction_owner_id",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/auction_notify.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_audit_logs",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_delete_request",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/moderation.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_warnings_count",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/auction/bidding.py",
+      "bot/handlers/auction/warnings.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "has_pending_delete_request",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "is_admin",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/new/admin_actions.py",
+      "bot/handlers/admin/helper/new/wrapper.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/auction/exchange/catalog.py",
+      "bot/handlers/auction/exchange/notifications.py",
+      "bot/handlers/auction/schedule.py",
+      "main.py"
+    ],
+    "legacy_import_count": 8,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "is_user_banned",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/auction/warnings.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_admins",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_users.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_pending_delete_requests",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/admin_actions.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "log_admin_action",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/admin_actions.py",
+      "bot/handlers/auctions.py",
+      "bot/handlers/helper/helpers_users.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 4,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "log_audit_action",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/broadcast.py",
+      "bot/handlers/admin/cards_admin.py",
+      "bot/handlers/admin/helper/admin_service.py",
+      "bot/handlers/admin/logs_admin.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/auction/admin_lifecycle.py",
+      "bot/handlers/auctions.py"
+    ],
+    "legacy_import_count": 8,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "remove_admin",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/admin_actions.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "reset_warnings",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/auction/warnings.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_trusted_status",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/admin_actions.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "sync_trusted_status",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "unban_user",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/auction/warnings.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "update_delete_request_status",
+    "repository": "db.repositories.admin",
+    "legacy_import_files": [
+      "bot/handlers/admin/moderation.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "add_auction",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "auction_exists",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "auto_finish_old_lots_for_owner",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "count_sold_by_card_id",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/auction/exchange/notifications.py",
+      "bot/handlers/auction/publication.py",
+      "bot/handlers/auctions.py"
+    ],
+    "legacy_import_count": 3,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "count_sold_same_card",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/auction/exchange/notifications.py",
+      "bot/handlers/auction/publication.py",
+      "bot/handlers/auctions.py"
+    ],
+    "legacy_import_count": 3,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_auction_ids_ended_on",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_auctions_by_card_ref",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/auction/schedule.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_auctions_by_date",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/auction_notify.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 3,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_auctions_by_date_with_owners",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/admin_service.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/admin/services/schedule.py"
+    ],
+    "legacy_import_count": 4,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_auctions_by_day",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_auctions_for_local_day",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_auctions_in_range",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/auction/schedule.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_expected_auction_for_now",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_lot_approval_info",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_lot_by_id",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/admin_service.py",
+      "bot/handlers/admin/helper/new/admin_actions.py",
+      "bot/handlers/admin/helper/new/formatting.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/auction/admin_lifecycle.py",
+      "bot/handlers/users.py",
+      "userbot/autobid_engine.py"
+    ],
+    "legacy_import_count": 8,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_lot_by_message_id",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_lot_owners",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/admin_service.py",
+      "bot/handlers/admin/helper/new/admin_actions.py",
+      "bot/handlers/admin/helper/new/formatting.py",
+      "bot/handlers/admin/helper/user_helpers.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/auction/admin_lifecycle.py"
+    ],
+    "legacy_import_count": 7,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_lots_by_owner",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/auction/admin_lifecycle.py",
+      "bot/handlers/auctions.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_lots_by_owner_view",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_occupied_slots",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/admin_keyboards.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_pending_auctions",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/new/admin_actions.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "has_pending_lot",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/auctions.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_auctions",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/auction_notify.py",
+      "bot/handlers/auction/publication.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_owner_lot_folder",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "show_pending_auction_lots",
+    "repository": "db.repositories.auctions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_autobid_action_by_msg_id",
+    "repository": "db.repositories.autobids",
+    "legacy_import_files": [
+      "find_discussion_id.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_autobids",
+    "repository": "db.repositories.autobids",
+    "legacy_import_files": [
+      "find_discussion_id.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "pick_best_autobid_candidate",
+    "repository": "db.repositories.autobids",
+    "legacy_import_files": [
+      "userbot/autobid_engine.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "record_autobid_action",
+    "repository": "db.repositories.autobids",
+    "legacy_import_files": [
+      "userbot/autobid_engine.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_active_auction_ids",
+    "repository": "db.repositories.bids",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_auction_by_discussion_id",
+    "repository": "db.repositories.bids",
+    "legacy_import_files": [
+      "bot/handlers/auction/admin_lifecycle.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_auction_winner",
+    "repository": "db.repositories.bids",
+    "legacy_import_files": [
+      "bot/auction_notify.py",
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_bids_for_auction",
+    "repository": "db.repositories.bids",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_current_auction",
+    "repository": "db.repositories.bids",
+    "legacy_import_files": [
+      "bot/handlers/auction_comments.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_top_bid_for_auction",
+    "repository": "db.repositories.bids",
+    "legacy_import_files": [
+      "userbot/autobid_engine.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_valid_bid_msg_ids",
+    "repository": "db.repositories.bids",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_audit_created_col",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_get_card_basic",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_norm_deck_type",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_norm_obtain_type",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_pg_column_exists",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_pg_table_exists",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_update_card_image",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "add_card",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/cards_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "add_card_db_func",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "add_deck",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/new/admin_actions.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "delete_card_by_id",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "find_card_by_name_hero",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/auction_notify.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_all_cards",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_all_decks",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/cards_admin.py",
+      "bot/handlers/admin/helper/new/admin_actions.py",
+      "bot/handlers/admin/helper/new/card_economy.py",
+      "bot/handlers/admin/services/market_add_flow.py",
+      "bot/handlers/admin/services/market_service.py",
+      "bot/handlers/admin/services/schedule.py",
+      "bot/handlers/auction/exchange/common.py",
+      "bot/handlers/auctions.py",
+      "bot/handlers/card_subscribe.py"
+    ],
+    "legacy_import_count": 10,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_card",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_card_by_id",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/auction/exchange/common.py",
+      "bot/handlers/auction/exchange/submission.py",
+      "bot/handlers/auctions.py",
+      "bot/handlers/helper/helpers_card_subscribe.py",
+      "bot/handlers/helper/helpers_users.py"
+    ],
+    "legacy_import_count": 6,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_card_by_num",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/user_helpers.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_card_full_by_id",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/auction_notify.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_cards_by_deck",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py",
+      "bot/handlers/auctions.py",
+      "bot/handlers/card_subscribe.py",
+      "bot/handlers/helper/helpers_users.py"
+    ],
+    "legacy_import_count": 4,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_cards_by_deck_id",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_cards_by_ids",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/auction/exchange/submission.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_cards_ids_by_deck",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/auction/exchange/submission.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_cards_meta_bulk",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/schedule.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_deck",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_deck_by_id",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/auction/exchange/catalog.py",
+      "bot/handlers/auction/exchange/notifications.py",
+      "bot/handlers/auction/exchange/submission.py"
+    ],
+    "legacy_import_count": 4,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_deck_obtain_totals",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/schedule.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_deck_treasure_sum",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/schedule.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_max_obtain_for_rarity",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/schedule.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_obtain_variants_for_rarity",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/schedule.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "norm_deck_type",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "norm_obtain_type",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "search_cards",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "set_card_obtain",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_card_video_by_id",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_deck_type",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "update_deck_type",
+    "repository": "db.repositories.cards",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "add_exchange_items_for_deck",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "count_exchange_cards_for_deck",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "count_pending_exchange_batches",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "create_exchange_items",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_exchange_approved_cards_by_deck",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_exchange_batch",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/moderation.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_exchange_batch_by_id",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/auction/exchange/catalog.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_exchange_batches_for_card",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_exchange_cards_for_batch",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_exchange_cards_for_deck",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/auction/exchange/common.py",
+      "bot/handlers/auctions.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_exchange_deck_overview",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_exchange_inventory_cards_for_deck",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_exchange_items_by_batch_id",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/auction/exchange/catalog.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_exchange_owner_batches_for_card",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_exchange_owners_for_cards",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_exchange_print_stats",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_pending_exchange_batches",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/admin_actions.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_print_win_missed_for_day",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "mark_exchange_manual_sent",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "reset_exchange_manual",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "reset_exchange_print_stats",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "set_exchange_manual_link",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_exchange_manual_price",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_exchange_manual_winner",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "upsert_exchange_print_stats",
+    "repository": "db.repositories.exchanges",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_get_listing_core",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_manage_flow.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "_has_column",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_json_to_str_map",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "market_add_items",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py",
+      "bot/handlers/admin/services/market_service.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_add_listing_item",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_add_rate_tiers",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py",
+      "bot/handlers/admin/services/market_service.py",
+      "bot/handlers/admin/services/market_utils.py"
+    ],
+    "legacy_import_count": 3,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_bind_channel_message",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "market_bump",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_manage_flow.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_count_active",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "market_create_listing",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py",
+      "bot/handlers/admin/services/market_service.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_dec_item_qty",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py",
+      "bot/handlers/admin/services/market_manage_flow.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_get_item_qty",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "market_get_listing",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_manage_flow.py",
+      "bot/handlers/admin/services/market_utils.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_get_rate_tiers",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py",
+      "bot/handlers/admin/services/market_render.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_my_listing_counts",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "market_my_listings",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "market_set_item_qty",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_set_offer_kind",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "market_set_status",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_add_flow.py",
+      "bot/handlers/admin/services/market_manage_flow.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "market_toggle_actual",
+    "repository": "db.repositories.market",
+    "legacy_import_files": [
+      "bot/handlers/admin/services/market_manage_flow.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "count_posts_for_day",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_post_days",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_post_details",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_post_months",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_posts_for_day",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_post_checked",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_post_excluded",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_post_manual_field",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "set_post_manual_note",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_post_stat_value",
+    "repository": "db.repositories.post_stats",
+    "legacy_import_files": [
+      "bot/handlers/admin/stats_posts.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "count_new_auctions",
+    "repository": "db.repositories.stats",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_stats",
+    "repository": "db.repositories.stats",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_norm",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_preset_user_ids_by_key_or_alias",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_rarity_slug",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "add_user_subscription",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/helper/helpers_card_subscribe.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "clear_all_card_subscriptions",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/helper.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "disable_all_notifications",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/helper.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_card_subscribers",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/auction_notify.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_settings",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/auction_notify.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_top_subscribed_cards",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_user_subscriptions",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_users_with_pref",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/auction_notify.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_broadcast_targets",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_my_preset_subs",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/card_subscribe.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_user_card_subs",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py",
+      "bot/handlers/helper/helpers_card_subscribe.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "mark_subscription_confirmed",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "mark_unreachable_user",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "mark_user_unreachable",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/helper.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "remove_user_subscription",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "set_settings",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/auction_notify.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "subscribe_preset",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "subscribers_for_deck",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/auction_notify.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "subscribers_for_lot_title",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/auction_notify.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "subscribers_for_rarity",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/auction_notify.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "unsubscribe_preset",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "unsubscribe_subscription",
+    "repository": "db.repositories.subscriptions",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py",
+      "bot/handlers/helper/helpers_card_subscribe.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "_is_user_uid_verified",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_mask_uid",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_norm_uid",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_normalize_username",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_set_uid_verification_confirmation_status_impl",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "_users_uid_verification_counts",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "add_uid_verification_confirmation",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "add_uid_verification_event",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "approve_uid_verification_request",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "clear_uid_verification_request_revision",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "create_uid_verification_request",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_uid_ban",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_uid_owner",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_uid_profile_binding",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_uid_verification_confirmation",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_uid_verification_request",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_user_id_by_uid_any",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_user_verified_uid",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/auction/exchange/notifications.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 3,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_verified_uid_for_user",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "is_identity_blocked",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "is_uid_banned",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "is_user_banned_now",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "is_user_uid_banned",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/auction/exchange/notifications.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_uid_bans",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "list_uid_verification_events",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "list_uid_verification_requests",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "mark_uid_verification_request_status",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "reject_uid_verification_request",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "remove_uid_ban",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "replace_uid_verification_request_extra_proofs",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_uid_verification_confirmation_message",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_uid_verification_confirmation_status",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_uid_verification_request_deal_media",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_uid_verification_request_deal_username",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_uid_verification_request_profile_proof",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_uid_verification_request_reg_date_proof",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_uid_verification_request_revision",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_uid_verification_request_uid_proof",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/uid_verification.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "update_uid_verification_confirmation_status",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "upsert_uid_ban",
+    "repository": "db.repositories.uid",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "add_user",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/user_helpers.py",
+      "bot/handlers/helper/helpers_users.py",
+      "bot/middlewares/user_sync.py",
+      "bot/tools/refresh_users.py"
+    ],
+    "legacy_import_count": 4,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "add_user_if_not_exists",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "count_new_users",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_all_users",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/broadcast.py",
+      "bot/handlers/admin/helper/user_helpers.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_user",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/user_helpers.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/auction/admin_lifecycle.py",
+      "bot/handlers/auctions.py",
+      "bot/handlers/helper/helpers_users.py",
+      "bot/utils.py",
+      "bot/utils_admin.py"
+    ],
+    "legacy_import_count": 8,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_user_admin_info",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_user_admin_info_by_username",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_user_basic_info",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [],
+    "legacy_import_count": 0,
+    "migration_status": "repository_only_or_dynamic"
+  },
+  {
+    "name": "get_user_basic_info_by_username",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/uid_verification.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 3,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_user_by_username",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/user_helpers.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/auction/admin_lifecycle.py",
+      "bot/handlers/auction/warnings.py",
+      "bot/handlers/auctions.py",
+      "bot/handlers/helper/helpers_users.py",
+      "bot/utils.py"
+    ],
+    "legacy_import_count": 9,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_user_id_by_username",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/new/card_economy.py",
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/auction/warnings.py"
+    ],
+    "legacy_import_count": 3,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_users_by_ids",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/user_helpers.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "get_whois_admin_payload",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/uid_verification_admin.py",
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "is_luxury_user",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/admin_panel.py",
+      "bot/handlers/admin/helper/admin_service.py",
+      "bot/handlers/admin/helper/new/card_economy.py",
+      "bot/handlers/admin/helper/user_helpers.py",
+      "bot/handlers/admin/moderation.py",
+      "bot/handlers/admin/services/schedule.py",
+      "bot/handlers/auction/exchange/catalog.py",
+      "bot/handlers/auction/exchange/submission.py",
+      "bot/handlers/auction/schedule.py",
+      "bot/handlers/auctions.py",
+      "bot/services/luxury.py"
+    ],
+    "legacy_import_count": 11,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "is_subscribed",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/users.py"
+    ],
+    "legacy_import_count": 1,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_luxury_status",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/admin/helper/user_helpers.py",
+      "bot/handlers/auctions.py",
+      "bot/handlers/helper/helpers_users.py",
+      "bot/tools/refresh_users.py"
+    ],
+    "legacy_import_count": 4,
+    "migration_status": "facade_compatibility"
+  },
+  {
+    "name": "set_subscription",
+    "repository": "db.repositories.users",
+    "legacy_import_files": [
+      "bot/handlers/users.py",
+      "bot/tools/refresh_users.py"
+    ],
+    "legacy_import_count": 2,
+    "migration_status": "facade_compatibility"
+  }
+]
