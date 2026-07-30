@@ -13,7 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.helper.helpers_users import _emoji_by_currency
 from bot.services.auction_media import resolve_media_file_id
 from bot.services.exchange_submission import ExchangeSubmissionQueries
-from db.legacy import fetchall, get_all_decks, get_card_by_id, get_exchange_cards_for_deck
+from db.legacy import get_all_decks, get_card_by_id, get_exchange_cards_for_deck
 
 EX_MODE_DECK = "deck"
 
@@ -645,18 +645,9 @@ async def _get_exchange_deck_ids(decks: list[dict] | None = None) -> list[int]:
         return ids
 
     try:
-        rows = await fetchall(
-            """
-            SELECT id AS deck_id
-            FROM public.decks
-            WHERE lower(COALESCE(deck_type, '')) = 'resource'
-              AND id % 2 = 0
-            ORDER BY id DESC
-            LIMIT $1
-            """,
-            EXCHANGE_RESOURCE_DECK_LIMIT,
+        ids = await (await ExchangeSubmissionQueries.create()).latest_resource_deck_ids(
+            EXCHANGE_RESOURCE_DECK_LIMIT
         )
-        ids = sorted({int(r["deck_id"]) for r in (rows or []) if r.get("deck_id") is not None})
         if ids:
             return ids
     except Exception:

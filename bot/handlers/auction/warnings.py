@@ -267,14 +267,7 @@ async def admin_reset_warnings(message: Message) -> None:
 async def admin_all_warnings(message: Message) -> None:
     if await _deny_unless_admin(message):
         return
-    rows = await fetch(
-        """
-        SELECT username, full_name, user_id, warnings_count
-        FROM users
-        WHERE warnings_count > 0
-        ORDER BY warnings_count DESC, user_id
-        """
-    )
+    rows = await (await WarningService.create()).list_users_with_warnings()
     if not rows:
         await message.answer("Нет пользователей с предупреждениями.")
         return
@@ -289,16 +282,7 @@ async def admin_all_warnings(message: Message) -> None:
 async def show_deleted_bids(message: Message) -> None:
     if await _deny_unless_admin(message):
         return
-    rows = await fetch(
-        """
-        SELECT w.user_id, u.username, w.issued_at
-        FROM user_warnings w
-        JOIN users u ON w.user_id = u.user_id
-        WHERE w.reason = 'delete_bid'
-        ORDER BY w.issued_at DESC
-        LIMIT 50
-        """
-    )
+    rows = await (await WarningService.create()).list_deleted_bid_warnings(limit=50)
     if not rows:
         await message.answer("Нет удалённых ставок за последнее время.")
         return

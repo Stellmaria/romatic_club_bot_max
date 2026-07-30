@@ -126,3 +126,11 @@
   крупные market, UID и auction-comment flows.
 - Статус: частично. Следующий шаг: выделить repository-операции market flows
   и затем вернуться к полному `pytest`.
+
+## Продолжение: exchange and warning read models
+
+- Ещё два query owner-а подключены к handlers: resource-deck selection
+  использует exchange submission read model, а списки предупреждений —
+  `WarningService`.
+- Общий handler SQL boundary сокращён до 9 исторических файлов. Оставшиеся
+  группы — market (6 файлов), UID (2) и крупный `auction_comments`.
