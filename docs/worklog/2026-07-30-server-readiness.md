@@ -325,3 +325,14 @@
   Один static failure был ложным: wheel build создаёт `build/lib`, а
   source-scope test его не исключал. CI удаляет generated build directory
   перед pytest; реальные оставшиеся архитектурные failures не скрываются.
+
+## Продолжение: auction comments read-model completion
+
+- Owners, active-owner lookup, warning lists, ranking ставок, auction preview,
+  bid message lookup и deck preview перенесены из `auction_comments` в
+  `AuctionWinnerRepository`/`AuctionCommentRepository` и соответствующие
+  service owners. `accepted_currencies` добавлено к существующему auction read
+  model, поэтому print-win UI сохраняет прежний контракт.
+- Проверки: import `auction_comments` и compileall успешны;
+  architecture tests — 10 passed. Общий `test_handler_sql_boundary.py` теперь
+  показывает только один remaining legacy file: `market_add_flow.py`.

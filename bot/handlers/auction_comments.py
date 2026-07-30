@@ -678,14 +678,7 @@ def _build_channel_link(message_id: int | None) -> str | None:
 
 
 async def _get_owners(auction_id: int) -> list[dict]:
-    rows = await fetch("""
-                       SELECT u.user_id, u.username
-                       FROM auction_owners ao
-                                JOIN users u ON u.user_id = ao.user_id
-                       WHERE ao.auction_id = $1
-                       ORDER BY u.user_id
-                       """, auction_id)
-    return [dict(r) for r in (rows or [])]
+    return await (await AuctionWinnerService.create()).owners(auction_id)
 
 
 def _kb_winner_action(auction_id: int, winner_id: int) -> InlineKeyboardMarkup:
@@ -705,21 +698,11 @@ async def love_handler(message: types.Message):
         await message.answer(reply)
         return
 
-    is_owner = False
     try:
-        rows = await fetch(
-            """
-            SELECT 1
-            FROM public.auctions a
-                     JOIN public.auction_owners ao ON ao.auction_id = a.auction_id
-                     LEFT JOIN public.users u ON u.user_id = ao.user_id
-            WHERE a.status = 'active'
-              AND (ao.user_id = $1 OR (u.username IS NOT NULL AND lower(u.username) = $2))
-            LIMIT 1
-            """,
-            sender_id, sender_username
+        is_owner = await (await AuctionCommentService.create()).is_active_lot_owner(
+            user_id=sender_id,
+            username=sender_username,
         )
-        is_owner = bool(rows)
     except Exception as e:
         print(f"[MAX_LOVE] Ошибка поиска владельцев: {e}")
 
@@ -925,13 +908,7 @@ async def admin_all_warns(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
         return
-    from db.legacy import fetch
-    rows = await fetch("""
-                       SELECT u.username, u.full_name, u.user_id, u.warnings_count
-                       FROM users u
-                       WHERE u.warnings_count > 0
-                       ORDER BY u.warnings_count DESC, u.user_id
-                       """)
+    rows = await (await WarningService.create()).list_users_with_warnings()
     if not rows:
         await message.answer("Нет пользователей с предупреждениями.")
         return
@@ -948,15 +925,7 @@ async def show_deleted_bids(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
         return
-    from db.legacy import fetch
-    rows = await fetch("""
-                       SELECT w.user_id, u.username, w.issued_at
-                       FROM user_warnings w
-                                JOIN users u ON w.user_id = u.user_id
-                       WHERE w.reason = 'delete_bid'
-                       ORDER BY w.issued_at DESC
-                       LIMIT 50
-                       """)
+    rows = await (await WarningService.create()).list_deleted_bid_warnings(limit=50)
     if not rows:
         await message.answer("Нет удалённых ставок за последнее время.")
         return
@@ -1315,23 +1284,7 @@ async def filter_auction_bids(message: types.Message):
 
 
 async def _ranked_bid_rows(auction_id: int, *, limit: int | None = None):
-    limit_sql = "LIMIT $2" if limit is not None else ""
-    args = (int(auction_id), int(limit)) if limit is not None else (int(auction_id),)
-    return await db.fetch(
-        f"""
-        SELECT b.*
-        FROM public.bids b
-        JOIN public.auctions a ON a.auction_id = b.auction_id
-        WHERE b.auction_id = $1
-        ORDER BY
-            CASE WHEN lower(COALESCE(a.auction_kind, 'standard')) = 'reverse' THEN b.amount END ASC,
-            CASE WHEN lower(COALESCE(a.auction_kind, 'standard')) <> 'reverse' THEN b.amount END DESC,
-            b.placed_at ASC,
-            b.bid_id ASC
-        {limit_sql}
-        """,
-        *args,
-    )
+    return await (await AuctionWinnerService.create()).ranked_bids(auction_id, limit=limit)
 
 
 async def _best_bid_row(auction_id: int):
@@ -1446,11 +1399,7 @@ def _winner_threshold(currency: str | None) -> int:
 
 
 async def _winner_preview_text(auction_id: int, amount: int, winner_id: int) -> str:
-    a = await fetchrow("""
-                       SELECT a.auction_id, a.hero_name, a.card_name, a.currency, a.message_id
-                       FROM public.auctions a
-                       WHERE a.auction_id = $1
-                       """, auction_id) or {}
+    a = await (await AuctionWinnerService.create()).auction(auction_id) or {}
     cur_emoji = _emoji_by_currency(a.get("currency"))
     link = _build_channel_link(a.get("message_id")) or "(ссылка недоступна)"
     lot_line = (a.get("hero_name") or "-") + (f" — {a.get('card_name')}" if a.get("card_name") else "")
@@ -1506,22 +1455,9 @@ async def _autobid_win_note(
 
     # 2) если его нет — найдём по БД (последняя ставка победителя на эту сумму)
     if not win_msg_id:
-        row = await fetchrow(
-            """
-            SELECT discussion_message_id
-            FROM public.bids
-            WHERE auction_id = $1
-              AND bidder_id = $2
-              AND amount = $3
-            ORDER BY placed_at DESC
-            LIMIT 1
-            """,
-            int(auction_id),
-            int(wid),
-            int(max_amt),
+        win_msg_id = await (await AuctionWinnerService.create()).bid_message_id(
+            auction_id, wid, max_amt
         )
-        if row and row.get("discussion_message_id"):
-            win_msg_id = int(row["discussion_message_id"])
 
     if not win_msg_id:
         return ""
@@ -1585,19 +1521,8 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
 
     winner_bidder_id = None
     if not win_msg_id:
-        top = await fetchrow(
-            """
-            SELECT bidder_id, amount, discussion_message_id
-            FROM public.bids
-            WHERE auction_id = $1
-            ORDER BY
-                CASE WHEN $2 THEN amount END ASC,
-                CASE WHEN NOT $2 THEN amount END DESC,
-                placed_at ASC
-            LIMIT 1
-            """,
-            auction_id,
-            lowest_wins,
+        top = await (await AuctionWinnerService.create()).top_bid(
+            auction_id, lowest_wins=lowest_wins
         )
         if top:
             winner_bidder_id = int(top["bidder_id"])
@@ -1646,15 +1571,7 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
 
     deck_tag = ""
     try:
-        row = await fetchrow("""
-                             SELECT d.id AS deck_id, d.name AS deck_name
-                             FROM public.auctions a
-                                      LEFT JOIN public.cards c
-                                                ON lower(c.card_name) = lower(a.card_name)
-                                                    AND (a.hero_name IS NULL OR lower(c.hero_name) = lower(a.hero_name))
-                                      LEFT JOIN public.decks d ON d.id = c.deck_id
-                             WHERE a.auction_id = $1
-                             """, auction_id)
+        row = await (await AuctionWinnerService.create()).deck_for_auction(auction_id)
         if row:
             if row.get("deck_id"):
                 deck_tag = f" Колода №{row['deck_id']}"
@@ -2015,12 +1932,7 @@ def _print_win_menu_kb(auction_id: int) -> InlineKeyboardMarkup:
 
 
 async def _build_print_win_context(auction_id: int) -> dict:
-    a = await fetchrow("""
-                       SELECT auction_id, hero_name, card_name, currency, auction_kind,
-                              accepted_currencies, message_id, image_id
-                       FROM public.auctions
-                       WHERE auction_id = $1
-                       """, auction_id)
+    a = await (await AuctionWinnerService.create()).auction(auction_id)
     if not a:
         return {"ok": False, "err": "Лот не найден."}
 
@@ -3225,11 +3137,7 @@ async def cb_winner_skip(call: types.CallbackQuery, bot: Bot):
 
 async def _send_notifications(bot: Bot, auction_id: int, winner_id: int, *, override_amount: int | None = None) -> \
         tuple[int, int, list[dict], int]:
-    a = await fetchrow("""
-                       SELECT a.auction_id, a.hero_name, a.card_name, a.currency, a.message_id
-                       FROM public.auctions a
-                       WHERE a.auction_id = $1
-                       """, auction_id) or {}
+    a = await (await AuctionWinnerService.create()).auction(auction_id) or {}
 
     cur_emoji = _emoji_by_currency(a.get("currency"))
     link = _build_channel_link(a.get("message_id")) or "(ссылка недоступна)"

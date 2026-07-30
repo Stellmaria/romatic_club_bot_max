@@ -82,7 +82,8 @@ class AuctionWinnerRepository:
                        message_id,
                        discussion_message_id,
                        image_id,
-                       auction_kind
+                       auction_kind,
+                       accepted_currencies
                 FROM public.auctions
                 WHERE auction_id = $1
                 """,
@@ -200,6 +201,31 @@ class AuctionWinnerRepository:
                 int(auction_id),
             )
         return dict(row) if row else None
+
+    async def ranked_bids(self, auction_id: int, *, limit: int | None = None) -> list[dict[str, Any]]:
+        limit_sql = "LIMIT $2" if limit is not None else ""
+        parameters: tuple[int, ...] = (int(auction_id),)
+        if limit is not None:
+            parameters = (int(auction_id), max(1, int(limit)))
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                SELECT b.*
+                FROM public.bids AS b
+                JOIN public.auctions AS a ON a.auction_id = b.auction_id
+                WHERE b.auction_id = $1
+                ORDER BY
+                    CASE WHEN lower(COALESCE(a.auction_kind, 'standard')) = 'reverse'
+                        THEN b.amount END ASC,
+                    CASE WHEN lower(COALESCE(a.auction_kind, 'standard')) <> 'reverse'
+                        THEN b.amount END DESC,
+                    b.placed_at ASC,
+                    b.bid_id ASC
+                {limit_sql}
+                """,
+                *parameters,
+            )
+        return [dict(row) for row in rows]
 
     async def bid_message_id(self, auction_id: int, bidder_id: int, amount: int) -> int | None:
         async with self._pool.acquire() as conn:

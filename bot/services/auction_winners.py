@@ -68,6 +68,9 @@ class AuctionWinnerService:
     async def top_bid(self, auction_id: int, *, lowest_wins: bool = False) -> dict[str, Any] | None:
         return await self._repository.top_bid(auction_id, lowest_wins=lowest_wins)
 
+    async def ranked_bids(self, auction_id: int, *, limit: int | None = None) -> list[dict[str, Any]]:
+        return await self._repository.ranked_bids(auction_id, limit=limit)
+
     async def bid_message_id(self, auction_id: int, bidder_id: int, amount: int) -> int | None:
         return await self._repository.bid_message_id(auction_id, bidder_id, amount)
 
