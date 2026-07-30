@@ -13,8 +13,8 @@ from bot.handlers.admin.services.market_keyboards import market_reply_kb, my_lis
     listing_public_kb
 from bot.handlers.admin.services.market_render import build_accepts_sentence, build_card_preview_caption
 from bot.handlers.admin.services.market_utils import can_publish_more, get_selected_ids
+from bot.services.market import market_set_cover, market_set_item_proof, market_set_item_quantity
 from db.legacy import (
-    execute as db_execute,
     market_create_listing,
     market_add_items,
     market_add_rate_tiers, fetch, )
@@ -151,23 +151,14 @@ async def cb_confirm_yes(call: CallbackQuery, state: FSMContext, bot: Bot):
 
         await persist_proofs(lid, state)
 
-        await db_execute(
-            "UPDATE market_listing_items SET quantity = $3 WHERE listing_id = $1 AND card_id = $2",
-            lid, card_id, qty
-        )
+        await market_set_item_quantity(lid, card_id, qty)
 
         if cover_file_id:
-            await db_execute(
-                "UPDATE market_listings SET cover_file_id = $2 WHERE listing_id = $1",
-                lid, cover_file_id
-            )
+            await market_set_cover(lid, cover_file_id)
 
         per_item_fid = proof_map.get(str(card_id))
         if per_item_fid:
-            await db_execute(
-                "UPDATE market_listing_items SET proof_file_id = $3 WHERE listing_id = $1 AND card_id = $2",
-                lid, card_id, per_item_fid
-            )
+            await market_set_item_proof(lid, card_id, per_item_fid)
 
         tiers_payload, order = [], 0
         for key, val in per_card.items():

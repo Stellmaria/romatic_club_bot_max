@@ -176,3 +176,9 @@
   существующие `MarketService`/`MarketRepository` operations.
 - `market_utils` больше не содержит SQL; общий handler SQL boundary сокращён
   до 6 файлов. Импорт utility-модуля проходит.
+
+## Продолжение: market publish mutations
+
+- Создание объявления теперь обновляет quantity, cover и per-card proof через
+  named `MarketService` operations вместо прямого pool SQL.
+- `test_architecture_boundaries.py` — 9 passed; import market service проходит.
