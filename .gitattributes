@@ -1,0 +1,2 @@
+# Keep immutable database migrations byte-stable across operating systems.
+db/migrations/*.sql text eol=lf
