@@ -32,11 +32,11 @@ def test_autobid_commands_were_removed_from_auction_monolith() -> None:
 
 
 def test_new_auction_routers_are_registered() -> None:
-    source = (ROOT / "main.py").read_text(encoding="utf-8")
+    source = (ROOT / "bot/bootstrap/routers.py").read_text(encoding="utf-8")
     assert "auction_bidding_router" in source
     assert "auction_autobid_router" in source
-    assert "dp.include_router(auction_bidding_router)" in source
-    assert "dp.include_router(auction_autobid_router)" in source
+    assert "dispatcher.include_router(auction_bidding_router)" in source
+    assert "dispatcher.include_router(auction_autobid_router)" in source
 
 
 def test_bid_repository_uses_row_lock_and_message_id_uniqueness() -> None:
@@ -49,15 +49,16 @@ def test_bid_repository_uses_row_lock_and_message_id_uniqueness() -> None:
 
 
 def test_userbot_reuses_shared_pool_and_shared_bid_service() -> None:
-    source = (ROOT / "find_discussion_id.py").read_text(encoding="utf-8")
-    assert "asyncpg.create_pool" not in source
-    assert "return await get_db_pool()" in source
-    assert "AuctionBidService.create()" in source
-    assert "await service.place_for_auction(" in source
+    repository = (ROOT / "userbot/repositories.py").read_text(encoding="utf-8")
+    handler = (ROOT / "userbot/handlers/new_messages.py").read_text(encoding="utf-8")
+    assert "asyncpg.create_pool" not in repository
+    assert "pool=await get_db_pool()" in repository
+    assert "AuctionBidService.create()" in handler
+    assert "await service.place_for_auction(" in handler
 
 
 def test_oops_workflow_is_implemented() -> None:
-    source = (ROOT / "find_discussion_id.py").read_text(encoding="utf-8")
+    source = (ROOT / "userbot/handlers/new_messages.py").read_text(encoding="utf-8")
     assert "await service.revise_bid(" in source
     assert "revision_window_seconds=OOPS_EDIT_WINDOW_SEC" in source
     assert "ТВОЙ БЛОК /oops" not in source

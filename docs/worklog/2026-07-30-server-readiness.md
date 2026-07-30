@@ -438,3 +438,15 @@
 - `compileall` и `ruff check` для `auction_comments` успешны. Phase-3 suite
   дальше выявляет отдельный legacy userbot entrypoint (`find_discussion_id`),
   который требует отдельного migration slice до server-ready заявления.
+
+## Продолжение: production userbot and autobid configuration
+
+- Убран публичный default `AUTOBID_SET_PASSWORD` из legacy `config.py`;
+  отсутствие явно заданного пароля теперь безопасно отключает protected flow.
+- Phase-3 regression checks перенесены с неиспользуемого legacy
+  `find_discussion_id.py` и removed `main.py` launcher на production owners:
+  `userbot/repositories.py`, `userbot/handlers/new_messages.py` и
+  `bot/bootstrap/routers.py`.
+- Проверки: `tests/test_phase3_regressions.py -q` — 8 passed. Локальный ruff
+  не завершился только потому, что sandbox не позволяет создать temp-файл в
+  существующей `.ruff_cache`; CI lint ранее проходит в чистом Linux runner.

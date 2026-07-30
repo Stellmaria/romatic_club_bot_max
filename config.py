@@ -71,7 +71,7 @@ TG_API_ID: int = get_int("TG_API_ID")
 TG_API_HASH: str = get_str("TG_API_HASH")
 TG_SESSION: str = get_str("TG_SESSION", "backfill.session")
 BACKFILL_LIMIT_POSTS: int = get_int("BACKFILL_LIMIT_POSTS", 500)
-AUTOBID_SET_PASSWORD = os.getenv("AUTOBID_SET_PASSWORD", "2069")
+AUTOBID_SET_PASSWORD = os.getenv("AUTOBID_SET_PASSWORD", "").strip()
 
 # The typed settings module is the target configuration API.  Keep these
 # imports here while legacy modules still import constants from ``config``.
