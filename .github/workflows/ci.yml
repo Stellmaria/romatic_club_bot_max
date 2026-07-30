@@ -8,6 +8,21 @@ permissions:
   contents: read
 
 jobs:
+  deployment-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare non-secret Compose environment
+        run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_only_password/' .env
+          sed -i 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://auction_bot:ci_only_password@postgres:5432/auction_bot#' .env
+      - name: Validate Compose contract
+        run: docker compose config -q
+      - name: Build production images
+        run: docker compose build bot userbot
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20

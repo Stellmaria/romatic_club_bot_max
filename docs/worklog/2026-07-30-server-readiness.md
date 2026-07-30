@@ -232,6 +232,13 @@
   указывает на два крупных legacy handler-модуля; Docker/Compose и реальная
   PostgreSQL restore-проверка требуют Linux Docker-enabled runner.
 
+## Продолжение: Linux Compose CI
+
+- В GitHub Actions добавлен отдельный `deployment-contract` job: создаёт
+  не-секретный `.env` для CI, проверяет `docker compose config -q` и собирает
+  production images на Ubuntu. Это делает Compose-контракт проверяемым после
+  push, несмотря на отсутствие Docker CLI на локальной Windows.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,
