@@ -3,6 +3,7 @@ from typing import Set
 from bot.handlers.admin.helper.new.utils import auction_kind_label
 from bot.domain.auctions import currency_choices_label
 from bot.handlers.helper.helpers_users import _emoji_by_currency
+from bot.presentation.warnings import WARN_TEXTS
 from bot.services.admin_auctions import AdminAuctionContextService
 
 CANCEL_TEXT = ["назад", "отмена", "⬅️ назад"]
@@ -642,11 +643,6 @@ AUCTION_FIELDS: Set[str] = {
 CARD_FIELDS: Set[str] = {
     "card_name", "num", "hero_name", "image_id", "rarity", "deck_id", "story", "quote",
 }
-
-WARN_TEXTS = [
-    "@{username}, Может попробуем соблюдать правила хотя бы иногда? (предов: {warnings}/4)",
-    "@{username}, Вот оно, начало конца твоей репутации в чате. (предов: {warnings}/4)"
-]
 
 ACTION_LABELS = {
     "approve_lot": "✅ Лот подтверждён",

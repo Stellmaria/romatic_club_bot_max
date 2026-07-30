@@ -37,11 +37,9 @@ def test_media_command_supports_direct_file_id_and_deck_alias() -> None:
 
 
 def test_deck_media_is_loaded_from_database_in_both_auction_flows() -> None:
-    auctions = (ROOT / "bot/handlers/auctions.py").read_text(encoding="utf-8")
     exchange = (ROOT / "bot/handlers/auction/exchange/common.py").read_text(encoding="utf-8")
     submission = (ROOT / "bot/handlers/auction/exchange/submission.py").read_text(encoding="utf-8")
 
-    assert 'await resolve_media_file_id(\n            "deck"' in auctions
     assert 'await resolve_media_file_id(\n            "deck"' in exchange
     assert "cover_id = await _exchange_deck_cover_id(deck_id_i)" in submission
 

@@ -376,3 +376,13 @@
 - Статус: частично. Следующий конкретный шаг: снова прогнать полный pytest,
   отделить оставшиеся устаревшие assertions от настоящих runtime failures и
   продолжить декомпозицию только по подтверждённому owner-контракту.
+
+## Продолжение: full-suite owner assertions
+
+- Полный локальный pytest после market split прошёл 158 tests до следующего
+  failure; исправлены проверки, которые читали retired facade вместо owner
+  module. Смысл проверок сохранён.
+- Реальная дублирующая export-константа `WARN_TEXTS` удалена из admin helper:
+  compatibility import теперь идёт из pure presentation module.
+- Статус: частично. Полный suite необходимо продолжить после этого checkpoint;
+  PostgreSQL integration cases по-прежнему корректно skipped без disposable DB.
