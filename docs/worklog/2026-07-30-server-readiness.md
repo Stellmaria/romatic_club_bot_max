@@ -428,3 +428,13 @@
   порядок: webhook очищается до запуска background workers.
 - Проверки: `tests/test_hotfix_expired_admin_callbacks.py -q` — 4 passed;
   `ruff check` и `git diff --check` — успешно.
+
+## Продолжение: duplicate bid handler retirement
+
+- Старые bid/edit handlers в `auction_comments` сняты с router registration;
+  они дублировали service-based `auction/bidding` handlers и могли обработать
+  одно сообщение дважды в bot validation mode. Active router теперь имеет
+  единственный owner для этих callbacks/messages.
+- `compileall` и `ruff check` для `auction_comments` успешны. Phase-3 suite
+  дальше выявляет отдельный legacy userbot entrypoint (`find_discussion_id`),
+  который требует отдельного migration slice до server-ready заявления.

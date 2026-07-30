@@ -944,7 +944,7 @@ async def get_lot_by_discussion_msg_id(msg_id: int):
     return await get_auction_by_discussion_id(msg_id)
 
 
-def parse_bid(text: str) -> int | None:
+def _legacy_parse_bid(text: str) -> int | None:
     txt = (text or '').replace(' ', '').replace('к', 'k').lower()
     if txt.endswith('k'):
         try:
@@ -1111,8 +1111,7 @@ async def bind_lot_to_discussion(message: types.Message):
         await message.answer(f"Ошибка: {e}")
 
 
-@router.message(F.chat.id < 0, ~F.text.startswith('/'))
-async def filter_auction_bids(message: types.Message):
+async def _legacy_filter_auction_bids(message: types.Message):
     if USERBOT_BID_MODERATION:
         return
     if BID_VALIDATION_MODE != "bot":
@@ -1313,7 +1312,7 @@ async def get_best_bid_for_auction(auction_id: int) -> int | None:
     return int(row['amount']) if row and row.get('amount') is not None else None
 
 
-async def get_max_bid_for_auction(auction_id: int) -> int | None:
+async def _legacy_get_max_bid_for_auction(auction_id: int) -> int | None:
     """Compatibility alias. For reverse auctions this returns the minimum/best bid."""
     return await get_best_bid_for_auction(auction_id)
 
@@ -1333,8 +1332,7 @@ async def handle_current_auction(message: types.Message):
     )
 
 
-@router.edited_message(F.chat.id < 0)
-async def edited_bid_handler(message: types.Message):
+async def _legacy_edited_bid_handler(message: types.Message):
     if USERBOT_BID_MODERATION:
         return
     if BID_VALIDATION_MODE != "bot":
