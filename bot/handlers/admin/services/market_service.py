@@ -14,19 +14,16 @@ from bot.handlers.admin.services.market_keyboards import market_reply_kb, my_lis
 from bot.handlers.admin.services.market_render import build_accepts_sentence, build_card_preview_caption
 from bot.handlers.admin.services.market_utils import can_publish_more, get_selected_ids
 from bot.services.market import (
+    get_all_decks,
+    market_add_items,
+    market_add_rate_tiers,
+    market_create_listing,
     market_listing_display_tiers,
     market_listing_items,
     market_seller_listings,
     market_set_cover,
     market_set_item_proof,
     market_set_item_quantity,
-)
-from db.legacy import (
-    market_create_listing,
-    market_add_items,
-    market_add_rate_tiers, )
-from db.legacy import (
-    get_all_decks
 )
 
 router = Router(name="market")

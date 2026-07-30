@@ -5,15 +5,23 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 
-import importlib
 from bot.handlers.admin.services.market_constants import CB_BUMP, CB_PREFIX
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_keyboards import edit_listing_kb, my_listing_actions, listing_public_kb, \
     market_reply_kb
 from bot.handlers.admin.services.market_render import _reload_listing_inplace
+from bot.handlers.admin.services.market_sales import _my_sales_set_filter_and_show
 from bot.handlers.admin.services.market_utils import ensure_owner, can_bump_now, _upsert_price, safe_delete
-from bot.services.market import market_get_status, market_quantity_total
-from db.legacy import market_get_listing, market_bump, market_set_status, _get_listing_core, market_toggle_actual
+from bot.services.market import (
+    market_bump,
+    market_dec_item_qty,
+    market_get_listing,
+    market_get_listing_core,
+    market_get_status,
+    market_quantity_total,
+    market_set_status,
+    market_toggle_actual,
+)
 
 router = Router(name="market_manage")
 
@@ -64,7 +72,6 @@ async def ask_action(call: CallbackQuery, state: FSMContext, bot: Bot):
             return
 
         if left == 1:
-            from db.legacy import market_dec_item_qty
             new_left = await market_dec_item_qty(lid, 1)
             if new_left <= 0:
                 await market_set_status(lid, "sold")
@@ -184,7 +191,7 @@ async def do_action(call: CallbackQuery):
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:proof:show:"))
 async def cb_show_proof(call: CallbackQuery, state: FSMContext, bot: Bot):
     lid = int(call.data.split(":")[-1])
-    listing = await _get_listing_core(lid)
+    listing = await market_get_listing_core(lid)
     if not listing:
         await call.answer("Лот не найден", show_alert=True);
         return
@@ -247,27 +254,27 @@ async def cb_toggle_actual(call: CallbackQuery):
 # --- Смена фильтра нижними кнопками ------------------------------------------
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Активные$"))
 async def ms_f_active(message: Message, state: FSMContext):
-    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "active")
+    await _my_sales_set_filter_and_show(message, state, "active")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Скрытые$"))
 async def ms_f_hidden(message: Message, state: FSMContext):
-    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "hidden")
+    await _my_sales_set_filter_and_show(message, state, "hidden")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Проданные$"))
 async def ms_f_sold(message: Message, state: FSMContext):
-    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "sold")
+    await _my_sales_set_filter_and_show(message, state, "sold")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Архив$"))
 async def ms_f_archived(message: Message, state: FSMContext):
-    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "archived")
+    await _my_sales_set_filter_and_show(message, state, "archived")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Все$"))
 async def ms_f_all(message: Message, state: FSMContext):
-    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "all")
+    await _my_sales_set_filter_and_show(message, state, "all")
 
 
 @router.message(F.chat.type == "private", F.text == "⬅️ Назад")

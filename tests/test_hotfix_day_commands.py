@@ -100,7 +100,7 @@ def test_day_formatter_accepts_aware_and_legacy_naive_datetimes() -> None:
 
 
 def test_day_query_is_pinned_to_moscow_calendar_date() -> None:
-    source = (ROOT / "db/db.py").read_text(encoding="utf-8")
+    source = (ROOT / "db/auctions.py").read_text(encoding="utf-8")
     start = source.index("async def get_auctions_by_date(")
     block = source[start : source.index("async def", start + 10)]
     assert "(a.start_time AT TIME ZONE 'Europe/Moscow')::date" in block

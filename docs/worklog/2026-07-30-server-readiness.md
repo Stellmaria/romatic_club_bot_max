@@ -354,3 +354,25 @@
   декомпозиции и compatibility assertions, поэтому готовность к production
   пока не заявляется. Следующий шаг: разобрать эти реальные фасадные
   контракты и сократить оставшиеся oversized legacy handlers.
+
+## Продолжение: market router facade completion
+
+- `market_add_flow` превращён в стабильный thin aggregate: он подключает семь
+  уже подготовленных router fragments в сохранённом порядке. Это устраняет
+  2k-строчный duplicate handler без изменения bootstrap import или callback
+  contracts.
+- Остаточные зависимости market handler-модулей от `db.legacy` перенесены в
+  `MarketService`; управление, utility и compatibility UI используют named
+  market operations и shared `market_sales` helper. Это продолжает улучшать
+  существующий marketplace, не расширяя предметную область.
+- Четыре static regression tests скорректированы на реальные owner-модули
+  после фасадного рефакторинга: reverse winner ordering — repository,
+  add-lot submission — `auction/submission`, day query — `db/auctions`,
+  review queue — `db/legacy_impl`.
+- Проверки: `tests/test_market_architecture.py
+  tests/test_handler_sql_boundary.py tests/test_architecture_boundaries.py -q`
+  — 17 passed; `ruff check` затронутых market-модулей — успешно;
+  `compileall` handler directory и `git diff --check` — успешно.
+- Статус: частично. Следующий конкретный шаг: снова прогнать полный pytest,
+  отделить оставшиеся устаревшие assertions от настоящих runtime failures и
+  продолжить декомпозицию только по подтверждённому owner-контракту.

@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_PATH = ROOT / "bot/handlers/auctions.py"
+SOURCE_PATH = ROOT / "bot/handlers/auction/submission.py"
 
 
 def _top_level_functions() -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:

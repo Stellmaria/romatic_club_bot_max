@@ -9,8 +9,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.handlers.admin.services.market_constants import BUMP_COOLDOWN, TIER_RE, MAP_PAY
-from bot.services.market import get_cards_ids_by_deck, market_replace_price
-from db.legacy import market_get_listing
+from bot.services.market import (
+    get_cards_ids_by_deck,
+    market_get_listing,
+    market_replace_price,
+)
 
 
 async def can_publish_more(_: Bot, user_id: int) -> Tuple[bool, int]:

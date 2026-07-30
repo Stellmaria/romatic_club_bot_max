@@ -50,8 +50,9 @@ def test_runtime_userbot_uses_minimum_as_best_reverse_bid() -> None:
 
 def test_runtime_winner_helpers_rank_reverse_ascending() -> None:
     comments = (ROOT / "bot/handlers/auction_comments.py").read_text(encoding="utf-8")
+    winner_repository = (ROOT / "bot/repositories/auction_winners.py").read_text(encoding="utf-8")
     database = (ROOT / "db/db.py").read_text(encoding="utf-8")
-    assert "THEN b.amount END ASC" in comments
+    assert "THEN b.amount END ASC" in winner_repository
     assert "get_best_bid_for_auction" in comments
     assert "THEN b.amount END ASC" in database
 
