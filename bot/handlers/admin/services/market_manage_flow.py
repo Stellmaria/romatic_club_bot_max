@@ -12,6 +12,7 @@ from bot.handlers.admin.services.market_keyboards import edit_listing_kb, my_lis
     market_reply_kb
 from bot.handlers.admin.services.market_render import _reload_listing_inplace
 from bot.handlers.admin.services.market_utils import ensure_owner, can_bump_now, _upsert_price, safe_delete
+from bot.services.market import market_get_status, market_quantity_total
 from db.legacy import market_get_listing, market_bump, market_set_status, _get_listing_core, market_toggle_actual
 
 router = Router(name="market_manage")
@@ -43,46 +44,20 @@ async def ask_action(call: CallbackQuery, state: FSMContext, bot: Bot):
         return
     lid = int(lid_str)
 
-    import importlib
-    dbmod = importlib.import_module("db.db")
-    pool = getattr(dbmod, "db_pool", None)
-
-    async def _fetchrow(sql: str, *args):
-        if pool is None:
-            return None
-        try:
-            return await pool.fetchrow(sql, *args)
-        except AttributeError:
-            async with pool.acquire() as conn:
-                return await conn.fetchrow(sql, *args)
-
-    async def _exec(sql: str, *args):
-        if pool is None:
-            return
-        try:
-            await pool.execute(sql, *args)
-        except AttributeError:
-            async with pool.acquire() as conn:
-                await conn.execute(sql, *args)
-
     if action == "hide":
-        await _exec("UPDATE market_listings SET status='hidden' WHERE listing_id=$1", lid)
+        await market_set_status(lid, "hidden")
         await call.answer("Скрыто")
 
     elif action == "activate":
-        await _exec("UPDATE market_listings SET status='active' WHERE listing_id=$1", lid)
+        await market_set_status(lid, "active")
         await call.answer("Сделано активным")
 
     elif action == "archive":
-        await _exec("UPDATE market_listings SET status='archived' WHERE listing_id=$1", lid)
+        await market_set_status(lid, "archived")
         await call.answer("Отправлено в архив")
 
     elif action == "sold":
-        row_left = await _fetchrow(
-            "SELECT COALESCE(SUM(quantity),0) AS left FROM market_listing_items WHERE listing_id=$1",
-            lid
-        )
-        left = int(row_left["left"]) if row_left and row_left["left"] is not None else 0
+        left = await market_quantity_total(lid)
 
         if left <= 0:
             await call.answer("Остатка нет.")
@@ -125,8 +100,7 @@ async def ask_action(call: CallbackQuery, state: FSMContext, bot: Bot):
         await call.answer()
         return
 
-    row = await _fetchrow("SELECT status FROM market_listings WHERE listing_id=$1", lid)
-    status = (row.get("status") if row else "active") or "active"
+    status = await market_get_status(lid) or "active"
     try:
         await call.message.edit_reply_markup(reply_markup=my_listing_actions(lid, status))
     except Exception:

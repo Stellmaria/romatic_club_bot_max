@@ -189,6 +189,12 @@
   Это убрало прямой pool доступ из двух read helpers; import render-модуля
   проходит.
 
+## Продолжение: market listing management
+
+- Изменение статусов, получение остатка и current status в manage callbacks
+  переведены на named `MarketService` operations. Общий handler SQL boundary
+  сокращён до 5 файлов; import manage-модуля проходит.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,
