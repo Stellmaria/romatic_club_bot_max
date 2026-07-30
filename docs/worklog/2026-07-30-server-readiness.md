@@ -134,3 +134,11 @@
   `WarningService`.
 - Общий handler SQL boundary сокращён до 9 исторических файлов. Оставшиеся
   группы — market (6 файлов), UID (2) и крупный `auction_comments`.
+
+## Продолжение: market helper boundary
+
+- Исторический `market_db_helpers` больше не открывает pool и не содержит SQL:
+  чтение карт и сохранение proof-метаданных делегируются существующему
+  `MarketService`/`MarketRepository`.
+- `test_handler_sql_boundary.py` теперь фиксирует 8 оставшихся файлов;
+  импорт market flows проходит.
