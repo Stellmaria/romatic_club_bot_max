@@ -195,6 +195,12 @@
   переведены на named `MarketService` operations. Общий handler SQL boundary
   сокращён до 5 файлов; import manage-модуля проходит.
 
+## Продолжение: market seller read model
+
+- Витрина «мои продажи» теперь получает listings, items и price tiers через
+  `MarketRepository` read methods вместо handler SQL. Boundary сокращён до
+  4 файлов; import market service проходит.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,

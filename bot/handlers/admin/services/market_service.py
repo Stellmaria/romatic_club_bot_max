@@ -13,11 +13,18 @@ from bot.handlers.admin.services.market_keyboards import market_reply_kb, my_lis
     listing_public_kb
 from bot.handlers.admin.services.market_render import build_accepts_sentence, build_card_preview_caption
 from bot.handlers.admin.services.market_utils import can_publish_more, get_selected_ids
-from bot.services.market import market_set_cover, market_set_item_proof, market_set_item_quantity
+from bot.services.market import (
+    market_listing_display_tiers,
+    market_listing_items,
+    market_seller_listings,
+    market_set_cover,
+    market_set_item_proof,
+    market_set_item_quantity,
+)
 from db.legacy import (
     market_create_listing,
     market_add_items,
-    market_add_rate_tiers, fetch, )
+    market_add_rate_tiers, )
 from db.legacy import (
     get_all_decks
 )
@@ -194,16 +201,7 @@ async def cb_confirm_yes(call: CallbackQuery, state: FSMContext, bot: Bot):
 async def show_my_sales(message: Message) -> None:
     user_id = message.from_user.id
 
-    listings = await fetch("""
-                           select listing_id, status, description, created_at, cover_file_id
-                           from market_listings
-                           where seller_id = $1
-                           order by case status
-                                        when 'active' then 0
-                                        when 'hidden' then 1
-                                        when 'sold' then 2
-                                        else 3 end, created_at desc
-                           """, user_id)
+    listings = await market_seller_listings(user_id)
 
     if not listings:
         await message.answer(
@@ -213,25 +211,8 @@ async def show_my_sales(message: Message) -> None:
     for listing in listings:
         lid = int(listing["listing_id"])
 
-        items = await fetch("""
-                            select mli.card_id,
-                                   mli.quantity,
-                                   c.hero_name,
-                                   c.card_name,
-                                   c.rarity,
-                                   c.image_id
-                            from market_listing_items mli
-                                     join cards c on c.card_id = mli.card_id
-                            where mli.listing_id = $1
-                            order by c.hero_name, c.card_name
-                            """, lid)
-
-        tiers = await fetch("""
-                            select pay_type, cash_code, price, coalesce(qty, 1) as qty
-                            from market_rate_tiers
-                            where listing_id = $1
-                            order by sort_order, id
-                            """, lid)
+        items = await market_listing_items(lid)
+        tiers = await market_listing_display_tiers(lid)
 
         per_card_prices: dict[str, float | int] = {}
         for t in tiers or []:
