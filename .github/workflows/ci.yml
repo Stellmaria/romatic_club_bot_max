@@ -51,5 +51,5 @@ jobs:
       - name: Unit and regression tests
         env:
           UID_HASH_KEY: ci-only-hmac-key
-          UID_ENC_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
+          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: python -m pytest -q

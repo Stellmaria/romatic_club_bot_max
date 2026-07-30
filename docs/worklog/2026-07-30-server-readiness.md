@@ -316,3 +316,5 @@
 - CI test step получает отдельные non-production UID HMAC/Fernet values:
   они нужны только для import/crypto unit tests и не являются GitHub secrets
   или production ключами.
+- Fernet fixture приведён к валидному 32-byte url-safe base64 ключу после
+  того, как Linux collection подтвердил строгую проверку crypto library.
