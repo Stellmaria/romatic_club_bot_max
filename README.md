@@ -1,4 +1,4 @@
-# Auction Bot
+# Romatic Club Bot Max
 
 ## Быстрый запуск
 
