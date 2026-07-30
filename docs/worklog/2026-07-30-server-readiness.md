@@ -159,3 +159,13 @@
   Master-ban выполняет UID и Telegram ban атомарно в repository transaction.
 - UID admin больше не содержит SQL. Общий handler SQL boundary сокращён до
   7 файлов; import admin UID router проходит.
+
+## Продолжение: UID confirmation persistence
+
+- Revision flags, replacement confirmation cleanup и confirmation-to-request
+  lookup перенесены в `UIDVerificationRepository`.
+- Reminder и expiry loop теперь использует idempotent repository operations:
+  reminders claim-ятся один раз, а просроченные заявки закрываются вместе с
+  pending confirmations в transaction. Импорт `main` проходит.
+- В UID handler осталось пять отдельных legacy SQL-операций для следующего
+  repository-среза; общий boundary по-прежнему содержит 7 файлов.

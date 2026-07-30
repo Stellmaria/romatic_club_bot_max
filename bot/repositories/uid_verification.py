@@ -173,6 +173,30 @@ class UIDVerificationRepository:
         result["confirmations"] = [dict(item) for item in confirmations]
         return result
 
+    async def revision_flags(self, request_id: int) -> list[str]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT revision_flags FROM public.uid_verification_requests WHERE id=$1",
+                int(request_id),
+            )
+        return list(row["revision_flags"] or []) if row else []
+
+    async def delete_confirmation_for_counterparty(self, request_id: int, username: str) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM public.uid_verification_confirmations WHERE request_id=$1 AND counterparty_username=$2",
+                int(request_id),
+                (username or "").strip().lower(),
+            )
+
+    async def confirmation_request_id(self, confirmation_id: int) -> int | None:
+        async with self._pool.acquire() as conn:
+            value = await conn.fetchval(
+                "SELECT request_id FROM public.uid_verification_confirmations WHERE id=$1",
+                int(confirmation_id),
+            )
+        return int(value) if value is not None else None
+
     async def get_latest_request(self, user_id: int) -> dict[str, Any] | None:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(

@@ -11,6 +11,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.logs_admin import send_admin_log
+from bot.services.uid_verification import UIDVerificationService
 from bot.uid_crypto import uid_decrypt
 from db.legacy import (
     create_uid_verification_request,
@@ -19,9 +20,6 @@ from db.legacy import (
     set_uid_verification_confirmation_status,
     get_user_basic_info_by_username,
     get_verified_uid_for_user,
-    fetch,
-    fetchrow,
-    execute,
     clear_uid_verification_request_revision,
     replace_uid_verification_request_extra_proofs,
     set_uid_verification_request_deal_media,
@@ -553,11 +551,7 @@ def _kb_fix_items(req_id: int, remaining: list[str]) -> types.InlineKeyboardMark
 
 
 async def _get_revision_flags(req_id: int) -> list[str]:
-    row = await fetchrow(
-        "SELECT revision_flags FROM public.uid_verification_requests WHERE id=$1",
-        int(req_id),
-    )
-    flags = list(row.get("revision_flags") or []) if row else []
+    flags = await (await UIDVerificationService.create()).revision_flags(req_id)
     out = [str(x) for x in flags if str(x).strip()]
 
     # Убираем устаревшие пункты, чтобы они не висели в “доработке” навечно
@@ -777,10 +771,8 @@ async def uidv_fix_username(message: types.Message, state: FSMContext, bot: Bot)
 
     if old_username and old_username != username:
         try:
-            await execute(
-                "DELETE FROM public.uid_verification_confirmations WHERE request_id=$1 AND counterparty_username=$2",
-                int(req_id),
-                old_username,
+            await (await UIDVerificationService.create()).delete_confirmation_for_counterparty(
+                req_id, old_username
             )
         except Exception:
             pass
@@ -913,11 +905,7 @@ async def uid_confirm_cb(call: types.CallbackQuery):
         return
 
     conf_id = int(data[1])
-    row = await fetchrow(
-        "SELECT request_id FROM public.uid_verification_confirmations WHERE id=$1",
-        conf_id,
-    )
-    request_id = int(row["request_id"]) if row and row.get("request_id") is not None else 0
+    request_id = await (await UIDVerificationService.create()).confirmation_request_id(conf_id) or 0
     answer = (data[2] or "").strip().lower()
 
     if answer == "ok":
@@ -973,20 +961,8 @@ async def uid_verification_watch_loop(bot: Bot) -> None:
     while True:
         try:
             # ~2 дня осталось (прошло 24ч)
-            rows = await fetch(
-                """
-                SELECT r.id,
-                       r.user_id,
-                       (SELECT count(*)
-                        FROM uid_verification_confirmations c
-                        WHERE c.request_id = r.id
-                          AND c.status = 'confirmed') AS confirmed_cnt
-                FROM uid_verification_requests r
-                WHERE r.status = 'pending'
-                  AND r.created_at <= now() - interval '24 hours'
-                  AND r.created_at > now() - interval '25 hours'
-                """
-            )
+            service = await UIDVerificationService.create()
+            rows = await service.claim_due_reminders(stage_h=24, minimum_confirmations=MIN_REQUIRED)
             for r in rows:
                 if int(r["confirmed_cnt"] or 0) >= MIN_REQUIRED:
                     continue
@@ -997,20 +973,7 @@ async def uid_verification_watch_loop(bot: Bot) -> None:
                 )
 
             # ~1 день осталось (прошло 48ч)
-            rows = await fetch(
-                """
-                SELECT r.id,
-                       r.user_id,
-                       (SELECT count(*)
-                        FROM uid_verification_confirmations c
-                        WHERE c.request_id = r.id
-                          AND c.status = 'confirmed') AS confirmed_cnt
-                FROM uid_verification_requests r
-                WHERE r.status = 'pending'
-                  AND r.created_at <= now() - interval '48 hours'
-                  AND r.created_at > now() - interval '49 hours'
-                """
-            )
+            rows = await service.claim_due_reminders(stage_h=48, minimum_confirmations=MIN_REQUIRED)
             for r in rows:
                 if int(r["confirmed_cnt"] or 0) >= MIN_REQUIRED:
                     continue
@@ -1021,29 +984,21 @@ async def uid_verification_watch_loop(bot: Bot) -> None:
                 )
 
             # истекло 72ч и <3 подтверждений
-            rows = await fetch(
-                f"""
-                SELECT r.id, r.user_id,
-                       (SELECT count(*) FROM uid_verification_confirmations c
-                        WHERE c.request_id=r.id AND c.status='confirmed') AS confirmed_cnt
-                FROM uid_verification_requests r
-                WHERE r.status='pending'
-                  AND r.created_at <= now() - interval '{CONFIRM_TTL_HOURS} hours'
-                """
+            rows = await service.expire_due_requests(
+                ttl_h=CONFIRM_TTL_HOURS,
+                minimum_confirmations=MIN_REQUIRED,
             )
             for r in rows:
                 if int(r["confirmed_cnt"] or 0) >= MIN_REQUIRED:
                     continue
 
-                req_id = int(r["id"])
+                req_id = int(r["request_id"])
                 owner_id = int(r["user_id"])
-
-                await execute("DELETE FROM uid_verification_requests WHERE id=$1 AND status='pending'", req_id)
 
                 await bot.send_message(
                     owner_id,
                     "⌛️ UID-верификация: не набрано 3 подтверждения за 72 часа.\n"
-                    "Заявка удалена автоматически. Можешь подать заново: /verify_uid",
+                    "Заявка автоматически закрыта по таймауту. Можешь подать заново: /verify_uid",
                     protect_content=False,
                 )
 

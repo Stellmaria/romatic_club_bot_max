@@ -88,6 +88,15 @@ class UIDVerificationService:
     async def get_request(self, request_id: int) -> dict[str, Any] | None:
         return await self.repository.get_request(request_id)
 
+    async def revision_flags(self, request_id: int) -> list[str]:
+        return await self.repository.revision_flags(request_id)
+
+    async def delete_confirmation_for_counterparty(self, request_id: int, username: str) -> None:
+        await self.repository.delete_confirmation_for_counterparty(request_id, username)
+
+    async def confirmation_request_id(self, confirmation_id: int) -> int | None:
+        return await self.repository.confirmation_request_id(confirmation_id)
+
     async def create_request(self, **kwargs: Any) -> int:
         return await self.repository.create_request(**kwargs)
 
