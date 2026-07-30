@@ -182,3 +182,11 @@
 - Создание объявления теперь обновляет quantity, cover и per-card proof через
   named `MarketService` operations вместо прямого pool SQL.
 - `test_architecture_boundaries.py` — 9 passed; import market service проходит.
+
+## Продолжение: Linux backup policy
+
+- Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,
+  non-empty check, `pg_restore --list` verification и 14-дневная retention.
+- `SERVER_DEPLOYMENT.md` содержит Linux cron policy и обязательство внешнего
+  persistent backup storage. Windows не содержит `sh`, поэтому syntax check
+  этого Linux-скрипта остаётся задачей Linux/Docker-enabled runner.
