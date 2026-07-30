@@ -7,7 +7,7 @@ name = "auction-telegram-bot"
 version = "0.7.0"
 description = "Telegram auction, exchange and moderation application"
 readme = "README.md"
-requires-python = ">=3.12,<3.15"
+requires-python = ">=3.12,<3.14"
 license = { text = "Proprietary" }
 authors = [{ name = "Auction Bot Team" }]
 dynamic = ["dependencies"]

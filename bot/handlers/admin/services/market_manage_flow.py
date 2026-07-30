@@ -64,7 +64,7 @@ async def ask_action(call: CallbackQuery, state: FSMContext, bot: Bot):
             return
 
         if left == 1:
-            from db.legacy import market_dec_item_qty, market_set_status
+            from db.legacy import market_dec_item_qty
             new_left = await market_dec_item_qty(lid, 1)
             if new_left <= 0:
                 await market_set_status(lid, "sold")

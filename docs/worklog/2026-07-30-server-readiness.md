@@ -292,3 +292,18 @@
   `test_architecture_boundaries.py` — 10 passed. Общий SQL boundary пока
   ожидаемо не проходит только из-за двух legacy-файлов; в `auction_comments`
   осталось 11 query locations для следующих точечных read-models.
+
+## Продолжение: public CI baseline
+
+- Repository опубликован после отдельного аудита tracked secrets: `.env`,
+  Telegram sessions, backup и ключевые файлы не находятся в Git, а история
+  содержит только `.env.example` с placeholder-значениями. Public standard
+  GitHub-hosted runners не расходуют private Actions quota.
+- Первый public CI подтвердил, что Compose deployment-contract собирается на
+  Ubuntu. Исправлен `F823` в market management flow: локальный импорт больше
+  не shadow-ит service function. Python 3.14 исключён из supported CI matrix
+  и package contract: pinned `pydantic-core` не собирается под CPython 3.14
+  (PyO3 поддерживает максимум 3.13); production target остаётся Python 3.13.
+- Проверки: `ruff check .` — успешно; `compileall` — успешно; architecture,
+  DB modularization и feature import tests — 15 passed; server preflight для
+  bot+userbot — успешно. Следующий CI должен подтвердить это на Linux.
