@@ -313,3 +313,6 @@
 - Первый Linux unit run показал отсутствие `pytest` и `pytest-asyncio` в
   `requirements-dev.txt`; оба test runner dependencies зафиксированы в
   development contract до следующего запуска CI.
+- CI test step получает отдельные non-production UID HMAC/Fernet values:
+  они нужны только для import/crypto unit tests и не являются GitHub secrets
+  или production ключами.

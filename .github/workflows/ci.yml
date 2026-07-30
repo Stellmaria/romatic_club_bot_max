@@ -49,4 +49,7 @@ jobs:
       - name: Critical lint checks
         run: python -m ruff check .
       - name: Unit and regression tests
+        env:
+          UID_HASH_KEY: ci-only-hmac-key
+          UID_ENC_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
         run: python -m pytest -q
