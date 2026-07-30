@@ -247,6 +247,14 @@
 - Ветка `main` теперь отслеживает `origin/main`; GitHub Actions сможет
   запустить новый Compose contract job на опубликованном коде.
 
+### Внешняя проверка, заблокированная аккаунтом
+
+- GitHub Actions run `30510020923` создан для commit `14dd5a0`, но все jobs
+  не были запущены: GitHub сообщил о failed account payments или spending
+  limit. Это не failure кода и не содержит job logs. После восстановления
+  billing/лимита нужно повторить CI и проверить `deployment-contract` на
+  Ubuntu Docker runner.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,
