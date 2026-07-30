@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Sequence
 
 from bot.repositories.exchange_diagnostics import ExchangeDiagnosticsRepository
-from db.core import get_db_pool
+from db.pool import get_db_pool
 
 
 class ExchangeDiagnosticsService:
@@ -101,3 +101,22 @@ class ExchangeDiagnosticsService:
         user_ids = await self._repository.users_by_usernames(normalized)
         ids = [user_ids.get(name, -1) for name in normalized]
         return await self._repository.assigned_items_for_winners(normalized, ids)
+
+
+class ExchangeDiagnosticsQueries(ExchangeDiagnosticsService):
+    """Compatibility facade for diagnostics handlers and their query contract."""
+
+    async def unsent_winner_batches(
+        self, *, winner_id: int | None, username: str | None
+    ) -> list[dict[str, Any]]:
+        return await self._repository.unsent_winner_batches(
+            winner_id=winner_id,
+            username=username,
+        )
+
+    async def winner_assignment_items(
+        self, *, usernames: Sequence[str], user_ids: Sequence[int]
+    ) -> list[dict[str, Any]]:
+        return await self._repository.winner_assignment_items(
+            usernames=list(usernames), user_ids=list(user_ids)
+        )

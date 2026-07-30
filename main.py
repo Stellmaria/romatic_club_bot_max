@@ -159,7 +159,7 @@ async def auction_winner_loop(bot: Bot, discussion_chat_id: int):
 
 # -------------------- entrypoint --------------------
 
-async def main() -> None:
+async def legacy_main() -> None:
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_TOKEN_HERE":
         logger.error("Bot token не задан. Проверь .env/config.py")
         sys.exit(1)
@@ -203,8 +203,22 @@ async def main() -> None:
         await on_shutdown(bot, tasks)
 
 
-if __name__ == "__main__":
+from bot.application import ApplicationConfigurationError, run_bot  # noqa: E402
+
+
+def main() -> int:
+    """Process entrypoint with deterministic configuration-error exit status."""
+
     try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
+        asyncio.run(run_bot())
+    except ApplicationConfigurationError as error:
+        logger.error("Configuration error: %s", error)
+        return 2
+    except KeyboardInterrupt:
         logger.info("Bot stopped.")
+        return 0
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

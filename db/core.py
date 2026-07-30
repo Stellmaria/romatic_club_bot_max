@@ -6,7 +6,8 @@ from typing import Any, Callable, Optional
 
 import asyncpg
 
-from config import DATABASE_URL
+from config import DATABASE_URL, DB_AUTO_MIGRATE
+from db.migrator import apply_migrations
 
 logger = logging.getLogger("auction_bot")
 
@@ -45,6 +46,9 @@ class PoolProxy:
 
 
 db_pool = PoolProxy()
+# Historical repository modules use this spelling.  Keep both names pointed at
+# the same stable proxy instead of creating a second pool reference.
+pool_proxy = db_pool
 
 
 async def fetchall(query: str, *args: Any) -> list[dict[str, Any]]:
@@ -66,6 +70,21 @@ async def get_db_pool() -> asyncpg.Pool:
     db_pool.bind(pool)
     logger.info("Database pool initialized")
     return pool
+
+
+async def init_db() -> None:
+    """Initialize the pool and apply migrations before serving work."""
+
+    pool = await get_db_pool()
+    if not DB_AUTO_MIGRATE:
+        logger.warning("Automatic migrations are disabled: DB_AUTO_MIGRATE=0")
+        return
+    try:
+        await apply_migrations(pool)
+    except Exception:
+        logger.exception("Database migration failed")
+        await close_db()
+        raise
 
 
 def require_db_pool(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -110,3 +129,40 @@ async def execute(query: str, *args: Any) -> str:
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         return await conn.execute(query, *args)
+
+
+@require_db_pool
+async def _pg_column_exists(table: str, column: str) -> bool:
+    async with db_pool.acquire() as conn:
+        return bool(
+            await conn.fetchval(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+                """,
+                table,
+                column,
+            )
+        )
+
+
+@require_db_pool
+async def _pg_table_exists(table: str) -> bool:
+    async with db_pool.acquire() as conn:
+        return bool(await conn.fetchval("SELECT to_regclass($1)", f"public.{table}"))
+
+
+@require_db_pool
+async def _has_column(conn: asyncpg.Connection, table: str, column: str) -> bool:
+    return bool(
+        await conn.fetchval(
+            """
+            SELECT EXISTS(
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+            )
+            """,
+            table,
+            column,
+        )
+    )

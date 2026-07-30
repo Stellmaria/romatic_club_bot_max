@@ -1,0 +1,15 @@
+.git/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.idea/
+build/
+dist/
+*.egg-info/
+.env
+*.session
+*.session-journal
+private/
+backups/
+var/

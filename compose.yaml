@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: ["python", "main.py"]
+    volumes:
+      - ./var:/app/var
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  userbot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: ["python", "-m", "userbot.entrypoint"]
+    volumes:
+      - ./var:/app/var
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

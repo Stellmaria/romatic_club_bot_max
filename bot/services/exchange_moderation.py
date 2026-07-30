@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from bot.repositories.exchange_moderation import ExchangeModerationRepository
-from db.core import get_db_pool
+from db.pool import get_db_pool
 
 
 class ExchangeModerationService:
@@ -62,3 +62,13 @@ class ExchangeModerationService:
             auction_id=auction_id,
             details=details,
         )
+
+
+class ExchangeModerationQueries(ExchangeModerationService):
+    """Compatibility query surface used by the extracted moderation router."""
+
+    async def pending(self, *, limit: int) -> list[dict[str, Any]]:
+        return await self._repository.pending(limit=max(1, min(200, int(limit))))
+
+    async def user_flags(self, user_id: int) -> dict[str, Any]:
+        return await self._repository.user_flags(int(user_id))

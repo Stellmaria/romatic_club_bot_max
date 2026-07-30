@@ -72,3 +72,10 @@ TG_API_HASH: str = get_str("TG_API_HASH")
 TG_SESSION: str = get_str("TG_SESSION", "backfill.session")
 BACKFILL_LIMIT_POSTS: int = get_int("BACKFILL_LIMIT_POSTS", 500)
 AUTOBID_SET_PASSWORD = os.getenv("AUTOBID_SET_PASSWORD", "2069")
+
+# The typed settings module is the target configuration API.  Keep these
+# imports here while legacy modules still import constants from ``config``.
+# ``load_dotenv()`` above intentionally runs first, so Settings sees the same
+# process environment as the legacy constants.
+from bot.core.environment import PROJECT_ROOT  # noqa: E402
+from bot.core.settings import Settings, settings  # noqa: E402
