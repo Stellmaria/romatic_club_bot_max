@@ -34,12 +34,12 @@ def test_auction_notifications_are_transactionally_enqueued() -> None:
 
 def test_outbox_worker_avoids_blind_retry_after_unknown_delivery() -> None:
     worker = (ROOT / "bot/telegram/outbox.py").read_text(encoding="utf-8")
-    main = (ROOT / "main.py").read_text(encoding="utf-8")
+    workers = (ROOT / "bot/bootstrap/workers.py").read_text(encoding="utf-8")
     assert "except TelegramRetryAfter" in worker
     assert "delivery outcome unknown; manual review required" in worker
     assert "repository.mark_failed" in worker
-    assert 'BackgroundTaskSpec("telegram-outbox"' in main
-    assert "telegram_outbox_loop(bot)" in main
+    assert 'BackgroundTaskSpec("telegram-outbox"' in workers
+    assert "telegram_outbox_loop(bot)" in workers
 
 
 def test_phase5_migration_converts_legacy_moscow_times_and_creates_outbox() -> None:
@@ -71,7 +71,7 @@ def test_phase5_migration_preserves_start_time_trigger_during_type_change() -> N
 def test_admin_lifecycle_router_is_extracted_and_registered() -> None:
     legacy_functions = _functions("bot/handlers/auction_comments.py")
     extracted_functions = _functions("bot/handlers/auction/admin_lifecycle.py")
-    main = (ROOT / "main.py").read_text(encoding="utf-8")
+    routers = (ROOT / "bot/bootstrap/routers.py").read_text(encoding="utf-8")
 
     moved = {
         "show_lot_owners",
@@ -83,7 +83,7 @@ def test_admin_lifecycle_router_is_extracted_and_registered() -> None:
     }
     assert not (legacy_functions & moved)
     assert moved <= extracted_functions
-    assert "dp.include_router(auction_admin_lifecycle_router)" in main
+    assert "dispatcher.include_router(auction_admin_lifecycle_router)" in routers
 
 
 def test_admin_bid_delete_is_a_transactional_application_operation() -> None:

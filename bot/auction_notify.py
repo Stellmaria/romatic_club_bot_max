@@ -20,9 +20,10 @@ from dateutil import tz
 
 from bot.handlers.admin.helper.new.helper import notify_users
 from bot.handlers.helper.helpers_users import get_user_ids_from_usernames, format_today_lots_fancy
+from bot.services.outbox import TelegramOutboxService
 from bot.utils import currency_emoji
 from db.legacy import get_settings, set_settings, get_card_by_id, get_card_subscribers, get_auctions_by_date, \
-    mark_card_day_notified, list_auctions, get_auction_owner_id, get_users_with_pref, update_lot_field, \
+    mark_card_day_notified, list_auctions, get_auction_owner_id, get_users_with_pref, \
     get_auction_winner, subscribers_for_lot_title, get_card_full_by_id, find_card_by_name_hero, subscribers_for_deck, \
     subscribers_for_rarity
 
@@ -645,11 +646,13 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                         f"Ссылка: <a href='{auction_url}'>Перейти к аукциону</a>"
                     )
                     user_ids = list(users_start | recipients)
-                    if user_ids:
-                        await notify_users(bot, user_ids, text)
                     if auction_id is not None:
-                        with suppress(DBError):
-                            await update_lot_field(auction_id, "notified_start", True)
+                        await (await TelegramOutboxService.create()).enqueue_auction_notification(
+                            auction_id=auction_id,
+                            event="start",
+                            recipients=user_ids,
+                            text=text,
+                        )
 
             if et_dt is not None and not auction.get("notified_1min"):
                 delta = et_dt - now
@@ -661,11 +664,13 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                         f"Ссылка: <a href='{auction_url}'>Успей сделать ставку</a>"
                     )
                     user_ids = list(users_1min | recipients)
-                    if user_ids:
-                        await notify_users(bot, user_ids, text)
                     if auction_id is not None:
-                        with suppress(DBError):
-                            await update_lot_field(auction_id, "notified_1min", True)
+                        await (await TelegramOutboxService.create()).enqueue_auction_notification(
+                            auction_id=auction_id,
+                            event="one_minute",
+                            recipients=user_ids,
+                            text=text,
+                        )
 
             if et_dt is not None and not auction.get("notified_end") and now >= et_dt:
                 winner: Optional[Dict[str, Any]]
@@ -691,8 +696,20 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                     winner_line_public = winner_line_owner
 
                 if auction_id is not None:
-                    with suppress(DBError):
-                        await update_lot_field(auction_id, "notified_end", True)
+                    text = (
+                        "🏁 <b>Аукцион завершён!</b>\n"
+                        f"Карта: <b>{html.escape(auction['card_name'])}</b>\n"
+                        f"{winner_line_public}\n"
+                        f"Ссылка: <a href='{auction_url}'>Открыть аукцион</a>"
+                    )
+                    messages = {int(user_id): text for user_id in (users_end | recipients)}
+                    if owner_id:
+                        messages[owner_id] = text.replace(winner_line_public, winner_line_owner)
+                    await (await TelegramOutboxService.create()).enqueue_auction_notification(
+                        auction_id=auction_id,
+                        event="end",
+                        messages=messages,
+                    )
 
         await asyncio.sleep(20.0)
 

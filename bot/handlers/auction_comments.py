@@ -268,8 +268,7 @@ def run_flask():
     app.run("127.0.0.1", 8002)
 
 
-@router.message(F.text.startswith("/lot_owner"), F.chat.type == "private")
-async def show_lot_owners(message: types.Message):
+async def _legacy_show_lot_owners(message: types.Message):
     # Только для админов
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
@@ -298,8 +297,7 @@ async def show_lot_owners(message: types.Message):
     await message.answer(text, parse_mode="HTML")
 
 
-@router.message(F.text.startswith("/activate_lot"), F.chat.type == "private")
-async def activate_lot_cmd(message: types.Message):
+async def _legacy_activate_lot_cmd(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
         return
@@ -352,8 +350,7 @@ async def activate_lot_cmd(message: types.Message):
     )
 
 
-@router.message(F.text.startswith("/user_lots"), F.chat.type == "private")
-async def show_user_lots(message: types.Message):
+async def _legacy_show_user_lots(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
         return
@@ -394,8 +391,7 @@ async def show_user_lots(message: types.Message):
     await answer_html_chunks(message, text_lines)
 
 
-@router.message(F.text.lower().startswith('макс удалить'))
-async def admin_delete_bid(message: types.Message):
+async def _legacy_admin_delete_bid(message: types.Message):
     # доступ
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
@@ -435,8 +431,7 @@ async def admin_delete_bid(message: types.Message):
     await message.answer(text, reply_to_message_id=replied_id, parse_mode="HTML")
 
 
-@router.message(F.text.lower().startswith('макс старт'))
-async def admin_start_auction(message: types.Message):
+async def _legacy_admin_start_auction(message: types.Message):
     """
     Админ-команда для принудительного старта/продления аукциона.
     Работает через reply к сообщению лота или любой ставке.
@@ -492,8 +487,7 @@ async def admin_start_auction(message: types.Message):
     )
 
 
-@router.message(F.text.lower().startswith('макс стоп'))
-async def admin_stop_auction(message: types.Message):
+async def _legacy_admin_stop_auction(message: types.Message):
     """
     Админ-команда для досрочного завершения аукциона (макс стоп).
     Работает через reply к сообщению лота или любой ставке.

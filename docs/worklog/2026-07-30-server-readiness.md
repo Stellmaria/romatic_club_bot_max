@@ -467,3 +467,15 @@
   10 passed; `git diff --check` — успешно. Python cache files нельзя
   записывать в текущей sandbox, поэтому compileall здесь не является
   достоверной проверкой и оставлен для CI/Linux runner.
+
+## Продолжение: transactional auction notification delivery
+
+- Start, one-minute и end auction notifications переведены с прямого
+  Telegram send + отдельного mutation флага на `TelegramOutboxService`.
+  Event flag и outbox rows теперь claim-ятся repository transaction, что
+  исключает дубли при рестарте/двух репликах. End notification также имеет
+  явный public/owner winner text.
+- Шесть legacy admin lifecycle handlers сняты с `auction_comments` router:
+  единственный active owner — `auction/admin_lifecycle`.
+- Проверки: `tests/test_phase5_regressions.py -q -p no:cacheprovider` —
+  8 passed; `git diff --check` — успешно.
