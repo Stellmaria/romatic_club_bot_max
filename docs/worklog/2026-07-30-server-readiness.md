@@ -72,3 +72,16 @@
   активным следующим срезом.
 - Статус: частично. Следующий шаг: завершить миграционный контракт и полный
   pytest, затем проверить Compose на Docker-enabled Linux runner.
+
+## Продолжение: auction submission compatibility
+
+- `bot.handlers.auctions` преобразован в фасад для `submission`, `guides` и
+  `luxury_admin` с прежним порядком router registration. Восстановлены
+  compatibility exports, нужные bootstrap и admin handlers.
+- Сохранён отдельный маршрут ввода custom terms: он регистрируется в том же
+  router, но не смешивается с историческим контрактом базовой последовательности
+  submission handlers.
+- Проверки: `scripts.server_preflight --userbot` — успешно; import `main` —
+  успешно; целевые lifecycle/submission/currency tests — 14 passed. Полный
+  pytest дошёл до 51 passed и 6 skipped, затем выявил следующий compatibility
+  assertion фасада; он является следующим незавершённым срезом.

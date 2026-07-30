@@ -78,6 +78,7 @@ from bot.features.auction_submission import (
 )
 
 router = Router(name=__name__)
+submission_feature = router
 
 
 async def _ask_for_currency(message: types.Message, state: FSMContext) -> None:
@@ -644,7 +645,7 @@ async def addlot_currency_or_spins(message: types.Message, state: FSMContext):
     await state.set_state(UserAddLotFSM.waiting_for_start_price)
 
 
-@router.message(StateFilter(UserAddLotFSM.waiting_for_custom_offer_terms), F.text)
+@submission_feature.message(StateFilter(UserAddLotFSM.waiting_for_custom_offer_terms), F.text)
 async def addlot_custom_offer_terms(message: types.Message, state: FSMContext):
     terms = (message.text or "").strip()
     if terms.lower() in {"отмена", "cancel", "/cancel"}:
