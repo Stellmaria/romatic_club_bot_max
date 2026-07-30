@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from bot.handlers.admin.helper.admin_keyboards import days_keyboard, months_keyboard
-from db.db import (
+from db.legacy import (
     get_all_decks,
     get_deck_obtain_totals,
     get_deck_treasure_sum,
@@ -18,9 +18,9 @@ from db.db import (
     get_max_obtain_for_rarity,
     get_obtain_variants_for_rarity,
 )
-from db.db import is_luxury_user, get_cards_meta_bulk, \
+from db.legacy import is_luxury_user, get_cards_meta_bulk, \
     fetchrow
-from fsm_states import LuxScheduleFSM
+from bot.legacy_fsm import LuxScheduleFSM
 
 router = Router(name="luxury_schedule")
 PREFIX = "luxsched"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, List, Optional
 
-from db.db import execute, fetchrow
+from db.legacy import execute, fetchrow
 
 
 def _row_to_dict(row: Any) -> dict[Any, Any] | dict[str, Any] | dict[str, str] | dict[bytes, bytes] | None:

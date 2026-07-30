@@ -3,8 +3,9 @@ from __future__ import annotations
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 
-from config import LUXURY_CHAT_ID, LUXURY_CHAT_ID_LVL2
-from db.db import is_luxury_user
+from bot.repositories.users import UserRepository
+from bot.core.legacy_config import LUXURY_CHAT_ID, LUXURY_CHAT_ID_LVL2
+from db.pool import get_db_pool
 
 
 async def is_luxury_member(bot: Bot, user_id: int, chat_id: int) -> bool:
@@ -30,4 +31,5 @@ async def get_user_luxury_level(bot: Bot, user_id: int) -> int:
         int(LUXURY_CHAT_ID),
     ):
         return 1
-    return 1 if await is_luxury_user(int(user_id)) else 0
+    repository = UserRepository(await get_db_pool())
+    return 1 if await repository.is_luxury(int(user_id)) else 0

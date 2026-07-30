@@ -8,8 +8,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
-from config import DISCUSSION_CHAT_ID
-from db.db import (
+from bot.core.legacy_config import DISCUSSION_CHAT_ID
+from db.legacy import (
     get_post_months,
     get_post_days,
     get_posts_for_day,
@@ -20,11 +20,11 @@ from db.db import (
     set_post_excluded,
 )
 
-from fsm_states import PostStatsFSM, PostStatsEditFSM
+from bot.legacy_fsm import PostStatsFSM, PostStatsEditFSM
 
 # Опционально: если ты добавила универсальный сеттер
 try:
-    from db.db import set_post_stat_value  # type: ignore
+    from db.legacy import set_post_stat_value  # type: ignore
 except Exception:
     set_post_stat_value = None  # noqa
 
@@ -646,7 +646,7 @@ def _kb_free_auction_ids(limit: int) -> types.InlineKeyboardMarkup:
     return kb.as_markup()
 
 async def _render_free_auction_ids_text(limit: int) -> str:
-    from db.db import get_missing_auction_ids, count_missing_auction_ids  # локально, чтобы не спорить с импортами
+    from db.legacy import get_missing_auction_ids, count_missing_auction_ids  # локально, чтобы не спорить с импортами
 
     limit = max(1, min(int(limit or 50), 200))
 
@@ -688,7 +688,7 @@ async def cb_free_auction_ids_refresh(call: types.CallbackQuery):
 @admin_only
 async def cb_free_auction_ids_take(call: types.CallbackQuery):
     await call.answer()
-    from db.db import reserve_first_missing_auction_id_for_stats  # локально
+    from db.legacy import reserve_first_missing_auction_id_for_stats  # локально
 
     parts = (call.data or "").split(":")
     limit = int(parts[-1]) if parts and parts[-1].isdigit() else 200

@@ -13,12 +13,12 @@ from bot.handlers.admin.services.market_keyboards import market_reply_kb, my_lis
     listing_public_kb
 from bot.handlers.admin.services.market_render import build_accepts_sentence, build_card_preview_caption
 from bot.handlers.admin.services.market_utils import can_publish_more, get_selected_ids
-from db.db import (
+from db.legacy import (
     execute as db_execute,
     market_create_listing,
     market_add_items,
     market_add_rate_tiers, fetch, )
-from db.db import (
+from db.legacy import (
     get_all_decks
 )
 

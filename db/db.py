@@ -16,8 +16,8 @@ from bot.uid_crypto import (
     uid_last4,
 )
 
-from bot.handlers.admin.helper.new.Types import Owner
-from config import DATABASE_URL, DB_AUTO_MIGRATE
+from db.types import Owner
+from bot.core.legacy_config import DATABASE_URL, DB_AUTO_MIGRATE
 from db.migrator import apply_migrations
 
 logger = logging.getLogger("auction_bot")
@@ -2595,7 +2595,7 @@ async def set_deck_type(deck_id: int, deck_type: str) -> Tuple[Optional[str], st
     if deck_type not in {"roulette", "resource"}:
         raise ValueError("deck_type must be roulette|resource")
     before = await fetchrow("SELECT deck_type FROM decks WHERE id=$1", deck_id)
-    from db.db import execute
+    from db.legacy import execute
     await execute("UPDATE decks SET deck_type=$2 WHERE id=$1", deck_id, deck_type)
     return (before["deck_type"] if before else None, deck_type)
 

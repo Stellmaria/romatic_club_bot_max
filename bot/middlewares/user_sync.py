@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, User
 
-from db.db import add_user
+from db.legacy import add_user
 
 
 class UserSyncMiddleware(BaseMiddleware):

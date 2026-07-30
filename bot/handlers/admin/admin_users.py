@@ -6,7 +6,7 @@ from bot.handlers.admin.action_support.compat import add_admin_role
 from bot.handlers.admin.helper.new.formatting import format_admins_list
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.utils_admin import resolve_admin_action_args
-from db.db import list_admins
+from db.legacy import list_admins
 
 
 def register_user_admins(router):

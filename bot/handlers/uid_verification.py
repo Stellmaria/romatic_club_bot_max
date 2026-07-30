@@ -12,7 +12,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.logs_admin import send_admin_log
 from bot.uid_crypto import uid_decrypt
-from db.db import (
+from db.legacy import (
     create_uid_verification_request,
     add_uid_verification_confirmation,
     set_uid_verification_confirmation_message,
@@ -31,7 +31,7 @@ from db.db import (
     set_uid_verification_request_uid_proof, get_uid_verification_request,
 )
 
-from fsm_states import UIDVerificationFSM, UIDVerificationFixFSM
+from bot.legacy_fsm import UIDVerificationFSM, UIDVerificationFixFSM
 
 router = Router()
 

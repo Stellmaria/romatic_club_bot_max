@@ -13,7 +13,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.core.time import to_moscow, utc_now
 from bot.services.auction_winners import AuctionWinnerService
-from config import (
+from bot.core.legacy_config import (
     ADMIN_LOG_CHATS,
     AUCTION_CHANNEL_ID,
     AUCTION_CHANNEL_USERNAME,

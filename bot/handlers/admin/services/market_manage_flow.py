@@ -12,7 +12,7 @@ from bot.handlers.admin.services.market_keyboards import edit_listing_kb, my_lis
     market_reply_kb
 from bot.handlers.admin.services.market_render import _reload_listing_inplace
 from bot.handlers.admin.services.market_utils import ensure_owner, can_bump_now, _upsert_price, safe_delete
-from db.db import market_get_listing, market_bump, market_set_status, _get_listing_core, market_toggle_actual
+from db.legacy import market_get_listing, market_bump, market_set_status, _get_listing_core, market_toggle_actual
 
 router = Router(name="market_manage")
 
@@ -89,7 +89,7 @@ async def ask_action(call: CallbackQuery, state: FSMContext, bot: Bot):
             return
 
         if left == 1:
-            from db.db import market_dec_item_qty, market_set_status
+            from db.legacy import market_dec_item_qty, market_set_status
             new_left = await market_dec_item_qty(lid, 1)
             if new_left <= 0:
                 await market_set_status(lid, "sold")

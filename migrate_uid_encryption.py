@@ -5,7 +5,7 @@ import asyncio
 # грузим .env проекта
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from db.db import fetch, execute, get_db_pool
+from db.legacy import fetch, execute, get_db_pool
 from bot.uid_crypto import uid_hash, uid_encrypt, uid_last4
 
 

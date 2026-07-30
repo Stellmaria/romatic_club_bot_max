@@ -9,7 +9,7 @@ from aiogram.types import Message
 
 from bot.core.time import to_moscow
 from bot.services.outbox import TelegramOutboxService
-from config import ADMINS
+from bot.core.legacy_config import ADMINS
 
 router = Router(name="outbox_admin")
 

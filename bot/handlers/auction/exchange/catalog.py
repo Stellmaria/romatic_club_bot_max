@@ -16,7 +16,7 @@ from bot.services.exchange_media import get_exchange_cover_media as _get_exchang
 from bot.services.exchanges import ExchangeService
 from bot.services.exchange_catalog import ExchangeCatalogService
 from bot.telegram.media import safe_send_media
-from db.db import get_deck_by_id, get_exchange_batch_by_id, get_exchange_items_by_batch_id, is_admin, is_luxury_user
+from db.legacy import get_deck_by_id, get_exchange_batch_by_id, get_exchange_items_by_batch_id, is_admin, is_luxury_user
 
 router = Router(name="auction_exchange_catalog")
 

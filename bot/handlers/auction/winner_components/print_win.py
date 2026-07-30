@@ -13,7 +13,7 @@ from bot.core.time import to_moscow
 from bot.domain.auctions import AuctionKind
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.auction_winners import AuctionWinnerService
-from config import ADMINS, DISCUSSION_CHAT_ID
+from bot.core.legacy_config import ADMINS, DISCUSSION_CHAT_ID
 
 from .common import (
     AUCTION_PROBLEMS_CONTACT,

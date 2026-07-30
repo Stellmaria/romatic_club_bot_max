@@ -9,7 +9,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.domain.auctions import AuctionKind
 from bot.services.auction_winners import AuctionWinnerService
-from config import ADMIN_LOG_CHATS, DISCUSSION_CHAT_ID
+from bot.core.legacy_config import ADMIN_LOG_CHATS, DISCUSSION_CHAT_ID
 
 from .common import (
     CB_WIN_EDIT_AMT,
@@ -32,7 +32,7 @@ from .common import (
 )
 
 try:
-    from config import WINNER_NOTIFY_DEADLINE_MINUTES
+    from bot.core.legacy_config import WINNER_NOTIFY_DEADLINE_MINUTES
 except Exception:
     WINNER_NOTIFY_DEADLINE_MINUTES = 5
 

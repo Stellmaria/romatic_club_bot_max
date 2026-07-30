@@ -36,8 +36,8 @@ from bot.handlers.uid_verification import router as uid_verification_router
 from bot.handlers.users import router as users_router
 from bot.middlewares.expired_callback import ExpiredCallbackMiddleware
 from bot.middlewares.user_sync import UserSyncMiddleware
-from config import BOT_TOKEN, AUCTION_CHANNEL_USERNAME, DISCUSSION_CHAT_ID
-from db.db import (
+from bot.core.legacy_config import BOT_TOKEN, AUCTION_CHANNEL_USERNAME, DISCUSSION_CHAT_ID
+from db.legacy import (
     init_db,
     close_db,
     list_auctions,

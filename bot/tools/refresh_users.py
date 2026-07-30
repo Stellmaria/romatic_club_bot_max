@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
-from config import BOT_TOKEN, DISCUSSION_CHAT_ID, LUXURY_CHAT_ID
-from db.db import (
+from bot.core.legacy_config import BOT_TOKEN, DISCUSSION_CHAT_ID, LUXURY_CHAT_ID
+from db.legacy import (
     init_db,
     fetch,
     execute,

@@ -11,7 +11,7 @@ import asyncpg
 
 from bot.core.time import ensure_utc
 from db.types import Owner
-from config import DATABASE_URL
+from bot.core.legacy_config import DATABASE_URL
 from db.core import (
     close_db,
     db_pool,

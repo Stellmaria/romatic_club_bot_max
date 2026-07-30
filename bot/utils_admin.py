@@ -6,8 +6,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from bot.handlers.admin.helper.admin_constants import BUTTONS, SYSTEM_MESSAGES
 from bot.utils import resolve_user_id
-from config import ADMIN_SECRET
-from db.db import get_user
+from bot.core.legacy_config import ADMIN_SECRET
+from db.legacy import get_user
 
 
 def lot_admin_keyboard(auction_id: int) -> InlineKeyboardMarkup:

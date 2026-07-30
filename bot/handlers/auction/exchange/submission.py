@@ -15,8 +15,8 @@ from bot.handlers.admin.action_support.compat import _safe_user_mention, send_ad
 from bot.handlers.admin.services.market_utils import safe_edit_text
 from bot.services.exchanges import ExchangeService
 from bot.telegram.media import answer_media_any as _answer_media_any
-from db.db import fetchrow, get_card_by_id, get_cards_by_ids, get_cards_ids_by_deck, get_deck_by_id, is_luxury_user
-from fsm_states import ExchangeFSM, UserAddLotFSM
+from db.legacy import fetchrow, get_card_by_id, get_cards_by_ids, get_cards_ids_by_deck, get_deck_by_id, is_luxury_user
+from bot.legacy_fsm import ExchangeFSM, UserAddLotFSM
 
 router = Router(name="auction_exchange_submission")
 

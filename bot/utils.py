@@ -10,8 +10,8 @@ from bot.core.time import to_moscow_wall
 from bot.handlers.admin.helper.admin_constants import BUTTONS
 from bot.handlers.constants import USER_MESSAGES
 from bot.keyboards.keyboards import back_to_menu_keyboard
-from config import ADMIN_LOG_CHATS
-from db.db import get_user_by_username, get_user, logger
+from bot.core.legacy_config import ADMIN_LOG_CHATS
+from db.legacy import get_user_by_username, get_user, logger
 
 
 def currency_emoji(currency: str) -> str:

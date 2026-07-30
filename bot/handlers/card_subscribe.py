@@ -17,14 +17,14 @@ from bot.handlers.helper.helpers_card_subscribe import (
     get_subscriptions,
     unsubscribe_from_card,
 )
-from db.db import (
+from db.legacy import (
     get_all_decks,
     get_cards_by_deck,
     list_my_preset_subs,
     fetch,
     execute,
 )
-from fsm_states import CardSubscribeFSM
+from bot.legacy_fsm import CardSubscribeFSM
 
 
 # ======================

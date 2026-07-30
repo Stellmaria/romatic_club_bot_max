@@ -4,9 +4,9 @@ from bot.handlers.admin.helper.admin_constants import ADMIN_ERRORS
 from bot.handlers.admin.action_support.compat import send_admin_log, remove_admin_role
 from bot.handlers.admin.helper.user_helpers import resolve_user_from_message, format_user_ref, \
     build_grouped_schedule_lines_with_prefixes, find_free_slots, filter_slots_by_user_type
-from config import ADMINS_OWNERS
-from db.db import get_lot_by_id, get_lot_owners, is_luxury_user, get_auctions_by_date_with_owners
-from db.db import log_audit_action
+from bot.core.legacy_config import ADMINS_OWNERS
+from db.legacy import get_lot_by_id, get_lot_owners, is_luxury_user, get_auctions_by_date_with_owners
+from db.legacy import log_audit_action
 
 
 async def process_remove_admin(message, user=None, state=None, bot=None, password_check=True):

@@ -8,8 +8,8 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, Teleg
 
 from bot.core.time import ensure_utc, to_moscow, utc_now
 from bot.handlers.admin.helper.new.utils import is_luxury_member
-from config import LUXURY_CHAT_ID
-from db.db import (
+from bot.core.legacy_config import LUXURY_CHAT_ID
+from db.legacy import (
     add_user, set_luxury_status, log_admin_action, get_user_by_username, get_user
 )
 
@@ -162,7 +162,7 @@ async def _find_card_for_lot(lot: dict) -> Optional[dict]:
       1) по card_id
       2) по (deck_id + hero_name) или (deck_id + card_name)
     """
-    from db.db import get_card_by_id, get_cards_by_deck
+    from db.legacy import get_card_by_id, get_cards_by_deck
 
     cid = lot.get("card_id")
     if cid:

@@ -21,7 +21,7 @@ from dateutil import tz
 from bot.handlers.admin.helper.new.helper import notify_users
 from bot.handlers.helper.helpers_users import get_user_ids_from_usernames, format_today_lots_fancy
 from bot.utils import currency_emoji
-from db.db import get_settings, set_settings, get_card_by_id, get_card_subscribers, get_auctions_by_date, \
+from db.legacy import get_settings, set_settings, get_card_by_id, get_card_subscribers, get_auctions_by_date, \
     mark_card_day_notified, list_auctions, get_auction_owner_id, get_users_with_pref, update_lot_field, \
     get_auction_winner, subscribers_for_lot_title, get_card_full_by_id, find_card_by_name_hero, subscribers_for_deck, \
     subscribers_for_rarity

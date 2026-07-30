@@ -24,7 +24,7 @@ from bot.handlers.helper.helpers_users import (
     user_edit_lot_keyboard,
 )
 from bot.keyboards.keyboards import back_to_menu_keyboard, currency_choice_keyboard
-from db.db import (
+from db.legacy import (
     add_delete_request,
     delete_lot,
     execute,
@@ -40,7 +40,7 @@ from db.db import (
     get_user_verified_uid, get_user_basic_info_by_username, get_whois_admin_payload, get_user_id_by_uid_any,
     get_uid_profile_binding,
 )
-from fsm_states import UserDeleteLotFSM, UserEditLotFSM, PublicWhoFSM
+from bot.legacy_fsm import UserDeleteLotFSM, UserEditLotFSM, PublicWhoFSM
 
 router = Router()
 logger = logging.getLogger(__name__)

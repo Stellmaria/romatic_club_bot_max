@@ -1,4 +1,4 @@
-from db.db import add_user_subscription, get_card_by_id, list_user_card_subs, unsubscribe_subscription
+from db.legacy import add_user_subscription, get_card_by_id, list_user_card_subs, unsubscribe_subscription
 
 
 async def subscribe_to_card(user_id: int, card_id: int):

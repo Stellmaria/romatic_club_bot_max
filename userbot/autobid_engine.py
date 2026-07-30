@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import datetime
 
-from db.db import (
+from db.legacy import (
     get_lot_by_id,
     get_top_bid_for_auction,
     pick_best_autobid_candidate,

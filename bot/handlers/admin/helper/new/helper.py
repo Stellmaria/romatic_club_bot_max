@@ -5,7 +5,7 @@ from typing import List
 
 from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError, TelegramBadRequest, TelegramAPIError
 
-from db.db import logger, disable_all_notifications, clear_all_card_subscriptions, mark_user_unreachable
+from db.legacy import logger, disable_all_notifications, clear_all_card_subscriptions, mark_user_unreachable
 
 _UNREACHABLE_CACHE: set[int] = set()
 BR_RE = re.compile(r"(?i)<br\s*/?>")

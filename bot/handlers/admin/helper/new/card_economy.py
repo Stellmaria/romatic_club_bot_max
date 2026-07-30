@@ -22,8 +22,8 @@ from bot.auction_notify import _kb_equal
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log as _send_admin_log
 from bot.handlers.card_subscribe import _decks_keyboard, _presets_manage_keyboard
-from config import ADMIN_LOG_CHATS
-from db.db import (
+from bot.core.legacy_config import ADMIN_LOG_CHATS
+from db.legacy import (
     get_card,
     get_deck,
     get_user_id_by_username,
@@ -35,7 +35,7 @@ from db.db import (
     set_card_obtain,
     set_deck_type,
     unsubscribe_subscription, get_auction_winner, fetchrow, fetch, get_all_decks, is_luxury_user, )
-from fsm_states import EconomyFSM, CardSubscribeFSM
+from bot.legacy_fsm import EconomyFSM, CardSubscribeFSM
 
 # ---------------------------------------------------------------------------
 # Router / constants
@@ -1586,7 +1586,7 @@ def _link(msg_id: int | str | None) -> str:
 
     # username из конфига (на случай если ты опять засунул туда '/@https://')
     try:
-        from config import AUCTION_CHANNEL_USERNAME as _U
+        from bot.core.legacy_config import AUCTION_CHANNEL_USERNAME as _U
     except Exception:
         _U = None
 
@@ -1597,13 +1597,13 @@ def _link(msg_id: int | str | None) -> str:
     # фоллбэк для приватных каналов
     chan_id = None
     try:
-        from config import AUCTION_CHANNEL_ID as _CID
+        from bot.core.legacy_config import AUCTION_CHANNEL_ID as _CID
         chan_id = _CID
     except Exception:
         pass
     if chan_id is None:
         try:
-            from config import DISCUSSION_CHAT_ID as _DISC
+            from bot.core.legacy_config import DISCUSSION_CHAT_ID as _DISC
             chan_id = _DISC
         except Exception:
             pass

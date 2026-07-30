@@ -6,8 +6,8 @@ from aiogram import Bot, F, Router, types
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
-from config import ADMIN_LOG_CHATS, ADMINS, LOG_CHAT_ID
-from db.db import (
+from bot.core.legacy_config import ADMIN_LOG_CHATS, ADMINS, LOG_CHAT_ID
+from db.legacy import (
     add_warning,
     ban_user,
     fetch,

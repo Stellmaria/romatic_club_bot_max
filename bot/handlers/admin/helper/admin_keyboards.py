@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.helper.admin_constants import BUTTONS, CALLBACK_CONFIRM_LOT, CALLBACK_CHOOSE_TIME_BACK
-from db.db import get_occupied_slots
+from db.legacy import get_occupied_slots
 
 
 def months_keyboard(prefix="month", months_ahead=3, auction_id=None) -> InlineKeyboardMarkup:

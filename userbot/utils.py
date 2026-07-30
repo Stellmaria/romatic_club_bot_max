@@ -7,7 +7,7 @@ from telethon import TelegramClient
 from telethon.tl.types import InputPeerChannel, InputPeerChat, InputPeerUser, InputPeerChannelFromMessage, \
     InputPeerEmpty, InputPeerSelf, InputPeerUserFromMessage
 
-from config import DISCUSSION_CHAT_ID
+from bot.core.legacy_config import DISCUSSION_CHAT_ID
 
 MSK = ZoneInfo("Europe/Moscow")
 

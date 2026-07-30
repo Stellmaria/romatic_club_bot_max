@@ -16,11 +16,11 @@ from aiogram.fsm.context import FSMContext
 from dateutil import tz
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
-from db.db import get_print_win_missed_for_day, get_exchange_batches_for_card, \
+from db.legacy import get_print_win_missed_for_day, get_exchange_batches_for_card, \
     upsert_exchange_print_stats, get_exchange_print_stats, reset_exchange_print_stats, \
     get_exchange_cards_for_batch, get_exchange_batch_by_id, \
     get_autobid_action_by_msg_id, _is_user_uid_verified, _users_uid_verification_counts
-from fsm_states import PrintExStates
+from bot.legacy_fsm import PrintExStates
 
 MSK = tz.gettz("Europe/Moscow")
 import asyncpg
@@ -36,15 +36,15 @@ from bot.domain.auctions import AuctionKind, Currency
 from bot.handlers.admin.helper.admin_constants import WARN_TEXTS
 from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
-from config import DISCUSSION_CHAT_ID, ADMINS, BOT_TOKEN, LOG_CHAT_ID, AUCTION_CHANNEL_USERNAME, AUCTION_CHANNEL_ID, \
+from bot.core.legacy_config import DISCUSSION_CHAT_ID, ADMINS, BOT_TOKEN, LOG_CHAT_ID, AUCTION_CHANNEL_USERNAME, AUCTION_CHANNEL_ID, \
     ADMIN_LOG_CHATS
 from db import db
-from db.db import add_bid, update_lot_field, add_warning, get_auction_by_discussion_id, \
+from db.legacy import add_bid, update_lot_field, add_warning, get_auction_by_discussion_id, \
     get_warnings_count, ban_user, is_user_banned, get_current_auction, add_user, execute, fetchrow, get_lot_owners, \
     get_user, get_lots_by_owner, get_user_by_username, log_audit_action, update_auction_status, get_lot_by_id, fetch
 
 try:
-    from config import WINNER_NOTIFY_DEADLINE_MINUTES
+    from bot.core.legacy_config import WINNER_NOTIFY_DEADLINE_MINUTES
 except Exception:
     WINNER_NOTIFY_DEADLINE_MINUTES = 5
 
@@ -573,7 +573,7 @@ async def admin_unmute(message: types.Message):
         await message.answer("Формат: Макс размут @username")
         return
     username = parts[2].lstrip("@")
-    from db.db import get_user_by_username
+    from db.legacy import get_user_by_username
     user = await get_user_by_username(username)
     if not user:
         await message.answer(f"Пользователь @{username} не найден.")
@@ -772,7 +772,7 @@ async def admin_warn_step1(message: types.Message):
 
 @router.message(lambda m: m.from_user.id in admin_pending_warns)
 async def admin_warn_step2(message: types.Message):
-    from db.db import get_user_id_by_username  # реализуй если нет
+    from db.legacy import get_user_id_by_username  # реализуй если нет
     target_username = admin_pending_warns.pop(message.from_user.id)
     user_id = await get_user_id_by_username(target_username)
     if not user_id:
@@ -803,7 +803,7 @@ async def admin_check_warns(message: types.Message):
         await message.answer("Формат: Макс преды @username")
         return
     username = parts[2].lstrip("@")
-    from db.db import get_user_id_by_username
+    from db.legacy import get_user_id_by_username
     user_id = await get_user_id_by_username(username)
     if not user_id:
         await message.answer("Пользователь не найден.")
@@ -834,7 +834,7 @@ async def admin_unban_and_reset(message: types.Message):
         return
 
     username = parts[2].lstrip("@")
-    from db.db import get_user_by_username, get_user_id_by_username, unban_user, reset_warnings, is_user_banned
+    from db.legacy import get_user_by_username, get_user_id_by_username, unban_user, reset_warnings, is_user_banned
     user = await get_user_by_username(username)
     user_id = user["user_id"] if user else await get_user_id_by_username(username)
     if not user_id:
@@ -886,7 +886,7 @@ async def admin_full_unrestrict(message: types.Message):
             await message.answer("Формат: макс рабан @username (или используйте reply)")
             return
         username = parts[2].lstrip("@")
-        from db.db import get_user_by_username
+        from db.legacy import get_user_by_username
         user = await get_user_by_username(username)
         if not user:
             await message.answer(
@@ -921,7 +921,7 @@ async def admin_reset_warns(message: types.Message):
         await message.answer("Формат: Макс обнулить @username")
         return
     username = parts[2].lstrip("@")
-    from db.db import get_user_by_username, reset_warnings, is_user_banned
+    from db.legacy import get_user_by_username, reset_warnings, is_user_banned
     user = await get_user_by_username(username)
     if not user:
         await message.answer(f"Пользователь @{username} не найден.")
@@ -939,7 +939,7 @@ async def admin_all_warns(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
         return
-    from db.db import fetch
+    from db.legacy import fetch
     rows = await fetch("""
                        SELECT u.username, u.full_name, u.user_id, u.warnings_count
                        FROM users u
@@ -962,7 +962,7 @@ async def show_deleted_bids(message: types.Message):
     if message.from_user.id not in ADMINS:
         await message.answer("Нет доступа.")
         return
-    from db.db import fetch
+    from db.legacy import fetch
     rows = await fetch("""
                        SELECT w.user_id, u.username, w.issued_at
                        FROM user_warnings w
@@ -1013,7 +1013,7 @@ async def admin_ban_user(message: types.Message):
         return
 
     username = parts[2].lstrip("@")
-    from db.db import get_user_by_username, ban_user
+    from db.legacy import get_user_by_username, ban_user
     user = await get_user_by_username(username)
     if not user:
         await message.answer(f"Пользователь @{username} не найден.")

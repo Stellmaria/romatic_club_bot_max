@@ -23,7 +23,7 @@ from bot.handlers.admin.services.market_service import _kb_proof_each_skip, _sen
 from bot.handlers.admin.services.market_utils import get_selected_ids, safe_delete, _normalize_pay_type, parse_tiers, \
     _distinct_cards_count, safe_edit_text, remove_selected_id, add_selected_id, currency_emoji, \
     validate_price_by_currency, _card_title
-from db.db import get_all_decks, market_create_listing, market_add_listing_item, market_add_rate_tiers, \
+from db.legacy import get_all_decks, market_create_listing, market_add_listing_item, market_add_rate_tiers, \
     market_add_items, fetchrow, execute, market_get_rate_tiers, db_pool, market_set_item_qty, market_dec_item_qty, \
     market_set_status, require_db_pool, get_cards_by_deck, fetch
 

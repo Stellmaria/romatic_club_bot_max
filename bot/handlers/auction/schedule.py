@@ -12,7 +12,7 @@ from aiogram.filters import Command
 from bot.core.time import to_moscow, utc_now
 from bot.handlers.admin.services.schedule import _chunks
 from bot.handlers.helper.helpers_users import _deck_tag, _emoji_by_currency
-from db.db import (
+from db.legacy import (
     get_auctions_by_card_ref,
     get_auctions_in_range,
     is_admin,

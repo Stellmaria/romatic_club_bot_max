@@ -8,9 +8,9 @@ from bot.handlers.admin.helper.new.keyboards import confirm_keyboard, rarity_key
     decks_menu_keyboard, decks_keyboard, back_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.helper.user_helpers import is_card_num_exists
-from config import ADMINS_OWNERS, ADMIN_SECRET
-from db.db import get_all_decks, log_audit_action, add_card
-from fsm_states import AddCardFSM
+from bot.core.legacy_config import ADMINS_OWNERS, ADMIN_SECRET
+from db.legacy import get_all_decks, log_audit_action, add_card
+from bot.legacy_fsm import AddCardFSM
 
 
 def register_cards_admin_handlers(router: Router):

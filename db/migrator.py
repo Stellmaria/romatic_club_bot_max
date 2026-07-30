@@ -300,7 +300,7 @@ async def migrate_database_url(database_url: str) -> list[str]:
 
 
 async def _main() -> None:
-    from config import DATABASE_URL
+    from bot.core.legacy_config import DATABASE_URL
 
     logging.basicConfig(
         level=logging.INFO,

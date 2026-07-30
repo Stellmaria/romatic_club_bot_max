@@ -11,8 +11,8 @@ from bot.core.time import schedule_slot_key, to_moscow_wall
 from bot.handlers.admin.helper.date_utils import all_30min_slots_for_date
 from bot.handlers.admin.helper.new.utils import auction_kind_label
 from bot.handlers.helper.helpers_users import parse_username_userid
-from config import LUXURY_CHAT_ID
-from db.db import get_all_users, set_luxury_status, get_user, add_user, get_user_by_username, get_card_by_num, \
+from bot.core.legacy_config import LUXURY_CHAT_ID
+from db.legacy import get_all_users, set_luxury_status, get_user, add_user, get_user_by_username, get_card_by_num, \
     get_lot_owners, get_users_by_ids, is_luxury_user
 
 

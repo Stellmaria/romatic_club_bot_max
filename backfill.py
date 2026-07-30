@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from telethon import TelegramClient, functions
 from telethon.errors import FloodWaitError, MsgIdInvalidError, SessionPasswordNeededError
 
-from config import (
+from bot.core.legacy_config import (
     AUCTION_CHANNEL_ID,
     AUCTION_CHANNEL_USERNAME,
     TG_API_ID,

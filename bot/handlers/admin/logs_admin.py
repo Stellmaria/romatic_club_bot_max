@@ -4,7 +4,7 @@ from typing import List, Optional, Set
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest, TelegramNetworkError
 
-import config as cfg
+import bot.core.legacy_config as cfg
 
 
 def _parse_chat_id(value: object) -> Optional[int]:
@@ -144,7 +144,7 @@ async def send_lot_edit_log(
         format_admin_action_log,
         format_field_change_block,
     )
-    from db.db import log_audit_action
+    from db.legacy import log_audit_action
 
     owners_text = await get_lot_owners_text(int(auction_id))
 
@@ -209,7 +209,7 @@ async def _log_lot_field_changes(
         format_admin_action_log,
         format_field_change_block,
     )
-    from db.db import log_audit_action
+    from db.legacy import log_audit_action
 
     owners_text = await get_lot_owners_text(int(auction_id))
 

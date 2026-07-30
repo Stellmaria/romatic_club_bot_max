@@ -11,7 +11,7 @@ from bot.handlers.admin.services.market_constants import STAR_DB_CODE, _EXTRAS_H
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_keyboards import my_listing_actions
 from bot.handlers.admin.services.market_utils import fiat_flag
-from db.db import db_pool, market_get_rate_tiers, fetchrow, fetch
+from db.legacy import db_pool, market_get_rate_tiers, fetchrow, fetch
 
 try:
     import pymorphy2  # type: ignore

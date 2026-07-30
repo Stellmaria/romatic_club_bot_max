@@ -56,3 +56,19 @@
 - Новый остаток полного pytest: `bot/handlers/admin/admin_panel.py` содержит
   3659 строк при контракте thin facade <80 строк. Его разбиение — следующий
   отдельный срез; в этом checkpoint не выполнялось.
+
+## Продолжение: handler boundaries and admin facades
+
+- `admin_panel.py` и `moderation.py` заменены thin facades, которые собирают
+  выделенные feature routers в прежнем порядке и сохраняют публичные импорты.
+- Убран прямой импорт handler-типа из `db/db.py`; SQL из exchange-media service
+  делегирован существующему repository. Прямые импорты root facades в production
+  переведены на package-scoped compatibility modules.
+- Исправлены label для сочетания «чай или/и алмазы» и единая политика окончания
+  перезапущенного аукциона на 59-й секунде минуты.
+- Проверки: `tests/test_architecture_boundaries.py` — 9 passed. Полный
+  `pytest -q --maxfail=1` дошёл до 38 passed и 6 skipped (disposable PostgreSQL
+  отсутствует), затем выявил следующий legacy-contract migrator-а; он остаётся
+  активным следующим срезом.
+- Статус: частично. Следующий шаг: завершить миграционный контракт и полный
+  pytest, затем проверить Compose на Docker-enabled Linux runner.

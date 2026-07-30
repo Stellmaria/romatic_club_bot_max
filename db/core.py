@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional
 
 import asyncpg
 
-from config import DATABASE_URL, DB_AUTO_MIGRATE
+from bot.core.legacy_config import DATABASE_URL, DB_AUTO_MIGRATE
 from db.migrator import apply_migrations
 
 logger = logging.getLogger("auction_bot")

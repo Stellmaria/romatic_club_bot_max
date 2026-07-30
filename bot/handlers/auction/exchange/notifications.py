@@ -7,8 +7,8 @@ from aiogram import Bot
 from aiogram.types import Message
 from bot.services.luxury import get_user_luxury_level, is_luxury_member
 from bot.telegram.media import answer_media_any as _answer_media_any
-from config import LUXURY_CHAT_ID, LUXURY_CHAT_ID_LVL2
-from db.db import count_sold_by_card_id, count_sold_same_card, fetchrow, get_deck_by_id, is_admin
+from bot.core.legacy_config import LUXURY_CHAT_ID, LUXURY_CHAT_ID_LVL2
+from db.legacy import count_sold_by_card_id, count_sold_same_card, fetchrow, get_deck_by_id, is_admin
 
 from .common import (
     _exchange_gain_for_card,
@@ -23,7 +23,7 @@ from .common import (
 
 async def _uid_verification_badge(user_id: int) -> str:
     try:
-        from db.db import get_user_verified_uid, is_user_uid_banned
+        from db.legacy import get_user_verified_uid, is_user_uid_banned
         if await is_user_uid_banned(int(user_id)):
             return "⛔️ UID в ЧС"
         uid = await get_user_verified_uid(int(user_id))

@@ -14,7 +14,7 @@ from bot.domain.auctions import (
 )
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.auction_autobids import AuctionAutobidService
-from config import AUTOBID_SET_PASSWORD
+from bot.core.legacy_config import AUTOBID_SET_PASSWORD
 
 logger = logging.getLogger("auction_bot.autobid_commands")
 router = Router(name="auction-autobid")

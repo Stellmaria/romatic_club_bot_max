@@ -3,7 +3,7 @@ from aiogram.filters import Command
 from html import escape
 
 # импортируй ИМЕННО оттуда, где у тебя helpers БД (судя по main.py — из db.db)
-from db.db import execute, fetch, fetchrow
+from db.legacy import execute, fetch, fetchrow
 
 router = Router(name="emoji_setup")
 

@@ -17,8 +17,8 @@ from bot.handlers.admin.helper.user_helpers import get_owner_refs
 from bot.handlers.auction.winner import _post_rules_under_lot
 from bot.services.auction_workflows import AuctionPublicationService
 from bot.telegram.media import bot_send_media_any
-from config import AUCTION_CHANNEL_ID, AUCTION_CHANNEL_USERNAME
-from db.db import count_sold_by_card_id, count_sold_same_card, list_auctions
+from bot.core.legacy_config import AUCTION_CHANNEL_ID, AUCTION_CHANNEL_USERNAME
+from db.legacy import count_sold_by_card_id, count_sold_same_card, list_auctions
 
 logger = logging.getLogger("auction_bot.publication")
 

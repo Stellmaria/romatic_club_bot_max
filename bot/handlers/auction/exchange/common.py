@@ -12,7 +12,7 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.helper.helpers_users import _emoji_by_currency
 from bot.services.auction_media import resolve_media_file_id
-from db.db import fetchall, fetchrow, get_all_decks, get_card_by_id, get_exchange_cards_for_deck
+from db.legacy import fetchall, fetchrow, get_all_decks, get_card_by_id, get_exchange_cards_for_deck
 
 EX_MODE_DECK = "deck"
 

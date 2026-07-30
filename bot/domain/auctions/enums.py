@@ -232,5 +232,5 @@ def currency_choices_label(
         Currency.TREASURES: "🪙 сокровища",
     }
     if with_words:
-        return " или ".join(labels[currency] for currency in choices)
+        return " или/и ".join(labels[currency] for currency in choices)
     return " / ".join(currency.emoji for currency in choices)

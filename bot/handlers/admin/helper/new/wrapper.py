@@ -6,7 +6,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.handlers.admin.helper.admin_constants import NO_ACCESS_MSG
 from bot.handlers.admin.helper.new.utils import sender_id
 from bot.telegram.callbacks import safe_callback_answer
-from db.db import is_admin
+from db.legacy import is_admin
 
 
 def admin_only(handler: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:

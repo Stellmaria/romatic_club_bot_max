@@ -12,7 +12,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log
-from db.db import (
+from db.legacy import (
     list_uid_verification_requests,
     get_uid_verification_request,
     approve_uid_verification_request,
@@ -23,7 +23,7 @@ from db.db import (
     set_uid_verification_request_revision, execute, get_user_id_by_username, unban_user, fetch, fetchrow, get_uid_owner,
     get_user_id_by_uid_any, get_uid_profile_binding,
 )
-from fsm_states import ModActionFSM, UIDVerificationRevisionFSM
+from bot.legacy_fsm import ModActionFSM, UIDVerificationRevisionFSM
 
 router = Router()
 

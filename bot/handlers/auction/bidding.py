@@ -27,8 +27,8 @@ from bot.domain.auctions import (
 )
 from bot.services.auction_bids import AuctionBidService
 from bot.core.time import utc_now
-from config import LOG_CHAT_ID
-from db.db import add_warning, get_warnings_count
+from bot.core.legacy_config import LOG_CHAT_ID
+from db.legacy import add_warning, get_warnings_count
 
 logger = logging.getLogger("auction_bot.bidding")
 router = Router(name="auction-bidding")

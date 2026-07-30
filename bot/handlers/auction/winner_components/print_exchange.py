@@ -10,8 +10,8 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.services.auction_winners import AuctionWinnerService
-from config import ADMINS
-from fsm_states import PrintExStates
+from bot.core.legacy_config import ADMINS
+from bot.legacy_fsm import PrintExStates
 
 from .common import mention_html
 

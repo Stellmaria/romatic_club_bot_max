@@ -2,21 +2,20 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from datetime import timedelta
 from typing import Optional
 
 from aiogram import F, Router, types
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import Message
 
-from bot.core.time import to_moscow, utc_now
+from bot.core.time import auction_end_at_59, to_moscow, utc_now
 from bot.domain.auctions import InvalidAuctionTransition
 from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.services.auction_admin import AuctionAdminService
 from bot.services.auction_workflows import AuctionLifecycleService
-from config import ADMINS
-from db.db import (
+from bot.core.legacy_config import ADMINS
+from db.legacy import (
     fetchrow,
     get_auction_by_discussion_id,
     get_lot_by_id,
@@ -240,7 +239,7 @@ async def admin_start_auction(message: Message) -> None:
         await message.answer("Не удалось найти аукцион по reply.")
         return
 
-    new_end_time = to_moscow(utc_now() + timedelta(minutes=30))
+    new_end_time = auction_end_at_59(to_moscow(utc_now()))
     try:
         lifecycle = await AuctionLifecycleService.create()
         await lifecycle.restart(int(lot["auction_id"]), end_time=new_end_time)

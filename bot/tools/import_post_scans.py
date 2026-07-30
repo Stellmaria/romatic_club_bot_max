@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]  # .../E:\python\main\1
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from config import DATABASE_URL
+from bot.core.legacy_config import DATABASE_URL
 
 
 def _to_dt(series: pd.Series) -> pd.Series:

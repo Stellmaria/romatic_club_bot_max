@@ -13,8 +13,8 @@ from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
 from telethon.tl.types import ChannelParticipantsAdmins
 
-from db.db import get_autobid_action_by_msg_id, list_autobids
-from db.db import init_db, close_db
+from db.legacy import get_autobid_action_by_msg_id, list_autobids
+from db.legacy import init_db, close_db
 
 # -----------------------------
 # ENV

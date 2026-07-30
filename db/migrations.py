@@ -9,6 +9,9 @@ import asyncpg
 logger = logging.getLogger("auction_bot.db.migrations")
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "migrations"
+# Historical schema inventory also contains "008_auction_slot_policy.sql" and
+# "009_auction_end_second_59.sql"; the active runner applies the ordered
+# runtime migration directory above.
 MIGRATION_LOCK_KEY = 0x4D494752  # "MIGR"
 
 

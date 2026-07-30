@@ -3,7 +3,7 @@ from typing import Set
 from bot.handlers.admin.helper.new.utils import auction_kind_label
 from bot.domain.auctions import currency_choices_label
 from bot.handlers.helper.helpers_users import _emoji_by_currency
-from db.db import fetchrow
+from db.legacy import fetchrow
 
 CANCEL_TEXT = ["назад", "отмена", "⬅️ назад"]
 NO_ACCESS_MSG = "Нет доступа."

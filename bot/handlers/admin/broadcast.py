@@ -7,8 +7,8 @@ from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
-from db.db import get_all_users, log_audit_action
-from fsm_states import BroadcastFSM
+from db.legacy import get_all_users, log_audit_action
+from bot.legacy_fsm import BroadcastFSM
 
 
 def register_broadcast_handlers(router: Router):

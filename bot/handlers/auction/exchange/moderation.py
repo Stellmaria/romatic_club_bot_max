@@ -18,8 +18,8 @@ from bot.services.exchange_media import get_exchange_cover_media as _get_exchang
 from bot.services.exchanges import ExchangeService
 from bot.services.exchange_moderation import ExchangeModerationService
 from bot.telegram.media import safe_send_media
-from config import AUCTION_CHANNEL_ID, AUCTION_CHANNEL_USERNAME
-from fsm_states import ModActionFSM
+from bot.core.legacy_config import AUCTION_CHANNEL_ID, AUCTION_CHANNEL_USERNAME
+from bot.legacy_fsm import ModActionFSM
 
 router = Router(name="auction_exchange_moderation")
 

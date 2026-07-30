@@ -38,9 +38,9 @@ from bot.keyboards.keyboards import craft_uid_kb
 from bot.domain.auctions import AuctionKind, currency_choices_label, normalize_currency_choices
 from bot.core.time import ensure_utc, utc_now
 from bot.services.auction_media import resolve_media_file_id
-from config import AUCTION_CHANNEL_ID, DISCUSSION_CHAT_ID, AUCTION_CHANNEL_USERNAME, LOG_CHAT_ID, ADMIN_LOG_CHATS, \
+from bot.core.legacy_config import AUCTION_CHANNEL_ID, DISCUSSION_CHAT_ID, AUCTION_CHANNEL_USERNAME, LOG_CHAT_ID, ADMIN_LOG_CHATS, \
     LUXURY_CHAT_ID_LVL2, LUXURY_CHAT_ID, ADMINS, AUTOBID_SET_PASSWORD
-from db.db import (
+from db.legacy import (
     get_all_decks, get_cards_by_deck, get_card_by_id, add_pending_auction, update_lot_field, log_admin_action,
     is_luxury_user, get_user, get_lots_by_owner, add_pending_auction_by_card_id, has_pending_lot,
     list_auctions, update_auction_status, get_auctions_by_card_ref, get_auctions_in_range, get_auctions_for_local_day,
@@ -55,8 +55,8 @@ from db.db import (
     mark_exchange_manual_sent, set_exchange_manual_winner, logger, set_luxury_status, log_audit_action,
     release_stale_unpublished_lots, cancel_owner_unpublished_lots,
 )
-from db.db import get_exchange_approved_cards_by_deck
-from fsm_states import UserAddLotFSM, ExchangeFSM, ModActionFSM
+from db.legacy import get_exchange_approved_cards_by_deck
+from bot.legacy_fsm import UserAddLotFSM, ExchangeFSM, ModActionFSM
 
 router = Router()
 
@@ -2931,7 +2931,7 @@ async def auction_publisher_loop(bot: Bot):
 @router.message(Command("when"), F.chat.type == "private")
 async def cmd_when(message: types.Message) -> None:
     # Разрешаем: админы и Лакшери
-    from db.db import is_admin  # локальный импорт
+    from db.legacy import is_admin  # локальный импорт
     from collections import defaultdict
     from html import escape
 
@@ -3372,7 +3372,7 @@ async def user_choose_progress_slots(call: types.CallbackQuery, state: FSMContex
 @router.message(Command("gaps"), F.chat.type == "private")
 async def cmd_gaps(message: types.Message) -> None:
     # Разрешаем команду администраторам и Лакшери
-    from db.db import is_admin  # локальный импорт, чтобы не трогать верхние импорты
+    from db.legacy import is_admin  # локальный импорт, чтобы не трогать верхние импорты
 
     uid = message.from_user.id
     allowed = await is_admin(uid) or await is_luxury_user(uid)
@@ -8182,7 +8182,7 @@ async def cmd_autobid_list(message: types.Message):
 
 async def _uid_verification_badge(user_id: int) -> str:
     try:
-        from db.db import get_user_verified_uid, is_user_uid_banned
+        from db.legacy import get_user_verified_uid, is_user_uid_banned
         if await is_user_uid_banned(int(user_id)):
             return "⛔️ UID в ЧС"
         uid = await get_user_verified_uid(int(user_id))

@@ -28,7 +28,7 @@ from bot.handlers.helper.appeals_service import (
     set_reply,
     set_status,
 )
-from fsm_states import AppealFSM
+from bot.legacy_fsm import AppealFSM
 
 router = Router(name="appeals")
 logger = logging.getLogger(__name__)
@@ -602,7 +602,7 @@ async def appeal_submit(message: types.Message, state: FSMContext) -> None:
 
         # докидываем медиа в админ-логи (копиями)
         if media_ids:
-            from config import ADMIN_LOG_CHATS  # локальный импорт чтобы не ловить циклы
+            from bot.core.legacy_config import ADMIN_LOG_CHATS  # локальный импорт чтобы не ловить циклы
 
             for chat_id in ADMIN_LOG_CHATS:
                 await message.bot.send_message(chat_id, "📎 Вложения к обращению:")
