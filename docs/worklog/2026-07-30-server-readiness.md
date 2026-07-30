@@ -239,6 +239,14 @@
   production images на Ubuntu. Это делает Compose-контракт проверяемым после
   push, несмотря на отсутствие Docker CLI на локальной Windows.
 
+## Продолжение: remote history and publication
+
+- Локальная восстановленная история объединена с однострочным initial commit
+  `origin/main` обычным merge `646299d` без force-push и отправлена в
+  `Stellmaria/romatic_club_bot_max`.
+- Ветка `main` теперь отслеживает `origin/main`; GitHub Actions сможет
+  запустить новый Compose contract job на опубликованном коде.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,
