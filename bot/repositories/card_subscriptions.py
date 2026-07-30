@@ -117,6 +117,14 @@ class CardSubscriptionsRepository:
             )
         return {int(row["card_id"]): dict(row) for row in rows}
 
+    async def subscriber_ids(self, card_id: int) -> list[int]:
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                "SELECT user_id FROM public.user_subscriptions WHERE card_id = $1",
+                int(card_id),
+            )
+        return [int(row["user_id"]) for row in rows]
+
     async def confirm_all(self, user_id: int) -> int:
         async with self._pool.acquire() as connection:
             rows = await connection.fetch(

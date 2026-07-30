@@ -262,3 +262,21 @@
 - `SERVER_DEPLOYMENT.md` содержит Linux cron policy и обязательство внешнего
   persistent backup storage. Windows не содержит `sh`, поэтому syntax check
   этого Linux-скрипта остаётся задачей Linux/Docker-enabled runner.
+
+## Продолжение: auction comments repository adoption
+
+- Ручные результаты аукциона, журнал рассылок и их legacy schema bootstrap
+  перенесены из `auction_comments` в `AuctionWinnerRepository` через
+  `AuctionWinnerService`; публичные callback-контракты не менялись.
+- Подписчики карточек, pruning/count предупреждений и admin-thanks также
+  используют существующие или расширенные repository/service owners. Это
+  уменьшает связанность handler-а с pool/DDL и улучшает переносимость запуска
+  на сервер, не добавляя новой предметной логики.
+- Проверки: `compileall` затронутых handler/service/repository файлов —
+  успешно; `git diff --check` — успешно. `test_handler_sql_boundary.py`
+  подтверждает, что остались только два больших legacy-файла:
+  `admin/services/market_add_flow.py` и `auction_comments.py`; полный тест
+  ещё ожидаемо не зелёный.
+- Следующий шаг: перенести оставшиеся bid/auction read-mutations из
+  `auction_comments` в точечные repository operations, затем продолжить
+  `market_add_flow`.

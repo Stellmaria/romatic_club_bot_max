@@ -22,6 +22,12 @@ class AuctionWinnerService:
     async def auction(self, auction_id: int) -> dict[str, Any] | None:
         return await self._repository.auction(auction_id)
 
+    async def ensure_print_win_schema(self) -> None:
+        await self._repository.ensure_print_win_schema()
+
+    async def ensure_admin_thanks_schema(self) -> None:
+        await self._repository.ensure_admin_thanks_schema()
+
     async def auction_currency(self, auction_id: int) -> str | None:
         return await self._repository.auction_currency(auction_id)
 

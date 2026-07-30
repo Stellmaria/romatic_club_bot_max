@@ -15,6 +15,62 @@ class AuctionWinnerRepository:
     def __init__(self, pool: asyncpg.Pool):
         self._pool = pool
 
+    async def ensure_print_win_schema(self) -> None:
+        """Keep legacy winner tables available without exposing DDL to handlers."""
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.auction_win_mailings (
+                    id BIGSERIAL PRIMARY KEY,
+                    auction_id INTEGER NOT NULL,
+                    target TEXT NOT NULL,
+                    sent_by_user_id BIGINT,
+                    sent_by_username TEXT,
+                    sent_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_auction_win_mailings_auction_id
+                    ON public.auction_win_mailings (auction_id);
+                CREATE TABLE IF NOT EXISTS public.auction_manual_results (
+                    auction_id INTEGER PRIMARY KEY,
+                    winner_user_id BIGINT,
+                    winner_username TEXT,
+                    owner_user_id BIGINT,
+                    owner_username TEXT,
+                    amount INTEGER,
+                    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_by BIGINT,
+                    moderator_comment TEXT
+                );
+                ALTER TABLE public.auction_manual_results
+                    ADD COLUMN IF NOT EXISTS moderator_comment TEXT;
+                """
+            )
+
+    async def ensure_admin_thanks_schema(self) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS public.admin_thanks_totals (
+                    author TEXT PRIMARY KEY,
+                    thanks_total BIGINT NOT NULL DEFAULT 0,
+                    users_total BIGINT NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS public.admin_thanks_users (
+                    author TEXT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    thanks_count BIGINT NOT NULL DEFAULT 0,
+                    PRIMARY KEY (author, user_id)
+                );
+                ALTER TABLE public.admin_thanks_users
+                    ADD COLUMN IF NOT EXISTS thanks_count BIGINT NOT NULL DEFAULT 0;
+                UPDATE public.admin_thanks_users
+                SET thanks_count = 1
+                WHERE thanks_count = 0;
+                """
+            )
+
     async def auction(self, auction_id: int) -> dict[str, Any] | None:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(

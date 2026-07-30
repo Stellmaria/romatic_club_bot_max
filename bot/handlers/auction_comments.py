@@ -37,6 +37,8 @@ from bot.handlers.admin.helper.admin_constants import WARN_TEXTS
 from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.services.auction_winners import AuctionWinnerService
+from bot.services.card_subscriptions import CardSubscriptionsService
+from bot.services.warnings import WarningService
 from bot.core.legacy_config import DISCUSSION_CHAT_ID, ADMINS, BOT_TOKEN, LOG_CHAT_ID, AUCTION_CHANNEL_USERNAME, AUCTION_CHANNEL_ID, \
     ADMIN_LOG_CHATS
 from db import db
@@ -1793,79 +1795,24 @@ async def _ensure_print_win_tables() -> None:
     if _WIN_TABLES_READY:
         return
 
-    await execute("""
-                  CREATE TABLE IF NOT EXISTS public.auction_win_mailings
-                  (
-                      id               BIGSERIAL PRIMARY KEY,
-                      auction_id       INTEGER NOT NULL,
-                      target           TEXT    NOT NULL, -- 'owner' | 'winner' | 'both'
-                      sent_by_user_id  BIGINT,
-                      sent_by_username TEXT,
-                      sent_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                  );
-                  """)
-    await execute("""
-                  CREATE INDEX IF NOT EXISTS idx_auction_win_mailings_auction_id
-                      ON public.auction_win_mailings (auction_id);
-                  """)
-
-    await execute("""
-                  CREATE TABLE IF NOT EXISTS public.auction_manual_results
-                  (
-                      auction_id      INTEGER PRIMARY KEY,
-                      winner_user_id  BIGINT,
-                      winner_username TEXT,
-                      owner_user_id   BIGINT,
-                      owner_username  TEXT,
-                      amount          INTEGER,
-                      updated_at      TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                      updated_by      BIGINT
-                  );
-                  """)
-
-    # добавляем колонку под комментарий модератора (безопасно, если уже есть)
-    await execute("""
-                  ALTER TABLE public.auction_manual_results
-                      ADD COLUMN IF NOT EXISTS moderator_comment TEXT;
-                  """)
+    await (await AuctionWinnerService.create()).ensure_print_win_schema()
 
     _WIN_TABLES_READY = True
 
 
 async def _win_mailing_counts(auction_id: int) -> tuple[int, int, int]:
     await _ensure_print_win_tables()
-    row = await fetchrow("""
-                         SELECT COUNT(*)::bigint                                                      AS total,
-                                SUM(CASE WHEN target IN ('owner', 'both') THEN 1 ELSE 0 END)::bigint  AS owner_cnt,
-                                SUM(CASE WHEN target IN ('winner', 'both') THEN 1 ELSE 0 END)::bigint AS winner_cnt
-                         FROM public.auction_win_mailings
-                         WHERE auction_id = $1
-                         """, auction_id)
-    return int(row["total"] or 0), int(row["owner_cnt"] or 0), int(row["winner_cnt"] or 0)
+    return await (await AuctionWinnerService.create()).mailing_counts(auction_id)
 
 
 async def _add_win_mailing(auction_id: int, target: str, admin: types.User) -> None:
     await _ensure_print_win_tables()
-    await execute("""
-                  INSERT INTO public.auction_win_mailings (auction_id, target, sent_by_user_id, sent_by_username)
-                  VALUES ($1, $2, $3, $4)
-                  """, auction_id, target, int(admin.id), (admin.username or None))
+    await (await AuctionWinnerService.create()).add_mailing(auction_id, target, admin)
 
 
 async def _get_manual_result(auction_id: int) -> dict | None:
     await _ensure_print_win_tables()
-    row = await fetchrow("""
-                         SELECT auction_id,
-                                winner_user_id,
-                                winner_username,
-                                owner_user_id,
-                                owner_username,
-                                amount,
-                                moderator_comment
-                         FROM public.auction_manual_results
-                         WHERE auction_id = $1
-                         """, auction_id)
-    return dict(row) if row else None
+    return await (await AuctionWinnerService.create()).manual_result(auction_id)
 
 
 async def _upsert_manual_result(
@@ -1880,20 +1827,16 @@ async def _upsert_manual_result(
         moderator_comment: str | None = None,
 ) -> None:
     await _ensure_print_win_tables()
-    await execute("""
-                  INSERT INTO public.auction_manual_results
-                  (auction_id, winner_user_id, winner_username, owner_user_id, owner_username, amount, updated_by, moderator_comment)
-                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                  ON CONFLICT (auction_id)
-                      DO UPDATE SET winner_user_id      = EXCLUDED.winner_user_id,
-                                    winner_username     = EXCLUDED.winner_username,
-                                    owner_user_id       = EXCLUDED.owner_user_id,
-                                    owner_username      = EXCLUDED.owner_username,
-                                    amount              = EXCLUDED.amount,
-                                    updated_by          = EXCLUDED.updated_by,
-                                    moderator_comment   = COALESCE(EXCLUDED.moderator_comment, public.auction_manual_results.moderator_comment),
-                                    updated_at          = CURRENT_TIMESTAMP
-                  """, auction_id, winner_user_id, winner_username, owner_user_id, owner_username, amount, updated_by, moderator_comment)
+    await (await AuctionWinnerService.create()).upsert_manual_result(
+        auction_id,
+        winner_user_id=winner_user_id,
+        winner_username=winner_username,
+        owner_user_id=owner_user_id,
+        owner_username=owner_username,
+        amount=amount,
+        updated_by=updated_by,
+        moderator_comment=moderator_comment,
+    )
 
 
 async def _resolve_user_ref(raw: str) -> tuple[int | None, str | None]:
@@ -2419,7 +2362,7 @@ async def cb_print_win_clear_manual(call: types.CallbackQuery, bot: Bot):
     auction_id = _cb_last_int(call.data)
 
     await _ensure_print_win_tables()
-    await execute("DELETE FROM public.auction_manual_results WHERE auction_id = $1", auction_id)
+    await (await AuctionWinnerService.create()).clear_manual_result(auction_id)
 
     await call.answer("🧹 Ручной итог сброшен.")
     await _refresh_print_win_menu_by_ids(
@@ -3396,10 +3339,7 @@ async def _send_notifications(bot: Bot, auction_id: int, winner_id: int, *, over
 
 
 async def notify_card_subscribers(telegram_bot, card_id: int, auction: dict):
-    subs = await fetch(
-        "SELECT us.user_id FROM public.user_subscriptions us WHERE us.card_id = $1",
-        card_id
-    )
+    subs = await (await CardSubscriptionsService.from_runtime()).subscriber_ids(card_id)
     if not subs:
         return
 
@@ -3415,8 +3355,7 @@ async def notify_card_subscribers(telegram_bot, card_id: int, auction: dict):
     )
 
     photo = auction.get("image_id")  # можно и без фото, если нет
-    for r in subs:
-        uid = r["user_id"]
+    for uid in subs:
         try:
             if photo:
                 await _send_media_any(telegram_bot, int(uid), str(photo), caption)
@@ -3600,24 +3539,7 @@ async def _resolve_user_id(arg: str | None) -> int | None:
     Понимает @username или числовой id. Возвращает user_id или None.
     Использует вашу таблицу users, если есть.
     """
-    if not arg:
-        return None
-    arg = arg.strip()
-    if arg.startswith("@"):
-        uname = arg.lstrip("@")
-        try:
-            row = await fetchrow("SELECT user_id FROM public.users WHERE lower(username)=lower($1) LIMIT 1", uname)
-            if row:
-                return int(row["user_id"])
-        except Exception:
-            return None
-        return None
-    if arg.isdigit():
-        try:
-            return int(arg)
-        except Exception:
-            return None
-    return None
+    return await (await WarningService.create()).resolve_user_id(arg)
 
 
 PRUNE_WARN_AGE_DAYS = 30
@@ -3630,48 +3552,12 @@ async def prune_old_warns(*, target_user_id: int | None = None, dry: bool = Fals
     у пользователей, у которых текущее число предупреждений < MAX_WARN_BEFORE_BAN.
     Возвращает [{"user_id": int, "removed": int}, ...]
     """
-    args = [MAX_WARN_BEFORE_BAN, PRUNE_WARN_AGE_DAYS, target_user_id]
-
-    if dry:
-        sql = """
-              WITH cnt AS (SELECT user_id
-                           FROM public.user_warnings
-                           GROUP BY user_id
-                           HAVING COUNT(*) < $1),
-                   cand AS (SELECT w.id, w.user_id
-                            FROM public.user_warnings w
-                                     JOIN cnt USING (user_id)
-                            WHERE w.issued_at < (NOW() AT TIME ZONE 'Europe/Moscow') - make_interval(days => $2)
-                              AND ($3::bigint IS NULL OR w.user_id = $3))
-              SELECT user_id, COUNT(*) AS removed
-              FROM cand
-              GROUP BY user_id
-              ORDER BY removed DESC; \
-              """
-    else:
-        # Вариант без подзапроса IN, с USING cnt — быстрее и линтеру спокойнее
-        sql = """
-              WITH cnt AS (SELECT user_id
-                           FROM public.user_warnings
-                           GROUP BY user_id
-                           HAVING COUNT(*) < $1),
-                   del AS (
-                       DELETE
-                           FROM public.user_warnings w USING cnt
-                               WHERE w.user_id = cnt.user_id
-                                   AND w.issued_at
-                                         < (NOW() AT TIME ZONE 'Europe/Moscow') - make_interval(days => $2)
-                                   AND ($3::bigint IS NULL
-                                       OR w.user_id = $3)
-                               RETURNING w.user_id)
-              SELECT user_id, COUNT(*) AS removed
-              FROM del
-              GROUP BY user_id
-              ORDER BY removed DESC; \
-              """
-
-    rows = await fetch(sql, *args)
-    return [{"user_id": int(r["user_id"]), "removed": int(r["removed"])} for r in rows]
+    return await (await WarningService.create()).prune_old(
+        maximum_warning_count=MAX_WARN_BEFORE_BAN,
+        age_days=PRUNE_WARN_AGE_DAYS,
+        target_user_id=target_user_id,
+        dry_run=dry,
+    )
 
 
 @router.message(Command("prune_warns"), F.chat.type.in_({"private", "supergroup", "group"}))
@@ -3718,14 +3604,11 @@ async def cmd_prune_warns(message: Message, bot: Bot, command: CommandObject):
     lines = []
     if target_id:
         # Отчёт по одному
-        remain = await fetchrow(
-            "SELECT COUNT(*) AS cnt FROM public.user_warnings WHERE user_id = $1",
-            target_id
-        )
+        remain = await (await WarningService.create()).count_warnings(target_id)
         lines.append(
             f"{'🧪' if dry else '🧹'} Пользователь <code>{target_id}</code>: "
             f"{'будет удалено' if dry else 'удалено'} <b>{total}</b> пред(ов); "
-            f"осталось: <b>{int(remain['cnt']) if remain else 0}</b>."
+            f"осталось: <b>{remain}</b>."
         )
     else:
         # Сводка + топ
@@ -4021,34 +3904,7 @@ async def _ensure_admin_thanks_tables() -> None:
     if _ADMIN_THANKS_READY:
         return
 
-    await execute("""
-        CREATE TABLE IF NOT EXISTS public.admin_thanks_totals (
-            author       TEXT PRIMARY KEY,
-            thanks_total BIGINT NOT NULL DEFAULT 0,
-            users_total  BIGINT NOT NULL DEFAULT 0,
-            updated_at   TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS public.admin_thanks_users (
-            author       TEXT   NOT NULL,
-            user_id      BIGINT NOT NULL,
-            created_at   TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            thanks_count BIGINT NOT NULL DEFAULT 0,
-            PRIMARY KEY (author, user_id)
-        );
-    """)
-
-    # мягкая миграция для старой схемы
-    await execute("""
-        ALTER TABLE public.admin_thanks_users
-            ADD COLUMN IF NOT EXISTS thanks_count BIGINT NOT NULL DEFAULT 0;
-    """)
-
-    await execute("""
-        UPDATE public.admin_thanks_users
-        SET thanks_count = 1
-        WHERE thanks_count = 0;
-    """)
+    await (await AuctionWinnerService.create()).ensure_admin_thanks_schema()
 
     _ADMIN_THANKS_READY = True
 
@@ -4065,31 +3921,7 @@ async def _inc_admin_thanks(author: str, user_id: int) -> tuple[int, int]:
     if not k:
         return 0, 0
 
-    row = await fetchrow("""
-        WITH up AS (
-            INSERT INTO public.admin_thanks_users (author, user_id, thanks_count)
-            VALUES ($1, $2, 1)
-            ON CONFLICT (author, user_id)
-            DO UPDATE SET
-                thanks_count = public.admin_thanks_users.thanks_count + 1
-            RETURNING CASE WHEN public.admin_thanks_users.thanks_count = 1 THEN 1 ELSE 0 END AS is_new_user
-        ),
-        tot AS (
-            INSERT INTO public.admin_thanks_totals (author, thanks_total, users_total)
-            VALUES ($1, 1, COALESCE((SELECT SUM(is_new_user) FROM up), 0))
-            ON CONFLICT (author)
-            DO UPDATE SET
-                thanks_total = public.admin_thanks_totals.thanks_total + 1,
-                users_total  = public.admin_thanks_totals.users_total + COALESCE((SELECT SUM(is_new_user) FROM up), 0),
-                updated_at   = CURRENT_TIMESTAMP
-            RETURNING thanks_total, users_total
-        )
-        SELECT thanks_total, users_total FROM tot;
-    """, k, int(user_id))
-
-    if not row:
-        return 0, 0
-    return int(row["thanks_total"] or 0), int(row["users_total"] or 0)
+    return await (await AuctionWinnerService.create()).increment_admin_thanks(k, int(user_id))
 
 
 async def get_admin_thanks_totals(author: str) -> tuple[int, int]:
@@ -4098,15 +3930,7 @@ async def get_admin_thanks_totals(author: str) -> tuple[int, int]:
     if not k:
         return 0, 0
 
-    row = await fetchrow("""
-                         SELECT thanks_total, users_total
-                         FROM public.admin_thanks_totals
-                         WHERE author = $1
-                         """, k)
-
-    if not row:
-        return 0, 0
-    return int(row["thanks_total"] or 0), int(row["users_total"] or 0)
+    return await (await AuctionWinnerService.create()).admin_thanks_totals(k)
 
 
 async def build_thanks_kb(any_id: int, moderator_tag: str) -> InlineKeyboardMarkup:

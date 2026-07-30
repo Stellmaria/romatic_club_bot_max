@@ -38,6 +38,9 @@ class CardSubscriptionsService:
     ) -> dict[int, dict[str, Any]]:
         return await self._repository.card_metadata(card_ids)
 
+    async def subscriber_ids(self, card_id: int) -> list[int]:
+        return await self._repository.subscriber_ids(card_id)
+
     async def confirm_all(self, user_id: int) -> int:
         return await self._repository.confirm_all(user_id)
 
