@@ -26,6 +26,21 @@ class Migration:
     path: Path
     sql: str
     checksum: str
+    compatible_checksums: frozenset[str]
+
+
+def _migration_checksums(raw: bytes) -> tuple[str, frozenset[str]]:
+    """Return a stable checksum and compatible historical line-ending hashes."""
+    lf_bytes = raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    crlf_bytes = lf_bytes.replace(b"\n", b"\r\n")
+    canonical = hashlib.sha256(lf_bytes).hexdigest()
+    return canonical, frozenset(
+        {
+            canonical,
+            hashlib.sha256(raw).hexdigest(),
+            hashlib.sha256(crlf_bytes).hexdigest(),
+        }
+    )
 
 
 def _load_migrations(directory: Path = MIGRATIONS_DIR) -> list[Migration]:
@@ -53,13 +68,15 @@ def _load_migrations(directory: Path = MIGRATIONS_DIR) -> list[Migration]:
         if not sql:
             raise RuntimeError(f"Пустая миграция: {path.name}")
 
+        checksum, compatible_checksums = _migration_checksums(raw)
         migrations.append(
             Migration(
                 filename=path.name,
                 version=version,
                 path=path,
                 sql=sql,
-                checksum=hashlib.sha256(raw).hexdigest(),
+                checksum=checksum,
+                compatible_checksums=compatible_checksums,
             )
         )
 
@@ -209,7 +226,7 @@ async def apply_migrations(
                 previous = applied.get(migration.filename)
                 if previous is not None:
                     previous_checksum = str(previous["checksum"])
-                    if previous_checksum != migration.checksum:
+                    if previous_checksum not in migration.compatible_checksums:
                         raise RuntimeError(
                             "Уже применённая миграция была изменена: "
                             f"{migration.filename}. Создай новую миграцию вместо "
