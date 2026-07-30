@@ -2,8 +2,7 @@ from aiogram import Router, F, types
 from aiogram.filters import Command
 from html import escape
 
-# импортируй ИМЕННО оттуда, где у тебя helpers БД (судя по main.py — из db.db)
-from db.legacy import execute, fetch, fetchrow
+from bot.services.custom_emojis import CustomEmojiService
 
 router = Router(name="emoji_setup")
 
@@ -24,12 +23,7 @@ def _first_custom_emoji_id(msg: types.Message) -> str | None:
 @router.message(Command("em_migrate"))
 async def em_migrate(message: types.Message):
     try:
-        await execute("""
-            CREATE TABLE IF NOT EXISTS custom_emojis (
-              name TEXT PRIMARY KEY,
-              emoji_id TEXT NOT NULL UNIQUE
-            )
-        """)
+        await (await CustomEmojiService.create()).ensure_schema()
         await message.answer("✅ Таблица custom_emojis готова.")
     except Exception as e:
         await message.answer(f"❌ Не удалось создать таблицу: <code>{escape(str(e))}</code>", parse_mode="HTML")
@@ -46,11 +40,7 @@ async def em_add(message: types.Message):
         await message.answer("В реплае не вижу premium custom emoji. Пришли именно прем-эмодзи, не обычный Unicode.")
         return
     try:
-        await execute(
-            "INSERT INTO custom_emojis(name, emoji_id) VALUES($1,$2) "
-            "ON CONFLICT (name) DO UPDATE SET emoji_id=EXCLUDED.emoji_id",
-            name, emoji_id
-        )
+        await (await CustomEmojiService.create()).save(name, emoji_id)
     except Exception as e:
         await message.answer(
             "❌ Ошибка БД: <code>{}</code>\nПодозрение: нет таблицы — запусти /em_migrate."
@@ -61,7 +51,7 @@ async def em_add(message: types.Message):
 @router.message(Command("em_list"))
 async def em_list(message: types.Message):
     try:
-        rows = await fetch("SELECT name, emoji_id FROM custom_emojis ORDER BY name")
+        rows = await (await CustomEmojiService.create()).list_all()
     except Exception as e:
         await message.answer(f"❌ Ошибка БД: <code>{escape(str(e))}</code>", parse_mode="HTML")
         return
@@ -80,5 +70,5 @@ async def em_del(message: types.Message):
         await message.answer("Формат: /em_del <name>")
         return
     name = parts[1].strip().lower()
-    row = await fetchrow("DELETE FROM custom_emojis WHERE name=$1 RETURNING name", name)
-    await message.answer("🗑 Удалено: {}".format(row["name"]) if row else "Такого имени нет.")
+    deleted_name = await (await CustomEmojiService.create()).delete(name)
+    await message.answer("🗑 Удалено: {}".format(deleted_name) if deleted_name else "Такого имени нет.")

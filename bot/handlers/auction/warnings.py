@@ -7,11 +7,10 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
 from bot.core.legacy_config import ADMIN_LOG_CHATS, ADMINS, LOG_CHAT_ID
+from bot.services.warnings import WarningService
 from db.legacy import (
     add_warning,
     ban_user,
-    fetch,
-    fetchrow,
     get_user_by_username,
     get_user_id_by_username,
     get_warnings_count,
@@ -346,14 +345,7 @@ async def admin_ban_user(message: Message) -> None:
 async def _resolve_user_id(value: str | None) -> int | None:
     if not value:
         return None
-    value = value.strip()
-    if value.startswith("@"):
-        row = await fetchrow(
-            "SELECT user_id FROM public.users WHERE lower(username)=lower($1) LIMIT 1",
-            value.lstrip("@"),
-        )
-        return int(row["user_id"]) if row else None
-    return int(value) if value.isdigit() else None
+    return await (await WarningService.create()).resolve_user_id(value)
 
 
 async def prune_old_warnings(
@@ -362,53 +354,12 @@ async def prune_old_warnings(
     dry_run: bool = False,
 ) -> list[dict]:
     """Delete, or count, old warnings for users who are below the ban threshold."""
-    arguments = [MAX_WARN_BEFORE_BAN, PRUNE_WARN_AGE_DAYS, target_user_id]
-    if dry_run:
-        sql = """
-            WITH warning_counts AS (
-                SELECT user_id
-                FROM public.user_warnings
-                GROUP BY user_id
-                HAVING COUNT(*) < $1
-            ), candidates AS (
-                SELECT warning.user_id
-                FROM public.user_warnings warning
-                JOIN warning_counts USING (user_id)
-                WHERE warning.issued_at
-                    < (NOW() AT TIME ZONE 'Europe/Moscow') - make_interval(days => $2)
-                  AND ($3::bigint IS NULL OR warning.user_id = $3)
-            )
-            SELECT user_id, COUNT(*) AS removed
-            FROM candidates
-            GROUP BY user_id
-            ORDER BY removed DESC
-        """
-    else:
-        sql = """
-            WITH warning_counts AS (
-                SELECT user_id
-                FROM public.user_warnings
-                GROUP BY user_id
-                HAVING COUNT(*) < $1
-            ), deleted AS (
-                DELETE FROM public.user_warnings warning
-                USING warning_counts
-                WHERE warning.user_id = warning_counts.user_id
-                  AND warning.issued_at
-                    < (NOW() AT TIME ZONE 'Europe/Moscow') - make_interval(days => $2)
-                  AND ($3::bigint IS NULL OR warning.user_id = $3)
-                RETURNING warning.user_id
-            )
-            SELECT user_id, COUNT(*) AS removed
-            FROM deleted
-            GROUP BY user_id
-            ORDER BY removed DESC
-        """
-    rows = await fetch(sql, *arguments)
-    return [
-        {"user_id": int(row["user_id"]), "removed": int(row["removed"])}
-        for row in rows
-    ]
+    return await (await WarningService.create()).prune_old(
+        maximum_warning_count=MAX_WARN_BEFORE_BAN,
+        age_days=PRUNE_WARN_AGE_DAYS,
+        target_user_id=target_user_id,
+        dry_run=dry_run,
+    )
 
 
 @router.message(Command("prune_warns"), F.chat.type.in_({"private", "supergroup", "group"}))
@@ -439,14 +390,11 @@ async def cmd_prune_warnings(message: Message, bot: Bot, command: CommandObject)
     total = sum(item["removed"] for item in stats)
     lines: list[str] = []
     if target_id:
-        remaining = await fetchrow(
-            "SELECT COUNT(*) AS cnt FROM public.user_warnings WHERE user_id = $1",
-            target_id,
-        )
+        remaining_count = await (await WarningService.create()).count_warnings(target_id)
         lines.append(
             f"{'🧪' if dry_run else '🧹'} Пользователь <code>{target_id}</code>: "
             f"{'будет удалено' if dry_run else 'удалено'} <b>{total}</b> пред(ов); "
-            f"осталось: <b>{int(remaining['cnt']) if remaining else 0}</b>."
+            f"осталось: <b>{remaining_count}</b>."
         )
     else:
         lines.append(

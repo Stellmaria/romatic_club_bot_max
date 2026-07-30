@@ -8,7 +8,7 @@ from aiogram.types import Message
 from bot.services.luxury import get_user_luxury_level, is_luxury_member
 from bot.telegram.media import answer_media_any as _answer_media_any
 from bot.core.legacy_config import LUXURY_CHAT_ID, LUXURY_CHAT_ID_LVL2
-from db.legacy import count_sold_by_card_id, count_sold_same_card, fetchrow, get_deck_by_id, is_admin
+from db.legacy import count_sold_by_card_id, count_sold_same_card, get_deck_by_id, get_user, is_admin
 
 from .common import (
     _exchange_gain_for_card,
@@ -51,10 +51,7 @@ async def _format_user_status(bot: Bot, user_id: int) -> str:
 
     # 3) fallback на БД
     try:
-        row = await fetchrow(
-            "SELECT is_luxury, is_trusted FROM public.users WHERE user_id = $1",
-            int(user_id),
-        )
+        row = await get_user(int(user_id))
         if row:
             if bool(row.get("is_luxury")):
                 return "👑 Лакшери"

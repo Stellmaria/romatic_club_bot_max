@@ -12,7 +12,8 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.helper.helpers_users import _emoji_by_currency
 from bot.services.auction_media import resolve_media_file_id
-from db.legacy import fetchall, fetchrow, get_all_decks, get_card_by_id, get_exchange_cards_for_deck
+from bot.services.exchange_submission import ExchangeSubmissionQueries
+from db.legacy import fetchall, get_all_decks, get_card_by_id, get_exchange_cards_for_deck
 
 EX_MODE_DECK = "deck"
 
@@ -337,30 +338,21 @@ async def _get_deck_type_from_state_or_db(data: dict) -> str | None:
         return dt
 
     if data.get("card_id"):
-        row = await fetchrow("""
-                             SELECT d.deck_type
-                             FROM cards c
-                                      JOIN decks d ON d.id = c.deck_id
-                             WHERE c.card_id = $1
-                             """, int(data["card_id"]))
-        if row and row["deck_type"] in ("roulette", "resource"):
-            return row["deck_type"]
+        deck_type = await (await ExchangeSubmissionQueries.create()).deck_type_for_card(int(data["card_id"]))
+        if deck_type in ("roulette", "resource"):
+            return deck_type
 
     if data.get("deck_id"):
-        row = await fetchrow("SELECT deck_type FROM decks WHERE id = $1", int(data["deck_id"]))
-        if row and row["deck_type"] in ("roulette", "resource"):
-            return row["deck_type"]
+        deck_type = await (await ExchangeSubmissionQueries.create()).deck_type_for_deck(int(data["deck_id"]))
+        if deck_type in ("roulette", "resource"):
+            return deck_type
 
     if data.get("card_name") and data.get("hero_name"):
-        row = await fetchrow("""
-                             SELECT d.deck_type
-                             FROM cards c
-                                      JOIN decks d ON d.id = c.deck_id
-                             WHERE c.card_name = $1
-                               AND c.hero_name = $2 LIMIT 1
-                             """, data["card_name"], data["hero_name"])
-        if row and row["deck_type"] in ("roulette", "resource"):
-            return row["deck_type"]
+        deck_type = await (await ExchangeSubmissionQueries.create()).deck_type_for_card_identity(
+            data["card_name"], data["hero_name"]
+        )
+        if deck_type in ("roulette", "resource"):
+            return deck_type
 
     return None
 

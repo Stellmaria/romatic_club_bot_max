@@ -115,3 +115,14 @@
   файлов-нарушителей снижено с 19 до 15.
 - Статус: частично. Следующий шаг: поочерёдно вынести оставшийся SQL из
   market, exchange, UID и appeal handlers, затем повторить полный pytest.
+
+## Продолжение: existing repository adoption
+
+- Убраны ещё восемь handler SQL boundaries: custom emoji и appeals переведены
+  на уже существующие service/repository owners; exchange deck lookups — на
+  `ExchangeSubmissionQueries`; warning retention — на `WarningService`.
+- Проверка boundary теперь показывает 11 файлов с историческим SQL вместо 19.
+  Контракт уже завершённых handler migrations проходит; оставшийся срез —
+  крупные market, UID и auction-comment flows.
+- Статус: частично. Следующий шаг: выделить repository-операции market flows
+  и затем вернуться к полному `pytest`.

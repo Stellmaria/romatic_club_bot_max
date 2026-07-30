@@ -14,8 +14,9 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.admin.action_support.compat import _safe_user_mention, send_admin_log
 from bot.handlers.admin.services.market_utils import safe_edit_text
 from bot.services.exchanges import ExchangeService
+from bot.services.exchange_submission import ExchangeSubmissionQueries
 from bot.telegram.media import answer_media_any as _answer_media_any
-from db.legacy import fetchrow, get_card_by_id, get_cards_by_ids, get_cards_ids_by_deck, get_deck_by_id, is_luxury_user
+from db.legacy import get_card_by_id, get_cards_by_ids, get_cards_ids_by_deck, get_deck_by_id, is_luxury_user
 from bot.legacy_fsm import ExchangeFSM, UserAddLotFSM
 
 router = Router(name="auction_exchange_submission")
@@ -482,9 +483,7 @@ async def _finalize_exchange_request(
         # deck_name
         deck_name = None
         try:
-            drow = await fetchrow("SELECT name FROM public.decks WHERE id=$1", deck_id_i)
-            if drow:
-                deck_name = (drow.get("name") or "").strip() or None
+            deck_name = await (await ExchangeSubmissionQueries.create()).deck_name(deck_id_i)
         except Exception:
             deck_name = None
 
