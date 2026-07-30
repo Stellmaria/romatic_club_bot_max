@@ -51,7 +51,7 @@ def test_exchange_monolith_is_a_compatibility_package() -> None:
 
 def test_exchange_handlers_are_distributed_without_duplicates() -> None:
     by_module = {
-        str(path.relative_to(EXCHANGE_DIR)): _handler_functions(path)
+        path.relative_to(EXCHANGE_DIR).as_posix(): _handler_functions(path)
         for path in EXCHANGE_DIR.rglob("*.py")
         if path.name not in {"__init__.py", "common.py", "notifications.py"}
     }
@@ -80,7 +80,13 @@ def test_exchange_catalog_uses_service_repository_boundary() -> None:
 
 
 def test_exchange_components_have_resolved_globals() -> None:
-    known = set(dir(builtins)) | {"__doc__", "__file__", "__name__", "__package__"}
+    known = set(dir(builtins)) | {
+        "__doc__",
+        "__file__",
+        "__name__",
+        "__package__",
+        "__conditional_annotations__",
+    }
     for path in sorted(EXCHANGE_DIR.rglob("*.py")):
         table = symtable.symtable(_source(path), str(path), "exec")
         defined = {

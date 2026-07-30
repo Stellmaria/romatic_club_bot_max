@@ -13,10 +13,15 @@ from bot.services.exchange_submission import ExchangeSubmissionQueries
 
 ROOT = Path(__file__).resolve().parents[1]
 HANDLERS = (
-    "bot/handlers/auction/exchange.py",
-    "bot/handlers/auction/exchange_moderation.py",
-    "bot/handlers/auction/exchange_catalog.py",
-    "bot/handlers/auction/exchange_diagnostics.py",
+    "bot/handlers/auction/exchange/__init__.py",
+    "bot/handlers/auction/exchange/submission.py",
+    "bot/handlers/auction/exchange/moderation.py",
+    "bot/handlers/auction/exchange/catalog.py",
+    "bot/handlers/auction/exchange/diagnostics/__init__.py",
+    "bot/handlers/auction/exchange/diagnostics/media.py",
+    "bot/handlers/auction/exchange/diagnostics/delivery.py",
+    "bot/handlers/auction/exchange/diagnostics/reports.py",
+    "bot/handlers/auction/exchange/diagnostics/reconciliation.py",
 )
 REPOSITORIES = (
     "bot/repositories/exchange_submission.py",

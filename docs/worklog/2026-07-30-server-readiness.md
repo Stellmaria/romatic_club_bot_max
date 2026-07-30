@@ -505,3 +505,19 @@
 - Статус: частично. Следующий шаг: выполнить full pytest от текущего
   checkpoint, исправлять только подтверждённые runtime/owner-contract failures
   и затем повторно проверить Linux Compose/image build.
+
+## Продолжение: unambiguous exchange package imports
+
+- Улучшаемая существующая функция: exchange router startup. Удалён старый
+  `auction/exchange.py`, конфликтовавший по import name с уже действующим
+  package `auction/exchange/`. Bootstrap продолжает импортировать тот же
+  public package path, но теперь Python не может выбрать устаревший monolith.
+- SQL-boundary и phase-7 проверки направлены на реальные package modules;
+  Windows path normalization устраняет ложный пропуск diagnostics routers.
+  Не добавлено новой аукционной функциональности, сохранены router и
+  service/repository boundaries.
+- Проверки: import `bot.handlers.auction.exchange` — успешно;
+  `tests/test_phase7_regressions.py -q -p no:cacheprovider` — 5 passed;
+  `tests/test_exchange_sql_boundary.py -q -p no:cacheprovider` — 6 passed.
+- Статус: частично. Полный pytest дошёл до 231 passed и 6 skipped до этого
+  compatibility-owner slice; следующий шаг — продолжить его после checkpoint.
