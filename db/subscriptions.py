@@ -541,6 +541,7 @@ async def subscribers_for_deck(deck_id: Optional[int], deck_name: Optional[str])
     return list({int(x) for x in out})
 
 
+
 __all__ = [
     "add_user_subscription",
     "get_user_subscriptions",

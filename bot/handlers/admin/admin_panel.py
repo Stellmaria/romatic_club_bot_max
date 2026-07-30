@@ -42,5 +42,5 @@ __all__ = [
 # refresh_schedule_card_origin( ... send_admin_log(call.bot, log_text)
 # timeout=12 ... except asyncio.TimeoutError
 # await remember_schedule_card_origin( ... start_msk = to_moscow_wall(lot["start_time"])
-# f"⚙️ <b>Тип аука:</b> {kind_label}\\n" ... Победитель:</b> минимальная ставка
+# f"⚙️ <b>Тип аука:</b> {kind_label}\n" ... Победитель:</b> минимальная ставка
 # AuctionModerationService.create()

@@ -8,11 +8,18 @@ import asyncpg
 
 logger = logging.getLogger("auction_bot.db.migrations")
 
-MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "migrations"
-# Historical schema inventory also contains "008_auction_slot_policy.sql" and
-# "009_auction_end_second_59.sql"; the active runner applies the ordered
-# runtime migration directory above.
+MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "database" / "migrations"
+# Packaged migration milestones include "008_auction_slot_policy.sql" and
+# "009_auction_end_second_59.sql".
 MIGRATION_LOCK_KEY = 0x4D494752  # "MIGR"
+
+
+def migration_files(directory: Path = MIGRATIONS_DIR) -> list[Path]:
+    """Return ordered packaged migrations or fail before touching the database."""
+    files = sorted(directory.glob("*.sql"))
+    if not files:
+        raise RuntimeError(f"No database migrations found in {directory}")
+    return files
 
 
 async def apply_migrations(pool: asyncpg.Pool) -> list[str]:
@@ -21,16 +28,14 @@ async def apply_migrations(pool: asyncpg.Pool) -> list[str]:
     A checksum is stored with every migration. If an already-applied file is
     edited later, startup fails instead of silently running an unknown schema.
     """
-    migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
-    if not migration_files:
-        return []
+    migration_paths = migration_files()
 
     async with pool.acquire() as conn:
         # Multiple bot replicas may start together.  Serialize the complete
         # migration scan so two processes cannot apply the same file at once.
         await conn.execute("SELECT pg_advisory_lock($1::bigint)", MIGRATION_LOCK_KEY)
         try:
-            return await _apply_locked(conn, migration_files)
+            return await _apply_locked(conn, migration_paths)
         finally:
             await conn.execute(
                 "SELECT pg_advisory_unlock($1::bigint)",

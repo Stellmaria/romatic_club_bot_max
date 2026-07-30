@@ -5,7 +5,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 
-from bot.handlers.admin.services.market_add_flow import _my_sales_set_filter_and_show
+import importlib
 from bot.handlers.admin.services.market_constants import CB_BUMP, CB_PREFIX
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_keyboards import edit_listing_kb, my_listing_actions, listing_public_kb, \
@@ -273,27 +273,27 @@ async def cb_toggle_actual(call: CallbackQuery):
 # --- Смена фильтра нижними кнопками ------------------------------------------
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Активные$"))
 async def ms_f_active(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "active")
+    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "active")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Скрытые$"))
 async def ms_f_hidden(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "hidden")
+    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "hidden")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Проданные$"))
 async def ms_f_sold(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "sold")
+    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "sold")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Архив$"))
 async def ms_f_archived(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "archived")
+    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "archived")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Все$"))
 async def ms_f_all(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "all")
+    await importlib.import_module("bot.handlers.admin.services.market_add_flow")._my_sales_set_filter_and_show(message, state, "all")
 
 
 @router.message(F.chat.type == "private", F.text == "⬅️ Назад")

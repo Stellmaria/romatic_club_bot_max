@@ -25,6 +25,7 @@ from db.legacy import (
     execute,
 )
 from bot.legacy_fsm import CardSubscribeFSM
+from bot.services.card_subscriptions import CardSubscriptionsService
 
 
 # ======================
@@ -195,8 +196,7 @@ def _preset_sort_key(item: dict) -> tuple[int, str]:
 
 
 async def _fetch_all_presets_rows() -> List[Dict[str, Any]]:
-    rows = await fetch("SELECT key, title FROM presets")
-    items = [dict(r) for r in rows]
+    items = await (await CardSubscriptionsService.from_runtime()).list_presets()
     items.sort(key=_preset_sort_key)
     return items
 
@@ -230,23 +230,7 @@ async def _toggle_preset(user_id: int, key: str) -> Tuple[bool, str]:
     Тумблер подписки на пресет по ключу.
     Возвращает (is_on_now, toast_message).
     """
-    rows = await fetch("SELECT id FROM presets WHERE key = $1", key)
-    if not rows:
-        return False, "Пресет не найден"
-    pid = int(rows[0]["id"])
-
-    deleted = await fetch(
-        "DELETE FROM user_preset_subscriptions WHERE user_id = $1 AND preset_id = $2 RETURNING id",
-        user_id, pid
-    )
-    if deleted:
-        return False, "Отключено"
-
-    await execute(
-        "INSERT INTO user_preset_subscriptions(user_id, preset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
-        user_id, pid
-    )
-    return True, "Подключено"
+    return await (await CardSubscriptionsService.from_runtime()).toggle_preset(user_id, key)
 
 
 def _decks_keyboard(decks: List[Dict[str, Any]]) -> InlineKeyboardMarkup:
@@ -381,11 +365,9 @@ def register_card_subscribe_handlers(router: Router) -> None:
     @router.callback_query(F.data.startswith("sub:preset_unsub:"))
     async def handle_preset_unsub(call: types.CallbackQuery, state: FSMContext):
         key = call.data.split(":", 2)[-1]
-        rows = await fetch("SELECT id FROM presets WHERE key = $1", key)
-        if rows:
-            pid = int(rows[0]["id"])
-            await execute("DELETE FROM user_preset_subscriptions WHERE user_id=$1 AND preset_id=$2",
-                          call.from_user.id, pid)
+        await (await CardSubscriptionsService.from_runtime()).unsubscribe_preset(
+            call.from_user.id, key
+        )
 
         text_now = (call.message.text or "").lower()
         if "пресеты уведомлений" in text_now:
@@ -397,13 +379,9 @@ def register_card_subscribe_handlers(router: Router) -> None:
 
     async def preset_unsub(call: types.CallbackQuery, state: FSMContext):
         key = call.data.split(":", 2)[-1]
-        rows = await fetch("SELECT id FROM presets WHERE key = $1", key)
-        if rows:
-            pid = int(rows[0]["id"])
-            await execute(
-                "DELETE FROM user_preset_subscriptions WHERE user_id=$1 AND preset_id=$2",
-                call.from_user.id, pid
-            )
+        await (await CardSubscriptionsService.from_runtime()).unsubscribe_preset(
+            call.from_user.id, key
+        )
 
         text_now = (call.message.text or "").lower()
         if "пресеты уведомлений" in text_now:
@@ -562,20 +540,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
         if not card_ids:
             return {}
 
-        rows = await fetch(
-            """
-            SELECT c.card_id,
-                   c.card_name,
-                   c.hero_name,
-                   c.deck_id,
-                   d.name AS deck_name
-            FROM cards c
-                     LEFT JOIN decks d ON d.id = c.deck_id
-            WHERE c.card_id = ANY ($1::int[])
-            """,
-            card_ids,
-        )
-        return {int(r["card_id"]): dict(r) for r in rows}
+        return await (await CardSubscriptionsService.from_runtime()).card_metadata(card_ids)
 
     async def _deck_name_map() -> dict[int, str]:
         decks = await get_all_decks()

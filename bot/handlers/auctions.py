@@ -37,3 +37,4 @@ async def _ask_for_currency(message, state):
 # KeyboardButton(text="💎 Алмазы")
 # KeyboardButton(text="🍵 + 💎 Чай или/и алмазы")
 # KeyboardButton(text="🧩 Комби (свои варианты)")
+# accepted_currencies = ["чашки", "алмазы"]

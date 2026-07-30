@@ -66,7 +66,8 @@ async def resolve_admin_action_args(message: types.Message, usage: str) -> tuple
 
 def format_log_entry(log: dict) -> str:
     """Форматирование одной строки аудита для вывода."""
-    time_str = log["timestamp"].strftime("%d.%m %H:%M")
+    created_at = log.get("created_at") or log.get("timestamp")
+    time_str = created_at.strftime("%d.%m %H:%M") if created_at else "—"
     return (
         f"\n🕒 <b>{time_str}</b>\n"
         f"👤 <code>{log['user_id']}</code>\n"

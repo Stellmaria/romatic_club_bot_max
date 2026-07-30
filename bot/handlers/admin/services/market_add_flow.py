@@ -326,13 +326,9 @@ async def market_go(call: CallbackQuery, state: FSMContext, bot: Bot):
     action = call.data.split(":")[2]
 
     # «Продать»
-    try:
-        from .market_add_flow import sell_start
-        if action in {"sell_cards", "sell_deck", "sell_currency"}:
-            await sell_start(call.message, state, bot)
-            return
-    except Exception:
-        pass
+    if action in {"sell_cards", "sell_deck", "sell_currency"}:
+        await sell_start(call.message, state, bot)
+        return
 
     # «Поиск»
     try:
@@ -344,13 +340,9 @@ async def market_go(call: CallbackQuery, state: FSMContext, bot: Bot):
         pass
 
     # «Мои объявления»
-    try:
-        from .market_add_flow import _show_my_sales
-        if action == "my_sales":
-            await _show_my_sales(call.message, call.from_user.id, state=state, tab="active")
-            return
-    except Exception:
-        pass
+    if action == "my_sales":
+        await _show_my_sales(call.message, call.from_user.id, state=state, tab="active")
+        return
 
     if action == "help":
         await call.message.answer("FAQ: /sell, /find, /my_sales")
@@ -358,7 +350,6 @@ async def market_go(call: CallbackQuery, state: FSMContext, bot: Bot):
 
 @router.message(F.text == "🛒 Продать")
 async def _sell_btn(message: Message, state: FSMContext, bot: Bot):
-    from .market_add_flow import sell_start
     await sell_start(message, state, bot)
 
 

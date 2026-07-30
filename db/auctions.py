@@ -1387,6 +1387,7 @@ async def get_auction_ids_ended_on(day: date) -> list[int]:
     return [int(r["auction_id"]) for r in rows]
 
 
+
 __all__ = [
     "add_auction",
     "get_lots_by_owner",

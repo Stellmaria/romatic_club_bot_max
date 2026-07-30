@@ -6,8 +6,7 @@ from typing import Any, Callable, Optional
 
 import asyncpg
 
-from bot.core.legacy_config import DATABASE_URL, DB_AUTO_MIGRATE
-from db.migrator import apply_migrations
+from db.pool import get_db_pool as _runtime_get_db_pool
 
 logger = logging.getLogger("auction_bot")
 
@@ -62,29 +61,10 @@ async def get_db_pool() -> asyncpg.Pool:
     pool = db_pool.pool
     if pool is not None:
         return pool
-    try:
-        pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
-    except Exception as exc:
-        logger.error("Не удалось создать пул соединений с БД: %s", exc)
-        raise
+    pool = await _runtime_get_db_pool()
     db_pool.bind(pool)
     logger.info("Database pool initialized")
     return pool
-
-
-async def init_db() -> None:
-    """Initialize the pool and apply migrations before serving work."""
-
-    pool = await get_db_pool()
-    if not DB_AUTO_MIGRATE:
-        logger.warning("Automatic migrations are disabled: DB_AUTO_MIGRATE=0")
-        return
-    try:
-        await apply_migrations(pool)
-    except Exception:
-        logger.exception("Database migration failed")
-        await close_db()
-        raise
 
 
 def require_db_pool(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -96,15 +76,6 @@ def require_db_pool(func: Callable[..., Any]) -> Callable[..., Any]:
         return await func(*args, **kwargs)
 
     return wrapper
-
-
-async def close_db() -> None:
-    pool = db_pool.pool
-    if pool is None:
-        return
-    await pool.close()
-    db_pool.clear()
-    logger.info("Database pool closed")
 
 
 async def fetch(query: str, *args: Any) -> list[asyncpg.Record]:
@@ -166,3 +137,12 @@ async def _has_column(conn: asyncpg.Connection, table: str, column: str) -> bool
             column,
         )
     )
+
+
+from db.lifecycle import close_db, init_db
+
+
+__all__ = [
+    "db_pool", "pool_proxy", "fetchall", "get_db_pool", "init_db", "close_db",
+    "fetch", "fetchrow", "fetchval", "execute", "require_db_pool",
+]

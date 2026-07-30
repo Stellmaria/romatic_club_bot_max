@@ -42,6 +42,25 @@ class BackgroundTaskManager:
             logger.exception("Background task %s terminated unexpectedly", spec.name)
             raise
 
+    async def wait_for_failure(self) -> None:
+        """Wait until a worker exits and surface it as a process-level failure."""
+        if not self._tasks:
+            raise RuntimeError("Background tasks have not been started")
+
+        done, _ = await asyncio.wait(
+            self._tasks,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        task = next(iter(done))
+        name = task.get_name()
+        if task.cancelled():
+            raise RuntimeError(f"Background task '{name}' was cancelled")
+        try:
+            task.result()
+        except Exception as error:
+            raise RuntimeError(f"Background task '{name}' failed") from error
+        raise RuntimeError(f"Background task '{name}' exited unexpectedly")
+
     async def stop(self) -> None:
         tasks, self._tasks = self._tasks, []
         for task in tasks:

@@ -19,7 +19,7 @@ def register_cards_admin_handlers(router: Router):
     async def addcard_start(message: types.Message, state: FSMContext):
         await start_add_card_fsm(message, state)
 
-    @router.message(AddCardFSM.waiting_admin_password)
+    @router.message(AddCardFSM.waiting_for_admin_password)
     async def check_admin_password_card(message: types.Message, state: FSMContext):
         if message.from_user.id in ADMINS_OWNERS or message.text.strip() == ADMIN_SECRET:
             decks = await get_all_decks()
@@ -173,7 +173,7 @@ def register_cards_admin_handlers(router: Router):
             AddCardFSM.waiting_for_story,
             AddCardFSM.waiting_for_quote,
             AddCardFSM.waiting_for_confirmation,
-            AddCardFSM.waiting_admin_password,
+            AddCardFSM.waiting_for_admin_password,
         ]),
         F.text.lower().in_(["отмена", "назад", "⬅️ назад"]),
         F.chat.type == "private"

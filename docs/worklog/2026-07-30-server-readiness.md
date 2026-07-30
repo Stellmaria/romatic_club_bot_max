@@ -85,3 +85,17 @@
   успешно; целевые lifecycle/submission/currency tests — 14 passed. Полный
   pytest дошёл до 51 passed и 6 skipped, затем выявил следующий compatibility
   assertion фасада; он является следующим незавершённым срезом.
+
+## Продолжение: runtime recovery and DB facade
+
+- `db/db.py` стал thin facade над модульными DB owners; исторический API,
+  который ещё не имеет владельца, временно изолирован в `db.legacy_impl` и
+  доступен только через `db.legacy` fallback.
+- Восстановлены application import и server preflight после DB split;
+  устранены циклы market feature imports и root FSM duplication.
+- Проверки: `test_db_modularization.py` — 5 passed; FSM boundary/reference —
+  4 passed; feature import cycle — passed; `python -m scripts.server_preflight
+  --userbot` — успешно; `import main` — успешно. Полный pytest дошёл до
+  115 passed и 6 skipped (нужна disposable PostgreSQL), затем выявил старый
+  SQL debt в 19 handler files. Он не блокирует import/preflight, но остаётся
+  архитектурным обязательством перед полной зелёной проверкой.

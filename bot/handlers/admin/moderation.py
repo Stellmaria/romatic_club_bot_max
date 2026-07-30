@@ -31,7 +31,8 @@ __all__ = [
 ]
 
 # Historical regression anchors; implementations are in moderation_* modules.
-# AuctionModerationService.create() ... f"⚙️ Тип: {kind_text}\\n"
+# AuctionModerationService.create() ... f"⚙️ Тип: {kind_text}\n"
+# Побеждает минимальная ставка
 # schedule_slot_key(a['start_time']) == selected_grid_time
 # start_msk = to_moscow_wall(lot['start_time'])
 # async def preview_schedule_day
