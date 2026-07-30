@@ -408,3 +408,14 @@
 - Проверка точечного callback-контракта проходит. Полный phase-2 файл далее
   выявляет независимые assertions к retired DB/admin facades; их нужно
   разбирать отдельно, не смешивая с runtime UID fix.
+
+## Продолжение: single production finalization path
+
+- Из `main.py` удалён недостижимый legacy launcher и его старый winner loop,
+  который завершал аукционы без claim/lease semantics. Единственный
+  production path теперь строится через `bot.application` и background worker
+  `auction_finalization_loop` с repository claim contract.
+- Phase-2 tests обновлены на owner-модули после рефакторинга facade: runtime
+  DB export, worker composition, DB lifecycle и subscriptions router.
+- Проверки: `tests/test_phase2_regressions.py -q` — 10 passed; `ruff check`
+  и `git diff --check` — успешно.

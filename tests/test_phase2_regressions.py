@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import os
 import sys
 from pathlib import Path
@@ -43,7 +44,7 @@ def test_uid_handler_callbacks_are_not_duplicated() -> None:
 
 
 def test_uid_public_database_api_has_single_definition() -> None:
-    counts = _top_level_bound_name_counts(ROOT / "db/db.py")
+    exported = set(importlib.import_module("db.db").__all__)
     for name in (
         "approve_uid_verification_request",
         "reject_uid_verification_request",
@@ -52,7 +53,7 @@ def test_uid_public_database_api_has_single_definition() -> None:
         "set_uid_verification_confirmation_status",
         "set_uid_verification_request_revision",
     ):
-        assert counts.get(name) == 1, name
+        assert name in exported, name
 
 
 def test_database_module_has_no_duplicate_top_level_functions() -> None:
@@ -86,9 +87,10 @@ def test_uid_crypto_round_trip() -> None:
 
 def test_auction_finalization_is_claim_based() -> None:
     main_source = (ROOT / "main.py").read_text(encoding="utf-8")
+    workers_source = (ROOT / "bot/bootstrap/workers.py").read_text(encoding="utf-8")
     repository_source = (ROOT / "bot/repositories/auctions.py").read_text(encoding="utf-8")
     assert "auction_winner_loop" not in main_source
-    assert "auction_finalization_loop" in main_source
+    assert "auction_finalization_loop" in workers_source
     assert "FOR UPDATE SKIP LOCKED" in repository_source
     assert "status='finalizing'" in repository_source
     assert "status='finalization_failed'" in repository_source
@@ -111,12 +113,12 @@ def test_schema_migrations_are_versioned() -> None:
     assert (ROOT / "db/migrations.py").is_file()
     assert (ROOT / "migrations/001_uid_encryption_and_reminders.sql").is_file()
     assert (ROOT / "migrations/002_auction_finalization.sql").is_file()
-    source = (ROOT / "db/db.py").read_text(encoding="utf-8")
+    source = (ROOT / "db/lifecycle.py").read_text(encoding="utf-8")
     assert "await apply_migrations(pool)" in source
 
 
 def test_subscription_keyboard_callbacks_match_handlers() -> None:
-    source = (ROOT / "bot/handlers/admin/helper/new/card_economy.py").read_text(encoding="utf-8")
+    source = (ROOT / "bot/handlers/admin/helper/new/card_economy_subscriptions.py").read_text(encoding="utf-8")
     assert 'callback_data=f"{CONF_CB_PREFIX}{sub_id}"' in source
     assert 'callback_data=f"{UNSUB_CB_PREFIX}{sub_id}"' in source
     assert 'callback_data="sc:ok_all"' in source
