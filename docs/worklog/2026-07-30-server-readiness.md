@@ -321,3 +321,7 @@
 - Для legacy handler import добавлен синтаксически валидный, но нерабочий
   CI-only `BOT_TOKEN`: aiogram валидирует формат при создании объекта, а
   тестовый процесс не открывает Telegram network connection.
+- Linux suite впервые выполнился полностью: 265 passed, 6 skipped, 67 failed.
+  Один static failure был ложным: wheel build создаёт `build/lib`, а
+  source-scope test его не исключал. CI удаляет generated build directory
+  перед pytest; реальные оставшиеся архитектурные failures не скрываются.
