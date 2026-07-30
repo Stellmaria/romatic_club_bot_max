@@ -1115,7 +1115,6 @@ async def send_uid_verification_confirmation_request(bot: Bot, request_id: int, 
 
 import html
 
-@router.callback_query(F.data == "uidv|start")
 async def uidv_start(call: types.CallbackQuery, state: FSMContext) -> None:
     row = await (await UIDVerificationService.create()).get_latest_request(call.from_user.id)
     if not row:
@@ -1154,7 +1153,6 @@ async def uidv_start(call: types.CallbackQuery, state: FSMContext) -> None:
 
     await call.answer()
 
-@router.callback_query(F.data.startswith("uidv_fix|"))
 async def uidv_fix_start(call: types.CallbackQuery, state: FSMContext) -> None:
     parts = (call.data or "").split("|")
     if len(parts) < 2:
@@ -1202,7 +1200,7 @@ async def uidv_show_my_request(call: types.CallbackQuery, state: FSMContext) -> 
 
     req = await (await UIDVerificationService.create()).get_latest_request(call.from_user.id)
     if not req:
-        await call.message.answer("У тебя нет заявки. Отправить новую: /verify_uid", protect_content=False)
+        await verify_uid_start(call.message, state)
         return
 
     rid = int(req["id"])
@@ -1236,7 +1234,6 @@ async def uidv_new(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.message.answer("1) Пришли юид", protect_content=False)
     await state.set_state(UIDVerificationFSM.waiting_for_uid)
 
-@router.callback_query(F.data == "uidv|start")
 async def uidv_start_btn(call: types.CallbackQuery, state: FSMContext):
     await call.answer()
     if not call.message:
@@ -1269,7 +1266,6 @@ async def uidv_start_btn(call: types.CallbackQuery, state: FSMContext):
 
     await call.message.answer(txt)
 
-@router.callback_query(F.data.startswith("uidv_fix|"))
 async def uidv_fix_btn(call: types.CallbackQuery, state: FSMContext):
     await call.answer()
     if not call.message:

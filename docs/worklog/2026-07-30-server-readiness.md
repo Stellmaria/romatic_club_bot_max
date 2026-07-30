@@ -398,3 +398,13 @@
   и `git diff --check` — успешно.
 - Статус: частично. Продолжить полный pytest от 164 passed и проверить
   последующие runtime/compatibility assertions.
+
+## Продолжение: UID callback registration
+
+- В `uid_verification` устранены повторные registrations `uidv|start` и
+  `uidv_fix|`: раньше один callback мог последовательно отработать до трёх
+  раз. Оставлен один owner handler для каждого callback; при отсутствии
+  заявки `uidv|start` теперь запускает штатный flow новой верификации.
+- Проверка точечного callback-контракта проходит. Полный phase-2 файл далее
+  выявляет независимые assertions к retired DB/admin facades; их нужно
+  разбирать отдельно, не смешивая с runtime UID fix.
