@@ -30,4 +30,10 @@ async def close_db() -> None:
         return
     await pool.close()
     db_pool.clear()
+    try:
+        from db import legacy_impl
+
+        legacy_impl.db_pool = None
+    except ImportError:
+        pass
     logger.info("Database pool closed")

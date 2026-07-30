@@ -1017,6 +1017,35 @@ async def add_bid(auction_id: int, bidder_id: int, amount: int, discussion_messa
         logger.error(f"Ошибка добавления ставки: {e}")
 
 
+async def get_bid_auction_by_discussion_id(discussion_message_id: int) -> int | None:
+    """Find an auction through a bid reply message for admin lifecycle commands."""
+    row = await fetchrow(
+        "SELECT auction_id FROM public.bids WHERE discussion_message_id = $1",
+        discussion_message_id,
+    )
+    return int(row["auction_id"]) if row and row.get("auction_id") else None
+
+
+async def mark_user_private_chat_opened(user_id: int) -> None:
+    await execute(
+        """
+        UPDATE users
+        SET pm_opened = TRUE,
+            first_pm_at = COALESCE(first_pm_at, NOW()),
+            last_pm_at = NOW()
+        WHERE user_id = $1
+        """,
+        user_id,
+    )
+
+
+async def mark_user_private_chat_closed(user_id: int) -> None:
+    await execute(
+        "UPDATE users SET pm_opened = FALSE, last_pm_at = NOW() WHERE user_id = $1",
+        user_id,
+    )
+
+
 async def get_all_decks() -> list[dict]:
     rows = await fetch(
         """
@@ -1092,6 +1121,15 @@ async def get_lot_owners(lot_id: int) -> list[Owner]:
     except Exception as e:
         logger.error(f"Error getting lot owners for lot {lot_id}: {e}")
         return []
+
+
+async def get_last_nonempty_card_deck_id() -> int:
+    """Return the latest deck represented by a card without leaking SQL to handlers."""
+    row = await fetchrow("SELECT COALESCE(MAX(deck_id), 0) AS mx FROM cards")
+    try:
+        return int(row["mx"]) if row and row["mx"] is not None else 0
+    except (KeyError, TypeError, IndexError):
+        return int(row[0]) if row else 0
 
 
 @require_db_pool

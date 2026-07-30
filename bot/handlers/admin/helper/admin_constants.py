@@ -3,7 +3,7 @@ from typing import Set
 from bot.handlers.admin.helper.new.utils import auction_kind_label
 from bot.domain.auctions import currency_choices_label
 from bot.handlers.helper.helpers_users import _emoji_by_currency
-from db.legacy import fetchrow
+from bot.services.admin_auctions import AdminAuctionContextService
 
 CANCEL_TEXT = ["назад", "отмена", "⬅️ назад"]
 NO_ACCESS_MSG = "Нет доступа."
@@ -631,91 +631,8 @@ def _exchange_line_from_card(card: dict) -> str | None:
 
 
 async def load_full_auction_ctx(auction_id: int) -> dict:
-    row = await fetchrow(
-        """
-        SELECT a.auction_id,
-               a.hero_name,
-               a.card_name,
-               a.start_price,
-               a.currency,
-               a.auction_kind,
-               a.craft_uid_possible,
-               a.end_time,
-               a.comment,
-               a.status,
-               c.card_id,
-               c.hero_name                          AS c_hero,
-               c.card_name                          AS c_name,
-               c.num,
-               c.rarity,
-               c.obtain_type,
-               c.obtain_amount,
-               c.story,
-               c.quote,
-               c.image_id                           AS card_image_id,
-               d.id                                 AS deck_id,
-               d.name                               AS deck_name,
-               (SELECT COUNT(*)
-                FROM public.auction_owners ao
-                WHERE ao.auction_id = a.auction_id) AS owners_count,
-               (SELECT COUNT(DISTINCT ao.user_id)
-                FROM public.auction_owners ao
-                WHERE ao.auction_id = a.auction_id) AS sellers_total,
-               (SELECT COUNT(DISTINCT ao.user_id)
-                FROM public.auction_owners ao
-                JOIN public.user_uids uu
-                  ON uu.user_id = ao.user_id
-                 AND uu.status = 'verified'
-                WHERE ao.auction_id = a.auction_id) AS sellers_verified
-        FROM public.auctions a
-                 LEFT JOIN public.cards c
-                           ON lower(c.card_name) = lower(a.card_name)
-                               AND (a.hero_name IS NULL OR lower(c.hero_name) = lower(a.hero_name))
-                 LEFT JOIN public.decks d ON d.id = c.deck_id
-        WHERE a.auction_id = $1
-        LIMIT 1
-        """,
-        auction_id,
-    )
-
-    if not row:
-        return {"auction": {}, "card": {}, "deck": {}}
-
-    sellers_total = int(row.get("sellers_total") or 0)
-    sellers_verified = int(row.get("sellers_verified") or 0)
-    seller_verified = bool(sellers_total and sellers_verified == sellers_total)
-
-    return {
-        "auction": {
-            "auction_id": row["auction_id"],
-            "hero_name": row["hero_name"],
-            "card_name": row["card_name"],
-            "start_price": row["start_price"],
-            "currency": row["currency"],
-            "end_time": row["end_time"],
-            "comment": row["comment"],
-            "status": row["status"],
-            "owners_count": row["owners_count"],
-            "auction_kind": row.get("auction_kind"),
-            "craft_uid_possible": row.get("craft_uid_possible"),
-            "sellers_total": sellers_total,
-            "sellers_verified": sellers_verified,
-            "seller_verified": seller_verified,
-        },
-        "card": {
-            "card_id": row.get("card_id"),
-            "hero_name": row.get("c_hero"),
-            "card_name": row.get("c_name"),
-            "num": row.get("num"),
-            "rarity": row.get("rarity"),
-            "obtain_type": row.get("obtain_type"),
-            "obtain_amount": row.get("obtain_amount"),
-            "story": row.get("story"),
-            "quote": row.get("quote"),
-            "image_id": row.get("card_image_id"),
-        },
-        "deck": {"deck_id": row.get("deck_id"), "name": row.get("deck_name")},
-    }
+    service = await AdminAuctionContextService.create()
+    return await service.load_full_context(auction_id)
 
 
 AUCTION_FIELDS: Set[str] = {

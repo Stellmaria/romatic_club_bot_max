@@ -63,6 +63,15 @@ async def get_db_pool() -> asyncpg.Pool:
         return pool
     pool = await _runtime_get_db_pool()
     db_pool.bind(pool)
+    # Legacy compatibility functions are still imported by older handlers.
+    # They must share the managed pool instead of retaining an uninitialized
+    # module-level reference from the pre-refactor implementation.
+    try:
+        from db import legacy_impl
+
+        legacy_impl.db_pool = pool
+    except ImportError:
+        pass
     logger.info("Database pool initialized")
     return pool
 

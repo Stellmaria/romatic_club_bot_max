@@ -19,7 +19,7 @@ from db.legacy import (
     get_obtain_variants_for_rarity,
 )
 from db.legacy import is_luxury_user, get_cards_meta_bulk, \
-    fetchrow
+    get_last_nonempty_card_deck_id
 from bot.legacy_fsm import LuxScheduleFSM
 
 router = Router(name="luxury_schedule")
@@ -45,14 +45,7 @@ def _has_any_word_any(title: str) -> bool:
 
 
 async def _last_nonempty_deck_id() -> int:
-    row = await fetchrow("SELECT COALESCE(MAX(deck_id),0) AS mx FROM cards")
-    try:
-        return int(row["mx"]) if row and row.get("mx") is not None else 0
-    except Exception:
-        try:
-            return int(row[0]) if row else 0
-        except Exception:
-            return 0
+    return await get_last_nonempty_card_deck_id()
 
 
 def rarity_block(raw: str | None) -> str:
@@ -195,23 +188,6 @@ async def lux_choose_day(call: types.CallbackQuery, state: FSMContext) -> None:
         if cur:
             out.append(cur.rstrip())
         return out
-
-    def _extract_ymd_from_cb(cb: str):
-        return None
-
-    def _has_any_word_any(title: str) -> bool:
-        t = (title or "").lower()
-        return any(x in t for x in ("любой", "любая", "любое", "любые", "any "))
-
-    async def _last_nonempty_deck_id() -> int:
-        row = await fetchrow("SELECT COALESCE(MAX(deck_id),0) AS mx FROM cards")
-        try:
-            return int(row["mx"]) if row and row.get("mx") is not None else 0
-        except Exception:
-            try:
-                return int(row[0]) if row else 0
-            except Exception:
-                return 0
 
     def _coerce_selected_from_cb(cb: str) -> date | None:
         raw = _extract_ymd_from_cb(cb)

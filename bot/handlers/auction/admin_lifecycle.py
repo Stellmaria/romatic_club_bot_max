@@ -16,7 +16,7 @@ from bot.services.auction_admin import AuctionAdminService
 from bot.services.auction_workflows import AuctionLifecycleService
 from bot.core.legacy_config import ADMINS
 from db.legacy import (
-    fetchrow,
+    get_bid_auction_by_discussion_id,
     get_auction_by_discussion_id,
     get_lot_by_id,
     get_lot_owners,
@@ -45,12 +45,9 @@ async def _resolve_lot_from_reply(
         if lot:
             return lot
 
-        bid = await fetchrow(
-            "SELECT auction_id FROM public.bids WHERE discussion_message_id = $1",
-            current.message_id,
-        )
-        if bid and bid.get("auction_id"):
-            lot = await get_lot_by_id(int(bid["auction_id"]))
+        bid_auction_id = await get_bid_auction_by_discussion_id(current.message_id)
+        if bid_auction_id:
+            lot = await get_lot_by_id(bid_auction_id)
             if lot:
                 return lot
         current = current.reply_to_message

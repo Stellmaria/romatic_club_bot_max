@@ -27,7 +27,6 @@ from bot.keyboards.keyboards import back_to_menu_keyboard, currency_choice_keybo
 from db.legacy import (
     add_delete_request,
     delete_lot,
-    execute,
     get_auctions_by_date,
     get_lot_by_id,
     get_settings,
@@ -39,6 +38,8 @@ from db.legacy import (
     update_lot_field, get_lots_by_owner_view, set_owner_lot_folder, auto_finish_old_lots_for_owner,
     get_user_verified_uid, get_user_basic_info_by_username, get_whois_admin_payload, get_user_id_by_uid_any,
     get_uid_profile_binding,
+    mark_user_private_chat_closed,
+    mark_user_private_chat_opened,
 )
 from bot.legacy_fsm import UserDeleteLotFSM, UserEditLotFSM, PublicWhoFSM
 
@@ -78,16 +79,7 @@ async def _resolve_who_target_from_text_or_message(message: types.Message, raw: 
 async def start_cmd(message: types.Message, state: FSMContext, bot: Bot, command: CommandObject) -> None:
     # помечаем, что ЛС открыт
     try:
-        await execute(
-            """
-            UPDATE users
-            SET pm_opened   = TRUE,
-                first_pm_at = COALESCE(first_pm_at, NOW()),
-                last_pm_at  = NOW()
-            WHERE user_id = $1
-            """,
-            message.from_user.id,
-        )
+        await mark_user_private_chat_opened(message.from_user.id)
     except Exception:
         pass
 
@@ -129,10 +121,7 @@ async def start_cmd(message: types.Message, state: FSMContext, bot: Bot, command
 
         # (опционально) пометить в БД, что ЛС закрыто, чтобы потом не пытаться слать рассылки
         try:
-            await execute(
-                "UPDATE users SET pm_opened=FALSE, last_pm_at=NOW() WHERE user_id=$1",
-                message.from_user.id,
-            )
+            await mark_user_private_chat_closed(message.from_user.id)
         except Exception:
             pass
         return

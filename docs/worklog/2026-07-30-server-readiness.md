@@ -99,3 +99,19 @@
   115 passed и 6 skipped (нужна disposable PostgreSQL), затем выявил старый
   SQL debt в 19 handler files. Он не блокирует import/preflight, но остаётся
   архитектурным обязательством перед полной зелёной проверкой.
+
+## Продолжение: runtime pool compatibility and handler SQL reduction
+
+- Legacy fallback теперь получает тот же pool, что и модульный DB lifecycle;
+  это устраняет риск запуска старых compatibility-функций с пустой ссылкой на
+  pool после server bootstrap. При shutdown ссылка также очищается.
+- SQL из завершённых handler-срезов `schedule`, `auction/admin_lifecycle`,
+  `admin_constants` и `users` перенесён к data/service owners. Заодно удалён
+  локальный shadowing helper в luxury schedule, который делал разбор даты
+  недостижимым.
+- Проверки: `import main` — успешно; `python -m scripts.server_preflight
+  --userbot` — успешно. `test_handler_sql_boundary.py`: второй контракт
+  завершённых миграций проходит; общий SQL boundary ещё падает, но число
+  файлов-нарушителей снижено с 19 до 15.
+- Статус: частично. Следующий шаг: поочерёдно вынести оставшийся SQL из
+  market, exchange, UID и appeal handlers, затем повторить полный pytest.
