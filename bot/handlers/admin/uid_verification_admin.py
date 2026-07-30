@@ -12,6 +12,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log
+from bot.services.uid_verification import apply_master_ban, ban_user, list_active_user_bans
 from db.legacy import (
     list_uid_verification_requests,
     get_uid_verification_request,
@@ -20,7 +21,7 @@ from db.legacy import (
     get_user_basic_info_by_username,
     get_whois_admin_payload, remove_uid_ban, list_uid_bans, upsert_uid_ban, get_user_verified_uid,
     get_user_by_username,
-    set_uid_verification_request_revision, execute, get_user_id_by_username, unban_user, fetch, fetchrow, get_uid_owner,
+    set_uid_verification_request_revision, execute, get_user_id_by_username, unban_user, fetch, fetchrow, get_uid_owner, get_user,
     get_user_id_by_uid_any, get_uid_profile_binding,
 )
 from bot.legacy_fsm import ModActionFSM, UIDVerificationRevisionFSM
@@ -1720,11 +1721,10 @@ async def user_ban_got_reason(message: Message, state: FSMContext):
 
     reason, banned_until = _parse_user_ban_reason_and_until(message.text or "")
 
-    await execute(
-        "INSERT INTO public.user_bans (user_id, banned_until, reason) VALUES ($1, $2, $3)",
-        int(user_id),
-        banned_until,
-        (reason or "").strip(),
+    await ban_user(
+        user_id=int(user_id),
+        banned_until=banned_until,
+        reason=(reason or "").strip(),
     )
 
     until_txt = str(banned_until)
@@ -1782,19 +1782,7 @@ async def user_unban_got_target(message: Message, state: FSMContext):
 @router.message(F.text == "📋 Список банов пользователей", F.chat.type == "private")
 @admin_only
 async def user_ban_list(message: Message):
-    rows = await fetch(
-        """
-        SELECT ub.user_id,
-               u.username,
-               ub.banned_until,
-               ub.reason
-        FROM public.user_bans ub
-        LEFT JOIN public.users u ON u.user_id = ub.user_id
-        WHERE ub.banned_until > NOW()
-        ORDER BY ub.banned_until DESC
-        LIMIT 50
-        """
-    )
+    rows = await list_active_user_bans(limit=50)
 
     if not rows:
         await message.answer("Список пуст.")
@@ -1853,7 +1841,7 @@ async def _resolve_master_user(text: str) -> tuple[int | None, str | None, str |
 
     if t.isdigit():
         uid = int(t)
-        un = await fetchrow("SELECT username FROM public.users WHERE user_id=$1 LIMIT 1", uid)
+        un = await get_user(uid)
         username = (un.get("username") or "").strip() if un else ""
         return uid, (username or None), None
 
@@ -1976,23 +1964,18 @@ async def master_ban_got_reason(message: Message, state: FSMContext):
     # TG-ban: если days нет -> 10 лет (как у тебя в банах пользователя)
     user_until = (datetime.now() + timedelta(days=int(days))) if days is not None else (datetime.now() + timedelta(days=365 * 10))
 
-    # (опционально) проверка владельца UID и предупреждение в лог
-    owner = await get_uid_owner(uid)
-    owner_user_id = int(owner.get("user_id")) if owner and owner.get("user_id") else None
+    result = await apply_master_ban(
+        uid=uid,
+        user_id=user_id,
+        banned_by=message.from_user.id,
+        reason=reason,
+        uid_banned_until=uid_until,
+        user_banned_until=user_until,
+    )
+    owner_user_id = result.owner_user_id
     mismatch_note = ""
     if owner_user_id and owner_user_id != user_id:
         mismatch_note = f"\n⚠️ UID принадлежит другому user_id: <code>{owner_user_id}</code>"
-
-    # применяем оба бана
-    await upsert_uid_ban(uid, banned_by=message.from_user.id, reason=reason, banned_until=uid_until)
-
-    await execute("DELETE FROM public.user_bans WHERE user_id=$1", int(user_id))
-    await execute(
-        "INSERT INTO public.user_bans (user_id, banned_until, reason) VALUES ($1, $2, $3)",
-        int(user_id),
-        user_until,
-        (reason or "").strip(),
-    )
 
     who = f"@{username}" if username else f"id{user_id}"
     uid_txt = _mask_uid(uid)

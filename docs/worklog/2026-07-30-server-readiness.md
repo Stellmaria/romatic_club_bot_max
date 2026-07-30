@@ -151,3 +151,11 @@
 - Восстановлено корректное состояние границ (`test_feature_import_cycles.py`
   и `test_architecture_boundaries.py`: 10 passed). Дальше SQL переносится
   только в repository/use-case owners.
+
+## Продолжение: UID admin repository adoption
+
+- Admin user-ban, active-ban listing, username lookup и master-ban теперь
+  используют `UIDIdentityAdminRepository` через `bot.services.uid_verification`.
+  Master-ban выполняет UID и Telegram ban атомарно в repository transaction.
+- UID admin больше не содержит SQL. Общий handler SQL boundary сокращён до
+  7 файлов; import admin UID router проходит.
