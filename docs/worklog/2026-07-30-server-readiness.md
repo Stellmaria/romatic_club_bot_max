@@ -215,6 +215,16 @@
 - Общий handler SQL boundary сокращён до 2 файлов (`market_add_flow` и
   `auction_comments`); import UID handler проходит.
 
+## Контрольный runtime-аудит
+
+- `compileall` для bot/db/userbot/scripts, `import main` и
+  `scripts.server_preflight --userbot` успешно выполнены.
+- `test_architecture_boundaries.py`, `test_db_modularization.py` и
+  `test_feature_import_cycles.py`: 15 passed. Worktree чистый.
+- Полный pytest пока намеренно не заявляется зелёным: boundary test всё ещё
+  указывает на два крупных legacy handler-модуля; Docker/Compose и реальная
+  PostgreSQL restore-проверка требуют Linux Docker-enabled runner.
+
 ## Продолжение: Linux backup policy
 
 - Добавлен `scripts/backup_database.sh` для Compose PostgreSQL: custom dump,
