@@ -419,3 +419,12 @@
   DB export, worker composition, DB lifecycle и subscriptions router.
 - Проверки: `tests/test_phase2_regressions.py -q` — 10 passed; `ruff check`
   и `git diff --check` — успешно.
+
+## Продолжение: application bootstrap regression
+
+- Expired callback guard и backlog drop assertion перенесены с удалённого
+  `main.py` legacy launcher на фактические production owners:
+  `bot/bootstrap/routers.py` и `bot/application.py`. Проверка сохраняет
+  порядок: webhook очищается до запуска background workers.
+- Проверки: `tests/test_hotfix_expired_admin_callbacks.py -q` — 4 passed;
+  `ruff check` и `git diff --check` — успешно.

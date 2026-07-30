@@ -9,14 +9,14 @@ def _source(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_legacy_main_registers_expired_callback_guard_and_drops_backlog() -> None:
-    source = _source("main.py")
+def test_application_registers_expired_callback_guard_and_drops_backlog() -> None:
+    routers = _source("bot/bootstrap/routers.py")
+    application = _source("bot/application.py")
 
-    assert "from bot.middlewares.expired_callback import ExpiredCallbackMiddleware" in source
-    assert "dp.update.outer_middleware(ExpiredCallbackMiddleware())" in source
-    assert 'os.getenv("DROP_PENDING_UPDATES", "1")' in source
-    assert "await bot.delete_webhook(drop_pending_updates=drop_pending_updates)" in source
-    assert source.index("await bot.delete_webhook") < source.index("# Фоновые задачи")
+    assert "from bot.middlewares.expired_callback import ExpiredCallbackMiddleware" in routers
+    assert "dispatcher.update.outer_middleware(ExpiredCallbackMiddleware())" in routers
+    assert "drop_pending_updates=app_settings.drop_pending_updates" in application
+    assert application.index("await bot.delete_webhook") < application.index("task_manager.start(")
 
 
 def test_edit_lot_menu_uses_safe_callback_answer() -> None:
