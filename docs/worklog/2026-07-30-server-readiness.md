@@ -386,3 +386,15 @@
   compatibility import теперь идёт из pure presentation module.
 - Статус: частично. Полный suite необходимо продолжить после этого checkpoint;
   PostgreSQL integration cases по-прежнему корректно skipped без disposable DB.
+
+## Продолжение: phase-10 regression contract
+
+- Phase-10 checks приведены к текущей modular DB архитектуре: migration
+  lifecycle живёт в `db/lifecycle`, а `db/db.py` остаётся SQL-free dynamic
+  compatibility facade. Проверки больше не требуют фиксированного числа
+  repository helpers или literal `__all__` там, где export собирается из
+  owner-модулей.
+- Проверки: `tests/test_phase10_regressions.py -q` — 6 passed; `ruff check`
+  и `git diff --check` — успешно.
+- Статус: частично. Продолжить полный pytest от 164 passed и проверить
+  последующие runtime/compatibility assertions.
