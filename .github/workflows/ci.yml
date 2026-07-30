@@ -50,6 +50,7 @@ jobs:
         run: python -m ruff check .
       - name: Unit and regression tests
         env:
+          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
           UID_HASH_KEY: ci-only-hmac-key
           UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: python -m pytest -q

@@ -318,3 +318,6 @@
   или production ключами.
 - Fernet fixture приведён к валидному 32-byte url-safe base64 ключу после
   того, как Linux collection подтвердил строгую проверку crypto library.
+- Для legacy handler import добавлен синтаксически валидный, но нерабочий
+  CI-only `BOT_TOKEN`: aiogram валидирует формат при создании объекта, а
+  тестовый процесс не открывает Telegram network connection.
