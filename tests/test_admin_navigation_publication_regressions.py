@@ -41,20 +41,39 @@ def test_complete_admin_menu_exposes_schedule_exchange_and_legacy_sections() -> 
 
 
 def test_exchange_navigation_uses_supported_catalog_callbacks() -> None:
-    source = _source("bot/handlers/admin/admin_navigation.py")
+    navigation = _source("bot/handlers/admin/admin_navigation.py")
+    catalog = _source("bot/handlers/auction/exchange/catalog.py")
 
-    assert 'F.text == "🛒 Биржа"' in source
-    assert 'F.data == "ex_appr:root"' in source
-    assert "_kb_exchange_approved_root()" in source
-    assert "exinv|" not in source
+    assert 'F.text == "🛒 Биржа"' in navigation
+    assert 'F.data == "ex_appr:root"' in navigation
+    assert "_kb_exchange_approved_root()" in navigation
+    assert "exinv|" not in navigation
+    assert '@router.callback_query(F.data == "ex_appr:decks")' in catalog
+    assert '@router.callback_query(F.data.startswith("ex_appr:list:all:"))' in catalog
+    assert '@router.callback_query(F.data.startswith("ex_appr:lot:"))' in catalog
 
 
-def test_schedule_navigation_is_read_only_and_clears_previous_fsm() -> None:
-    source = _source("bot/handlers/admin/admin_navigation.py")
+def test_schedule_navigation_opens_grouped_preview() -> None:
+    navigation = _source("bot/handlers/admin/admin_navigation.py")
 
-    assert 'F.text == "📅 Расписание"' in source
-    assert "start_preview_schedule(message, state)" in source
-    assert "start_edit_schedule" not in source
+    assert 'F.text == "📅 Расписание"' in navigation
+    assert "start_preview_schedule(message, state)" in navigation
+    assert "start_edit_schedule" not in navigation
+    assert 'F.data.startswith("preview_schedule|")' in navigation
+    assert 'period="day"' in navigation
+    assert 'prefix="preview_schedule"' in navigation
+    assert "get_auctions_by_date_with_owners(selected_date)" in navigation
+    assert "build_grouped_schedule_lines_with_prefixes(" in navigation
+    assert 'schedule_text = "\\n".join(lines)' in navigation
+
+
+def test_per_lot_schedule_editor_remains_separate() -> None:
+    schedule = _source("bot/handlers/admin/admin_panel_schedule.py")
+
+    assert 'F.text == "📝 Редактировать расписание"' in schedule
+    assert "start_edit_schedule(message, state)" in schedule
+    assert "for lot in auctions:" in schedule
+    assert 'F.data.startswith("edit_schedule_lot|")' in schedule
 
 
 def test_publisher_receives_both_channel_addresses() -> None:
