@@ -47,6 +47,11 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    networks:
+      default: {}
+      hermes-supervisor-control:
+        aliases:
+          - romatic-supervisor
 
   bot:
     build: .
@@ -74,3 +79,10 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  hermes-supervisor-control:
+    name: ${HERMES_SUPERVISOR_NETWORK:-hermes-supervisor-control}
+    driver: bridge
+    internal: true
+    attachable: true

@@ -30,6 +30,44 @@ Server Supervisor возвращает владельцу управление �
 - поддерживаются только фиксированные действия status, logs, restart bot, restart userbot, update и rollback;
 - произвольная shell-команда отсутствует.
 
+## Hermes Operator Control
+
+Главный оператор `@VelvetHermesBot` может обращаться к Max Supervisor только через отдельный fixed-action gateway из репозитория Velvet. Сам агент не получает Docker, systemd, production `.env` или `SUPERVISOR_TOKEN`.
+
+Для этого только `supervisor-proxy` подключается к внутренней Docker-сети:
+
+```text
+hermes-supervisor-control
+```
+
+В эту сеть не подключаются:
+
+- `bot`;
+- `userbot`;
+- `postgres`;
+- `@romatic_max_coder_bot`.
+
+Alias proxy внутри control-сети:
+
+```text
+romatic-supervisor
+```
+
+Разрешённые для главного Hermes операции по Max:
+
+```text
+status
+logs
+start bot
+restart bot
+start userbot
+restart userbot
+update
+rollback
+```
+
+Кодер `@romatic_max_coder_bot` по-прежнему работает только со своим Git workspace и GitHub repository. Он не должен запускать или перезапускать production-сервисы.
+
 ## Установка
 
 Рекомендуемый checkout:
@@ -53,6 +91,13 @@ sudo env \
   ROMATIC_APP_DIR=/srv/your-path \
   ROMATIC_SERVICE_USER=your-user \
   bash deploy/server/install-server-supervisor.sh
+```
+
+После установки Max Supervisor общий gateway главного Hermes устанавливается из checkout Velvet:
+
+```bash
+cd /srv/velvet
+sudo bash deploy/hermes-operator/install.sh
 ```
 
 ## Telegram
@@ -97,7 +142,12 @@ sudo systemctl status romatic-server-supervisor.service --no-pager
 
 cd /srv/romatic-club-max
 docker compose --env-file .env -f compose.yaml ps
+
+docker network inspect hermes-supervisor-control \
+  --format '{{.Internal}} {{json .Containers}}'
 ```
+
+Control network должна быть internal. В списке её контейнеров допустимы Max `supervisor-proxy` и Hermes operator gateway, но не `bot`, `userbot`, `postgres` или coder-контейнеры.
 
 При restart основного bot должен измениться только `StartedAt` контейнера `bot`.
 При restart userbot должен измениться только `StartedAt` контейнера `userbot`.
