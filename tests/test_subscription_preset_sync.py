@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from bot.repositories.card_subscriptions import CardSubscriptionsRepository
-from db.migrations import migration_files
+from db.migrator import _load_migrations
 from db.subscriptions import _deck_id_from_lot_title, preset_keys_for_auction
 
 
@@ -39,7 +39,7 @@ class _Connection:
         return [{"key": "deck_all_26", "title": "Вся колода 26 — Test"}]
 
 
-def test_deck_presets_are_backfilled_and_kept_in_sync_by_migration() -> None:
+def test_deck_preset_migration_is_archived_not_runtime() -> None:
     migration = (
         ROOT / "database/migrations/010_deck_notification_presets.sql"
     ).read_text(encoding="utf-8")
@@ -48,8 +48,8 @@ def test_deck_presets_are_backfilled_and_kept_in_sync_by_migration() -> None:
     assert "deck_all_" in migration
     assert "CREATE TRIGGER trg_sync_deck_notification_preset" in migration
     assert "AFTER INSERT OR UPDATE OF name ON public.decks" in migration
-    assert "010_deck_notification_presets.sql" in {
-        path.name for path in migration_files()
+    assert "010_deck_notification_presets.sql" not in {
+        item.filename for item in _load_migrations()
     }
 
 
