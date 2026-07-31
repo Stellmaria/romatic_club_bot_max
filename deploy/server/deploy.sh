@@ -97,7 +97,7 @@ echo "Creating pre-deploy PostgreSQL dump..."
   pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc
 ' > "$backup_path"
 test -s "$backup_path"
-cat "$backup_path" | "${compose[@]}" exec -T postgres pg_restore -l >/dev/null
+"${compose[@]}" exec -T postgres pg_restore -l < "$backup_path" >/dev/null
 chmod 0600 "$backup_path"
 echo "Verified dump: $backup_path"
 

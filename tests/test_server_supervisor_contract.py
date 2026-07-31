@@ -61,6 +61,8 @@ def test_deploy_keeps_backup_health_and_rollback_gates() -> None:
 
     assert "pg_dump" in deploy
     assert "pg_restore -l" in deploy
+    assert 'exec -T postgres pg_restore -l < "$backup_path"' in deploy
+    assert 'cat "$backup_path" |' not in deploy
     assert "git merge-base --is-ancestor" in deploy
     assert "ROMATIC_DEPLOY_TARGET_SHA" in deploy
     assert "Romatic server smoke OK" in deploy
