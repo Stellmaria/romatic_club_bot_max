@@ -14,6 +14,40 @@ services:
       timeout: 5s
       retries: 10
 
+  supervisor-proxy:
+    image: ${SUPERVISOR_PROXY_IMAGE:-romatic-server-supervisor-proxy:local}
+    build:
+      context: .
+      dockerfile: Dockerfile.server-supervisor-proxy
+    restart: unless-stopped
+    user: "10001:10001"
+    environment:
+      SERVER_SUPERVISOR_SOCKET: ${SERVER_SUPERVISOR_SOCKET:-/runtime/supervisor/romatic-server-supervisor.sock}
+      SERVER_SUPERVISOR_PROXY_HOST: 0.0.0.0
+      SERVER_SUPERVISOR_PROXY_PORT: 8765
+    volumes:
+      - ${ROMATIC_DATA_DIR:-./server-data}/runtime:/runtime
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket; s=socket.create_connection(('127.0.0.1',8765),2); s.close()
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    mem_limit: ${SUPERVISOR_PROXY_MEMORY_LIMIT:-128m}
+    cpus: ${SUPERVISOR_PROXY_CPU_LIMIT:-0.25}
+    pids_limit: 64
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
   bot:
     build: .
     restart: unless-stopped
@@ -24,6 +58,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      supervisor-proxy:
+        condition: service_started
 
   userbot:
     build: .
