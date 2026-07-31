@@ -69,6 +69,15 @@ def test_deploy_keeps_backup_health_and_rollback_gates() -> None:
     assert "COMPOSE_BAKE=false" in deploy
 
 
+def test_postgres_image_matches_production_major_version() -> None:
+    compose = source("compose.yaml")
+    env_example = source(".env.example")
+
+    assert "${POSTGRES_IMAGE:-postgres:17-alpine}" in compose
+    assert "POSTGRES_IMAGE=postgres:17-alpine" in env_example
+    assert "postgres:16-alpine" not in compose
+
+
 def test_systemd_runtime_stays_unprivileged() -> None:
     unit = source("deploy/systemd/romatic-server-supervisor.service")
 
