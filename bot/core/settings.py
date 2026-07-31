@@ -110,6 +110,11 @@ class Settings:
     bid_validation_mode: str
     userbot_bid_moderation: bool
     runtime_dir: Path
+    schedule_announcements_enabled: bool = True
+    schedule_announcements_hour: int = 23
+    schedule_announcements_minute: int = 0
+    schedule_announcements_require_custom_emoji: bool = True
+    schedule_announcement_state_file: Path = Path("var/schedule_announcements.json")
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -118,6 +123,15 @@ class Settings:
         runtime_dir = Path(get_str("RUNTIME_DIR", str(PROJECT_ROOT / "var")))
         if not runtime_dir.is_absolute():
             runtime_dir = PROJECT_ROOT / runtime_dir
+
+        schedule_state_file = Path(
+            get_str(
+                "SCHEDULE_ANNOUNCEMENT_STATE_FILE",
+                str(runtime_dir / "schedule_announcements.json"),
+            )
+        )
+        if not schedule_state_file.is_absolute():
+            schedule_state_file = PROJECT_ROOT / schedule_state_file
 
         return cls(
             bot_token=get_str("BOT_TOKEN"),
@@ -163,6 +177,20 @@ class Settings:
             bid_validation_mode=get_str("BID_VALIDATION_MODE", "userbot").lower(),
             userbot_bid_moderation=get_bool("USERBOT_BID_MODERATION", True),
             runtime_dir=runtime_dir,
+            schedule_announcements_enabled=get_bool("SCHEDULE_ANNOUNCEMENTS_ENABLED", True),
+            schedule_announcements_hour=min(
+                23,
+                max(0, get_int("SCHEDULE_ANNOUNCEMENTS_HOUR", 23)),
+            ),
+            schedule_announcements_minute=min(
+                59,
+                max(0, get_int("SCHEDULE_ANNOUNCEMENTS_MINUTE", 0)),
+            ),
+            schedule_announcements_require_custom_emoji=get_bool(
+                "SCHEDULE_ANNOUNCEMENTS_REQUIRE_CUSTOM_EMOJI",
+                True,
+            ),
+            schedule_announcement_state_file=schedule_state_file,
         )
 
     def bot_configuration_errors(self) -> tuple[str, ...]:
