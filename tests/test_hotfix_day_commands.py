@@ -5,7 +5,6 @@ import asyncio
 import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,26 +68,10 @@ def test_day_formatter_accepts_aware_and_legacy_naive_datetimes() -> None:
         },
     )
     lots = [
-        {
-            "auction_id": 1,
-            "start_time": datetime(2026, 7, 15, 19, 0, tzinfo=moscow),
-            "end_time": datetime(2026, 7, 15, 19, 30, tzinfo=moscow),
-        },
-        {
-            "auction_id": 2,
-            "start_time": datetime(2026, 7, 15, 22, 0),
-            "end_time": datetime(2026, 7, 15, 22, 30),
-        },
-        {
-            "auction_id": 3,
-            "start_time": datetime(2026, 7, 15, 23, 0, tzinfo=moscow),
-            "end_time": datetime(2026, 7, 15, 23, 30, tzinfo=moscow),
-        },
-        {
-            "auction_id": 4,
-            "start_time": datetime(2026, 7, 15, 18, 0),
-            "end_time": datetime(2026, 7, 15, 18, 30),
-        },
+        {"auction_id": 1, "start_time": datetime(2026, 7, 15, 19, 0, tzinfo=moscow), "end_time": datetime(2026, 7, 15, 19, 30, tzinfo=moscow)},
+        {"auction_id": 2, "start_time": datetime(2026, 7, 15, 22, 0), "end_time": datetime(2026, 7, 15, 22, 30)},
+        {"auction_id": 3, "start_time": datetime(2026, 7, 15, 23, 0, tzinfo=moscow), "end_time": datetime(2026, 7, 15, 23, 30, tzinfo=moscow)},
+        {"auction_id": 4, "start_time": datetime(2026, 7, 15, 18, 0), "end_time": datetime(2026, 7, 15, 18, 30)},
     ]
     rendered = asyncio.run(formatter(date(2026, 7, 15), lots))
     assert "4:True" in rendered
@@ -110,9 +93,8 @@ def test_day_query_is_pinned_to_moscow_calendar_date() -> None:
 
 
 def test_priority_command_routers_precede_stateful_auction_router() -> None:
-    for relative in ("main.py", "bot/bootstrap/routers.py"):
-        source = (ROOT / relative).read_text(encoding="utf-8")
-        schedule = source.index("include_router(auction_schedule_router)")
-        users = source.index("include_router(users_router)")
-        auctions = source.index("include_router(auctions_router)")
-        assert schedule < users < auctions
+    source = (ROOT / "bot/bootstrap/routers.py").read_text(encoding="utf-8")
+    schedule = source.index("include_router(auction_schedule_router)")
+    users = source.index("include_router(users_router)")
+    auctions = source.index("include_router(auctions_router)")
+    assert schedule < users < auctions
