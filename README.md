@@ -1,5 +1,7 @@
 # Romatic Club Bot Max
 
+Проект поддерживает только Python 3.13.
+
 ## Быстрый запуск
 
 ```powershell
