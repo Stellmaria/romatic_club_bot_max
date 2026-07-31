@@ -21,9 +21,6 @@ from bot.handlers.auction.admin_lifecycle import router as auction_admin_lifecyc
 from bot.handlers.auction.autobid import router as auction_autobid_router
 from bot.handlers.auction.bidding import router as auction_bidding_router
 from bot.handlers.auction.exchange import router as auction_exchange_router
-from bot.handlers.auction.exchange_catalog import router as auction_exchange_catalog_router
-from bot.handlers.auction.exchange_diagnostics import router as auction_exchange_diagnostics_router
-from bot.handlers.auction.exchange_moderation import router as auction_exchange_moderation_router
 from bot.handlers.auction.schedule import router as auction_schedule_router
 from bot.handlers.auction.warnings import router as auction_warnings_router
 from bot.handlers.auction.winner_exchange import router as auction_winner_exchange_router
@@ -68,10 +65,9 @@ def register_all_routers(
     dispatcher.include_router(auction_schedule_router)
     dispatcher.include_router(users_router)
     dispatcher.include_router(auctions_router)
+    # The package router owns submission, moderation, catalog and diagnostics.
+    # Registering those children again would attach the same routers twice.
     dispatcher.include_router(auction_exchange_router)
-    dispatcher.include_router(auction_exchange_moderation_router)
-    dispatcher.include_router(auction_exchange_catalog_router)
-    dispatcher.include_router(auction_exchange_diagnostics_router)
     dispatcher.include_router(emoji_setup_router)
 
     dispatcher.update.outer_middleware(ExpiredCallbackMiddleware())
