@@ -22,10 +22,19 @@ jobs:
           fetch-depth: 0
       - name: Apply audited changes
         run: |
-          : > /tmp/admin-audit.patch
-          for part in .admin-audit-patch-part-*; do
-            base64 --decode --ignore-garbage "$part" >> /tmp/admin-audit.patch
-          done
+          python - <<'PY'
+          import base64
+          import re
+          from pathlib import Path
+
+          output = bytearray()
+          for part in sorted(Path('.').glob('.admin-audit-patch-part-*')):
+              encoded = part.read_text(encoding='utf-8')
+              encoded = re.sub(r'[^A-Za-z0-9+/=]', '', encoded).rstrip('=')
+              encoded += '=' * (-len(encoded) % 4)
+              output.extend(base64.b64decode(encoded, validate=False))
+          Path('/tmp/admin-audit.patch').write_bytes(output)
+          PY
           git apply --check /tmp/admin-audit.patch
           git apply /tmp/admin-audit.patch
           rm -f .admin-audit-patch-part-*
