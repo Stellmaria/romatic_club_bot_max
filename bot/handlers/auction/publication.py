@@ -7,6 +7,11 @@ from datetime import datetime
 from typing import Any
 
 from aiogram import Bot
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramNetworkError,
+)
 
 from bot.core.time import moscow_date, utc_now
 from bot.handlers.admin.helper.admin_constants import (
@@ -27,15 +32,43 @@ def _without_usernames(value: object) -> str:
     return re.sub(r"@\w+", "", str(value or "")).strip()
 
 
-def _target_channel(configured: int | str | None) -> int | str:
+def _username_target(value: str | None) -> str | None:
+    username = str(value or "").strip()
+    if not username:
+        return None
+    return username if username.startswith("@") else f"@{username}"
+
+
+def _publication_targets(
+    configured: int | str | None,
+    configured_username: str | None = AUCTION_CHANNEL_USERNAME,
+) -> tuple[int | str, ...]:
+    """Return unique channel targets in preferred delivery order.
+
+    Production normally uses the numeric channel ID.  The username is retained
+    as an explicit fallback because Telegram migrations and stale environment
+    values can leave a valid public channel reachable only by its username.
+    """
+
+    targets: list[int | str] = []
     if isinstance(configured, int) and configured:
-        return configured
-    if isinstance(configured, str) and configured.strip():
-        return configured.strip()
-    if AUCTION_CHANNEL_USERNAME:
-        username = AUCTION_CHANNEL_USERNAME.strip()
-        return username if username.startswith("@") else f"@{username}"
-    raise RuntimeError("auction publication channel is not configured")
+        targets.append(configured)
+    elif isinstance(configured, str) and configured.strip():
+        targets.append(configured.strip())
+
+    username_target = _username_target(configured_username)
+    if username_target and username_target not in targets:
+        targets.append(username_target)
+
+    if not targets:
+        raise RuntimeError("auction publication channel is not configured")
+    return tuple(targets)
+
+
+def _target_channel(configured: int | str | None) -> int | str:
+    """Backward-compatible preferred channel resolver."""
+
+    return _publication_targets(configured)[0]
 
 
 def _media_id(*records: dict[str, Any]) -> str | None:
@@ -86,12 +119,39 @@ async def _publication_context(auction: dict[str, Any]) -> tuple[dict, dict, dic
     return full_auction, card, deck, owners_count
 
 
+async def _send_publication(
+    bot: Bot,
+    *,
+    target: int | str,
+    media: str | None,
+    caption: str,
+):
+    message = None
+    if media and len(caption) <= 1000:
+        message = await bot_send_media_any(
+            bot,
+            chat_id=target,
+            file_id=media,
+            caption=caption,
+            parse_mode="HTML",
+        )
+    if message is None:
+        message = await bot.send_message(
+            target,
+            caption,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+    return message
+
+
 async def publish_auction_lot(
     bot: Bot,
     auction: dict[str, Any],
     channel_id: int | str | None = AUCTION_CHANNEL_ID,
     lot_number: int | None = None,
     publication_service: AuctionPublicationService | None = None,
+    channel_username: str | None = AUCTION_CHANNEL_USERNAME,
 ) -> int | None:
     """Deliver one claimed auction and atomically record its Telegram message."""
     del lot_number  # retained for compatibility with existing admin calls
@@ -116,25 +176,36 @@ async def publish_auction_lot(
             owners_count=owners_count,
             show_min_bid=True,
         )
-        target = _target_channel(channel_id)
         media = _media_id(full_auction, card, auction)
 
         message = None
-        if media and len(caption) <= 1000:
-            message = await bot_send_media_any(
-                bot,
-                chat_id=target,
-                file_id=media,
-                caption=caption,
-                parse_mode="HTML",
-            )
+        last_delivery_error: Exception | None = None
+        for target in _publication_targets(channel_id, channel_username):
+            try:
+                message = await _send_publication(
+                    bot,
+                    target=target,
+                    media=media,
+                    caption=caption,
+                )
+                break
+            except (
+                TelegramBadRequest,
+                TelegramForbiddenError,
+                TelegramNetworkError,
+            ) as exc:
+                last_delivery_error = exc
+                logger.warning(
+                    "Auction %s could not be delivered to %r; trying fallback: %s",
+                    auction_id,
+                    target,
+                    exc,
+                )
+
         if message is None:
-            message = await bot.send_message(
-                target,
-                caption,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
+            raise RuntimeError(
+                "auction publication failed for every configured channel target"
+            ) from last_delivery_error
 
         message_id = int(message.message_id)
         stored = await service.mark_published(auction_id, message_id=message_id)
@@ -178,7 +249,12 @@ async def get_lot_number_for_day(auction: dict[str, Any]) -> int:
     return 1
 
 
-async def auction_publisher_loop(bot: Bot) -> None:
+async def auction_publisher_loop(
+    bot: Bot,
+    *,
+    channel_id: int | str | None = AUCTION_CHANNEL_ID,
+    channel_username: str | None = AUCTION_CHANNEL_USERNAME,
+) -> None:
     service = await AuctionPublicationService.create()
     while True:
         try:
@@ -190,7 +266,8 @@ async def auction_publisher_loop(bot: Bot) -> None:
                 await publish_auction_lot(
                     bot,
                     auction,
-                    channel_id=AUCTION_CHANNEL_ID,
+                    channel_id=channel_id,
+                    channel_username=channel_username,
                     lot_number=await get_lot_number_for_day(auction),
                     publication_service=service,
                 )
