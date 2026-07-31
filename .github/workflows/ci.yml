@@ -22,9 +22,9 @@ jobs:
           test -f .admin-audit-gz/part-10.b64
           cat .admin-audit-gz/part-*.b64 > /tmp/admin-audit.patch.gz.b64
           base64 -d /tmp/admin-audit.patch.gz.b64 > /tmp/admin-audit.patch.gz
-          echo "e66644c9310e6bc58436cd5a0413f80afb660df23d5ed99a636a58bba0278c20  /tmp/admin-audit.patch.gz" | sha256sum -c -
+          echo "f4db043cca720ee4cd712d6dd8a3290961fbf28a7ff60ee7b7aa34a738aa2d64  /tmp/admin-audit.patch.gz" | sha256sum -c -
           gzip -dc /tmp/admin-audit.patch.gz > /tmp/admin-audit.patch
-          echo "03b206a65ef6c25ac15a9881bb285e382c659fa21505109bc07b6bde1fad251d  /tmp/admin-audit.patch" | sha256sum -c -
+          echo "26fbc3caf8e04363b06a7b4f0c74732528cfe0ecf10ad9ee7b74cb74795730ee  /tmp/admin-audit.patch" | sha256sum -c -
           git apply --3way /tmp/admin-audit.patch
           rm -rf .admin-audit .admin-audit-gz
           rm -f .github/workflows/apply-admin-navigation-audit.yml
