@@ -37,25 +37,21 @@ jobs:
               '.admin-audit-patch-part-05': (15528, 'd66136ab2f274bbfe9a50b1b231b3f90f05bad386a3be76c21770df6b91d717b'),
           }
 
+          def clean(value: str) -> str:
+              return re.sub(r'[^A-Za-z0-9+/=]', '', value)
+
           def digest(value: str) -> str:
               return hashlib.sha256(value.encode()).hexdigest()
 
+          repaired_part_02 = ''.join(
+              clean(part.read_text(encoding='utf-8'))
+              for part in sorted(Path('.').glob('.admin-audit-repair-02-*'))
+          )
+
           output = bytearray()
           for part in sorted(Path('.').glob('.admin-audit-patch-part-*')):
-              encoded = re.sub(r'[^A-Za-z0-9+/=]', '', part.read_text(encoding='utf-8'))
+              encoded = repaired_part_02 if part.name == '.admin-audit-patch-part-02' else clean(part.read_text(encoding='utf-8'))
               expected_len, expected_hash = expected[part.name]
-              if digest(encoded) != expected_hash:
-                  if len(encoded) != expected_len + 1:
-                      raise RuntimeError(f'{part.name}: unexpected length {len(encoded)}')
-                  repaired = None
-                  for index in range(len(encoded)):
-                      candidate = encoded[:index] + encoded[index + 1:]
-                      if digest(candidate) == expected_hash:
-                          repaired = candidate
-                          break
-                  if repaired is None:
-                      raise RuntimeError(f'{part.name}: single-character repair failed')
-                  encoded = repaired
               if len(encoded) != expected_len or digest(encoded) != expected_hash:
                   raise RuntimeError(f'{part.name}: checksum validation failed')
               normalized = encoded.rstrip('=')
@@ -65,7 +61,7 @@ jobs:
           PY
           git apply --check /tmp/admin-audit.patch
           git apply /tmp/admin-audit.patch
-          rm -f .admin-audit-patch-part-*
+          rm -f .admin-audit-patch-part-* .admin-audit-repair-02-*
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
