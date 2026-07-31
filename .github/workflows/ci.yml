@@ -78,7 +78,7 @@ jobs:
       - name: Verify installed wheel resources
         run: |
           python -m pip install --no-deps --force-reinstall dist/*.whl
-          python -I -c "from db.migrations import migration_files; assert len(migration_files()) >= 7"
+          python -I -c "from db.migrator import _load_migrations; items = _load_migrations(); assert items[-1].filename == '011_schedule_setup_master.sql'; assert len({item.version for item in items}) == len(items)"
       - name: Remove wheel build artifacts before source checks
         run: rm -rf build
       - name: Critical lint checks
