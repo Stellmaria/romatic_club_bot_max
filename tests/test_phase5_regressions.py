@@ -118,7 +118,7 @@ def test_workflow_services_normalize_boundaries_to_utc() -> None:
 
 
 def test_migration_runner_serializes_concurrent_replicas() -> None:
-    runner = (ROOT / "db/migrations.py").read_text(encoding="utf-8")
+    runner = (ROOT / "db/migrator.py").read_text(encoding="utf-8")
     assert "pg_advisory_lock" in runner
     assert "pg_advisory_unlock" in runner
-    assert "MIGRATION_LOCK_KEY" in runner
+    assert "MIGRATION_LOCK_ID" in runner
