@@ -22,13 +22,9 @@ _SCHEDULE_COMMAND_PATTERN = (
 
 
 def register_handlers(telegram_client: TelegramClient) -> None:
-    """Bind runtime state and register discussion and owner handlers."""
+    """Bind runtime state and register the three historical handlers."""
 
     bind_client(telegram_client)
-    telegram_client.add_event_handler(
-        on_schedule_admin_command,
-        events.NewMessage(pattern=_SCHEDULE_COMMAND_PATTERN),
-    )
     telegram_client.add_event_handler(
         on_new_message,
         events.NewMessage(chats=DISCUSSION_CHAT_ID),
@@ -43,10 +39,20 @@ def register_handlers(telegram_client: TelegramClient) -> None:
     )
 
 
+def register_schedule_handlers(telegram_client: TelegramClient) -> None:
+    """Register private owner commands for Premium schedule announcements."""
+
+    telegram_client.add_event_handler(
+        on_schedule_admin_command,
+        events.NewMessage(pattern=_SCHEDULE_COMMAND_PATTERN),
+    )
+
+
 __all__ = [
     "on_deleted",
     "on_edited",
     "on_new_message",
     "on_schedule_admin_command",
     "register_handlers",
+    "register_schedule_handlers",
 ]
