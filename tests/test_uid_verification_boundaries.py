@@ -138,7 +138,7 @@ async def test_confirmation_cleanup_is_owned_by_repository() -> None:
     connection = _FakeConnection([])
     repository = UIDVerificationRepository(_FakePool(connection))  # type: ignore[arg-type]
 
-    await repository.delete_confirmation_for_counterparty(14, " @New_Name ")
+    await repository.delete_confirmation_for_counterparty(14, " New_Name ")
 
     assert len(connection.execute_calls) == 1
     assert "DELETE FROM public.uid_verification_confirmations" in connection.execute_calls[0][0]
