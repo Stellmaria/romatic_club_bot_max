@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_PANEL = ROOT / "bot" / "handlers" / "admin" / "admin_panel.py"
 SYSTEM_PANEL = ROOT / "bot" / "handlers" / "admin" / "admin_panel_system.py"
+CLIENT = ROOT / "bot" / "core" / "supervisor_client.py"
 
 
 def _source(path: Path) -> str:
@@ -34,12 +35,25 @@ def test_system_router_is_registered_before_legacy_admin_menu() -> None:
     assert first_router.attr == "router"
 
 
-def test_system_panel_keeps_owner_gate_and_restart_confirmation() -> None:
+def test_system_panel_keeps_owner_gate_and_safe_fallback() -> None:
     source = _source(SYSTEM_PANEL)
 
     assert "ADMINS_OWNERS" in source
     assert 'callback_data="system:restart:ask"' in source
-    assert 'callback_data="system:restart:do"' in source
+    assert '"system:restart:do"' in source
+    assert '"system:update:do"' in source
+    assert '"system:rollback:do"' in source
     assert "process_restart_coordinator.request()" in source
+    assert "supervisor_client.update()" in source
     assert 'F.text == "🖥 Система"' in source
     assert '["🖥 Система"]' in source
+
+
+def test_supervisor_client_requires_explicit_enablement_and_token() -> None:
+    source = _source(CLIENT)
+
+    assert 'os.getenv("SUPERVISOR_ENABLED"' in source
+    assert 'os.getenv("SUPERVISOR_TOKEN"' in source
+    assert '"Authorization": f"Bearer {self.token}"' in source
+    assert '"/v1/update"' in source
+    assert '"/v1/rollback"' in source
