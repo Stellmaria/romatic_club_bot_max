@@ -28,7 +28,7 @@ include = ["bot*", "database*", "db*", "userbot*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-database = ["*.sql", "README.md", "migrations/*.sql"]
+database = ["*.sql", "README.md"]
 db = ["migrations/*.sql"]
 
 [tool.setuptools.dynamic]

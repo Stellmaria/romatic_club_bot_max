@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from db.migrator import _load_migrations
+
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -43,17 +46,15 @@ def test_standard_auction_end_uses_second_59() -> None:
     assert "new_end_time = auction_end_at_59(to_moscow(utc_now()))" in lifecycle
 
 
-def test_slot_policy_migration_removes_legacy_padding() -> None:
+def test_slot_policy_migrations_are_archived_not_runtime() -> None:
     migration = (
         ROOT / "database/migrations/008_auction_slot_policy.sql"
     ).read_text(encoding="utf-8")
-    runner = (ROOT / "db/migrations.py").read_text(encoding="utf-8")
 
     assert "DROP TRIGGER IF EXISTS trg_auctions_fix_end_time" in migration
     assert "start_time + INTERVAL '30 minutes'" in migration
     assert "start_time > now()" in migration
     assert "status IN ('scheduled', 'publication_failed')" in migration
-    assert '"008_auction_slot_policy.sql"' in runner
 
     restore = (
         ROOT / "database/migrations/009_auction_end_second_59.sql"
@@ -61,7 +62,11 @@ def test_slot_policy_migration_removes_legacy_padding() -> None:
     assert "date_trunc('minute', start_time + INTERVAL '30 minutes')" in restore
     assert "+ INTERVAL '59 seconds'" in restore
     assert "start_time > now()" in restore
-    assert '"009_auction_end_second_59.sql"' in runner
+
+    runtime_names = {item.filename for item in _load_migrations()}
+    assert "008_auction_slot_policy.sql" not in runtime_names
+    assert "009_auction_end_second_59.sql" not in runtime_names
+    assert "005_fix_auction_slot_duration.sql" in runtime_names
 
 
 def test_card_media_sync_does_not_depend_on_legacy_31_minute_rows() -> None:

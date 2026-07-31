@@ -13,7 +13,7 @@ from db.core import (
     close_db,
     get_db_pool,
 )
-from db.migrations import apply_migrations
+from db.migrator import apply_migrations
 
 UID_RE = re.compile(r"^[0-9a-f]{24}$", re.IGNORECASE)
 
