@@ -1,0 +1,22 @@
+[Unit]
+Description=Romatic Club Docker Compose stack
+Requires=docker.service
+After=docker.service network-online.target romatic-server-supervisor.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=%SERVICE_USER%
+Group=%SERVICE_USER%
+WorkingDirectory=%APP_DIR%
+Environment=DOCKER_CONFIG=%DATA_DIR%/runtime/docker-config
+Environment=COMPOSE_BAKE=false
+ExecStart=/usr/bin/docker compose --env-file .env -f compose.yaml up -d
+ExecReload=/usr/bin/docker compose --env-file .env -f compose.yaml up -d
+ExecStop=/usr/bin/docker compose --env-file .env -f compose.yaml stop --timeout 45
+TimeoutStartSec=1800
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
