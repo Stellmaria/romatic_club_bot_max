@@ -10,6 +10,7 @@ ADMIN_DIR = ROOT / "bot" / "handlers" / "admin"
 
 SPLITS = {
     "admin_panel": (
+        "admin_panel_system",
         "admin_panel_requests",
         "admin_panel_schedule",
         "admin_panel_sections",
@@ -25,6 +26,11 @@ SPLITS = {
 }
 
 EXPECTED_HANDLER_BOUNDS = {
+    "admin_panel_system": (
+        "show_admin_menu_with_system",
+        "close_system_callback",
+        6,
+    ),
     "admin_panel_requests": ("admreq_back", "cb_exchange_approved_root", 21),
     "admin_panel_schedule": ("edit_schedule_button", "edit_price_handler", 19),
     "admin_panel_sections": ("show_decks_for_cards", "admin_help", 25),
@@ -87,7 +93,8 @@ def test_every_admin_handler_has_one_feature_owner_in_original_order() -> None:
             all_names.extend(names)
 
         assert len(all_names) == len(set(all_names))
-        assert len(all_names) == 81
+        expected_total = 87 if facade == "admin_panel" else 81
+        assert len(all_names) == expected_total
 
         compatibility_module = importlib.import_module(
             f"bot.handlers.admin.{facade}"
