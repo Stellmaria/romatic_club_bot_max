@@ -53,13 +53,25 @@ def test_exchange_navigation_uses_supported_catalog_callbacks() -> None:
     assert '@router.callback_query(F.data.startswith("ex_appr:lot:"))' in catalog
 
 
-def test_schedule_navigation_opens_per_lot_editor() -> None:
+def test_schedule_navigation_opens_grouped_preview() -> None:
     navigation = _source("bot/handlers/admin/admin_navigation.py")
-    schedule = _source("bot/handlers/admin/admin_panel_schedule.py")
 
     assert 'F.text == "📅 Расписание"' in navigation
-    assert "start_edit_schedule(message, state)" in navigation
-    assert "start_preview_schedule" not in navigation
+    assert "start_preview_schedule(message, state)" in navigation
+    assert "start_edit_schedule" not in navigation
+    assert 'F.data.startswith("preview_schedule|")' in navigation
+    assert 'period="day"' in navigation
+    assert 'prefix="preview_schedule"' in navigation
+    assert "get_auctions_by_date_with_owners(selected_date)" in navigation
+    assert "build_grouped_schedule_lines_with_prefixes(" in navigation
+    assert 'schedule_text = "\\n".join(lines)' in navigation
+
+
+def test_per_lot_schedule_editor_remains_separate() -> None:
+    schedule = _source("bot/handlers/admin/admin_panel_schedule.py")
+
+    assert 'F.text == "📝 Редактировать расписание"' in schedule
+    assert "start_edit_schedule(message, state)" in schedule
     assert "for lot in auctions:" in schedule
     assert 'F.data.startswith("edit_schedule_lot|")' in schedule
 
