@@ -1,3 +1,4 @@
+import html
 from typing import Set
 
 from bot.handlers.admin.helper.new.utils import auction_kind_label
