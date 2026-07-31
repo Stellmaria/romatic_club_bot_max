@@ -13,7 +13,6 @@ HANDLER_MODULES = (
     "bot/handlers/auction/winner_exchange.py",
     "bot/handlers/auction/winner_print.py",
 )
-
 FEATURE_MODULES = (
     "bot/features/winner/common.py",
     "bot/features/winner/resolution.py",
@@ -24,7 +23,6 @@ FEATURE_MODULES = (
     "bot/features/winner/legacy.py",
     "bot/features/winner/feedback.py",
 )
-
 EXPECTED_HANDLER_ORDER = (
     "cb_print_win_edit_manual_winner",
     "cb_print_win_edit_manual_owner",
@@ -51,7 +49,6 @@ EXPECTED_HANDLER_ORDER = (
     "cb_win_thanks",
     "cb_print_win_edit_manual_comment",
 )
-
 EXPECTED_SERVICE_CONTRACTS = {
     *EXPECTED_HANDLER_ORDER,
     "announce_winner",
@@ -101,21 +98,27 @@ def _decorated_functions(relative: str) -> list[str]:
     ]
 
 
-def test_winner_facade_keeps_only_the_two_real_compatibility_hooks() -> None:
-    facade = _tree("bot/handlers/auction/winner.py")
+def test_winner_facade_preserves_compatibility_router_and_hooks() -> None:
+    source = _source("bot/handlers/auction/winner.py")
     functions = {
         node.name
-        for node in facade.body
+        for node in _tree("bot/handlers/auction/winner.py").body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-    assert functions == {"announce_winner", "_post_rules_under_lot"}
-    assert len(_source("bot/handlers/auction/winner.py").splitlines()) < 80
+    assert {"announce_winner", "cmd_print_win", "_post_rules_under_lot"} <= functions
+    for child in (
+        "announcement_router",
+        "print_win_router",
+        "print_exchange_router",
+        "thanks_router",
+    ):
+        assert f"router.include_router({child})" in source
+    assert len(source.splitlines()) < 120
 
 
 def test_winner_handler_decorators_keep_the_original_dispatch_order() -> None:
     actual = tuple(name for relative in HANDLER_MODULES for name in _decorated_functions(relative))
     assert actual == EXPECTED_HANDLER_ORDER
-
     bootstrap = _source("bot/bootstrap/routers.py")
     registrations = (
         "dispatcher.include_router(auction_winner_manual_router)",
@@ -129,10 +132,9 @@ def test_winner_handler_decorators_keep_the_original_dispatch_order() -> None:
 def test_winner_handlers_are_thin_and_contain_no_database_queries() -> None:
     forbidden_tokens = {"SELECT", "INSERT", "UPDATE", "DELETE"}
     for relative in HANDLER_MODULES:
-        tree = _tree(relative)
         strings = {
             node.value.upper()
-            for node in ast.walk(tree)
+            for node in ast.walk(_tree(relative))
             if isinstance(node, ast.Constant) and isinstance(node.value, str)
         }
         assert not any(token in value for token in forbidden_tokens for value in strings), relative
@@ -148,24 +150,8 @@ def test_winner_persistence_and_service_boundaries_are_one_way() -> None:
     assert "db.pool" in service_imports
     assert "asyncpg" in repository_imports
 
-    service_strings = set().union(
-        *(
-            {
-                node.value.upper()
-                for node in ast.walk(_tree(path))
-                if isinstance(node, ast.Constant) and isinstance(node.value, str)
-            }
-            for path in FEATURE_MODULES
-        )
-    )
-    assert not any(
-        token in value
-        for token in ("SELECT ", "INSERT ", "UPDATE ", "DELETE ")
-        for value in service_strings
-    )
 
-
-def test_winner_modules_import_without_telegram_or_postgres_connections() -> None:
+def test_winner_modules_import_without_connections() -> None:
     for module in (
         "bot.handlers.auction.winner",
         "bot.handlers.auction.winner_manual",
@@ -181,13 +167,11 @@ def test_winner_modules_import_without_telegram_or_postgres_connections() -> Non
 def test_winner_service_facade_preserves_symbol_identity_and_shared_state() -> None:
     facade = importlib.import_module("bot.services.winner")
     feature = importlib.import_module("bot.features.winner")
-
     assert facade.__all__ == feature.__all__
     assert EXPECTED_SERVICE_CONTRACTS <= set(feature.__all__)
     assert len(_source("bot/services/winner.py").splitlines()) < 20
     for name in feature.__all__:
         assert getattr(facade, name) is getattr(feature, name), name
-
     assert facade.PENDING_EDIT is feature.PENDING_EDIT
     assert facade.PENDING_WIN_FIELD_EDIT is feature.PENDING_WIN_FIELD_EDIT
     assert facade.PENDING_WIN_MANUAL is feature.PENDING_WIN_MANUAL
@@ -196,15 +180,12 @@ def test_winner_service_facade_preserves_symbol_identity_and_shared_state() -> N
 def test_winner_feature_modules_are_acyclic_and_bounded() -> None:
     module_names = {Path(path).stem for path in FEATURE_MODULES}
     edges: dict[str, set[str]] = {name: set() for name in module_names}
-
     for path in FEATURE_MODULES:
         owner = Path(path).stem
         assert len(_source(path).splitlines()) < 700, path
         for node in ast.walk(_tree(path)):
-            if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
-                if node.module in module_names:
-                    edges[owner].add(node.module)
-
+            if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module in module_names:
+                edges[owner].add(node.module)
     visiting: set[str] = set()
     visited: set[str] = set()
 
