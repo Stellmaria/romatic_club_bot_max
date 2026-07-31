@@ -8,29 +8,31 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE = ROOT / "database"
-MIGRATIONS = DATABASE / "migrations"
+ARCHIVED_MIGRATIONS = DATABASE / "migrations"
+RUNTIME_MIGRATIONS = ROOT / "db" / "migrations"
 
 
-def test_database_resources_are_importable_for_wheel_deployments() -> None:
-    import database
-    from db.migrations import MIGRATIONS_DIR
+def test_runtime_migrations_are_importable_for_wheel_deployments() -> None:
+    import db
+    from db.migrator import MIGRATIONS_DIR, _load_migrations
 
-    package_dir = Path(database.__file__).resolve().parent
+    package_dir = Path(db.__file__).resolve().parent
     assert MIGRATIONS_DIR == package_dir / "migrations"
-    assert {path.name for path in MIGRATIONS_DIR.glob("*.sql")} >= {
-        "001_uid_encryption_and_reminders.sql",
-        "007_schema_alignment.sql",
-    }
+    names = {migration.filename for migration in _load_migrations()}
+    assert {
+        "001_extensions_and_types.sql",
+        "011_schedule_setup_master.sql",
+    } <= names
 
 
 def test_migration_discovery_fails_closed_for_missing_resources() -> None:
-    from db.migrations import migration_files
+    from db.migrator import _load_migrations
 
     with TemporaryDirectory() as directory:
         try:
-            migration_files(Path(directory))
+            _load_migrations(Path(directory))
         except RuntimeError as error:
-            assert "No database migrations" in str(error)
+            assert "нет SQL-миграций" in str(error)
         else:  # pragma: no cover
             raise AssertionError("an empty migration package was accepted")
 
@@ -285,12 +287,12 @@ def test_current_sql_contract_columns_are_materialized() -> None:
 
 def test_historical_migrations_remain_byte_for_byte_immutable() -> None:
     for name, expected in IMMUTABLE_MIGRATION_HASHES.items():
-        digest = hashlib.sha256((MIGRATIONS / name).read_bytes()).hexdigest()
+        digest = hashlib.sha256((ARCHIVED_MIGRATIONS / name).read_bytes()).hexdigest()
         assert digest == expected, name
 
 
 def test_alignment_migration_is_additive_and_repeat_safe() -> None:
-    migration = (MIGRATIONS / "007_schema_alignment.sql").read_text(encoding="utf-8")
+    migration = (ARCHIVED_MIGRATIONS / "007_schema_alignment.sql").read_text(encoding="utf-8")
     executable = _strip_line_comments(migration).lower()
 
     assert "add column if not exists moderator_comment" in executable
@@ -323,7 +325,12 @@ def test_bootstrap_is_single_transaction_without_legacy_alternative() -> None:
 
 
 def test_sql_dollar_quote_tags_are_balanced() -> None:
-    for path in [DATABASE / "bootstrap.sql", *sorted(MIGRATIONS.glob("*.sql"))]:
+    paths = [
+        DATABASE / "bootstrap.sql",
+        *sorted(ARCHIVED_MIGRATIONS.glob("*.sql")),
+        *sorted(RUNTIME_MIGRATIONS.glob("*.sql")),
+    ]
+    for path in paths:
         sql = path.read_text(encoding="utf-8")
         tags = re.findall(r"\$[a-z_]*\$", sql, flags=re.IGNORECASE)
         for tag in set(tags):
