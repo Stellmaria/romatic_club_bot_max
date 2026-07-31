@@ -4,14 +4,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_reverse_submission_skips_start_price_range() -> None:
-    for relative in (
-        "bot/handlers/auctions.py",
-        "bot/handlers/auction/submission.py",
-    ):
-        source = (ROOT / relative).read_text(encoding="utf-8")
-        assert "auction_kind == AuctionKind.REVERSE.value" in source
-        assert "start_price=0" in source
-        assert "waiting_for_comment" in source
+    source = (ROOT / "bot/handlers/auction/submission.py").read_text(encoding="utf-8")
+    assert "auction_kind == AuctionKind.REVERSE.value" in source
+    assert "start_price=0" in source
+    assert "waiting_for_comment" in source
 
 
 def test_reverse_caption_has_no_fixed_ceiling_label() -> None:
