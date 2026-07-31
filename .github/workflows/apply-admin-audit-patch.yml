@@ -43,17 +43,20 @@ jobs:
           def digest(value: str) -> str:
               return hashlib.sha256(value.encode()).hexdigest()
 
-          repaired_part_02 = ''.join(
-              clean(part.read_text(encoding='utf-8'))
-              for part in sorted(Path('.').glob('.admin-audit-repair-02-*'))
-          )
-
           output = bytearray()
           for part in sorted(Path('.').glob('.admin-audit-patch-part-*')):
-              encoded = repaired_part_02 if part.name == '.admin-audit-patch-part-02' else clean(part.read_text(encoding='utf-8'))
+              suffix = part.name.rsplit('-', 1)[-1]
+              repairs = sorted(Path('.').glob(f'.admin-audit-repair-{suffix}-*'))
+              if repairs:
+                  encoded = ''.join(clean(item.read_text(encoding='utf-8')) for item in repairs)
+              else:
+                  encoded = clean(part.read_text(encoding='utf-8'))
               expected_len, expected_hash = expected[part.name]
               if len(encoded) != expected_len or digest(encoded) != expected_hash:
-                  raise RuntimeError(f'{part.name}: checksum validation failed')
+                  raise RuntimeError(
+                      f'{part.name}: checksum validation failed '
+                      f'(length={len(encoded)}, sha256={digest(encoded)})'
+                  )
               normalized = encoded.rstrip('=')
               normalized += '=' * (-len(normalized) % 4)
               output.extend(base64.b64decode(normalized, validate=True))
@@ -61,7 +64,7 @@ jobs:
           PY
           git apply --check /tmp/admin-audit.patch
           git apply /tmp/admin-audit.patch
-          rm -f .admin-audit-patch-part-* .admin-audit-repair-02-*
+          rm -f .admin-audit-patch-part-* .admin-audit-repair-*
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
