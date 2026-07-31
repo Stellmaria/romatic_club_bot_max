@@ -29,7 +29,7 @@ EXPECTED_HANDLER_BOUNDS = {
     "admin_panel_system": (
         "show_admin_menu_with_system",
         "close_system_callback",
-        6,
+        8,
     ),
     "admin_panel_requests": ("admreq_back", "cb_exchange_approved_root", 21),
     "admin_panel_schedule": ("edit_schedule_button", "edit_price_handler", 19),
@@ -93,7 +93,7 @@ def test_every_admin_handler_has_one_feature_owner_in_original_order() -> None:
             all_names.extend(names)
 
         assert len(all_names) == len(set(all_names))
-        expected_total = 87 if facade == "admin_panel" else 81
+        expected_total = 89 if facade == "admin_panel" else 81
         assert len(all_names) == expected_total
 
         compatibility_module = importlib.import_module(
