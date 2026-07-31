@@ -16,6 +16,12 @@ python main.py
 
 Полная инструкция по чистой установке, резервному копированию и переносу базы находится в [DATABASE_SETUP.md](DATABASE_SETUP.md).
 
+## Server Supervisor
+
+Для Ubuntu/Docker Compose доступен отдельный host-side Supervisor с Telegram-меню `/supervisor`, безопасным перезапуском только основного бота, обновлением `origin/main`, проверяемым backup PostgreSQL и rollback.
+
+Установка и эксплуатация описаны в [docs/SERVER_SUPERVISOR_RUNBOOK.md](docs/SERVER_SUPERVISOR_RUNBOOK.md).
+
 ## Миграции
 
 SQL-файлы лежат в `db/migrations`. Бот применяет их автоматически при старте, если `DB_AUTO_MIGRATE=1`.
