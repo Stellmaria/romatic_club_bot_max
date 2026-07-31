@@ -1,9 +1,9 @@
 name: Apply admin audit patch
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/admin-button-audit
+      - main
     paths:
       - ".admin-audit-patch-part-*"
       - ".github/workflows/apply-admin-audit-patch.yml"
@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   apply:
+    if: github.event.pull_request.head.ref == 'agent/admin-button-audit'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
