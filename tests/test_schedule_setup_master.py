@@ -143,7 +143,7 @@ def test_source_contract_has_preview_approval_and_topic_target() -> None:
         encoding="utf-8"
     )
     migration = (
-        ROOT / "database" / "migrations" / "010_schedule_setup_master.sql"
+        ROOT / "db" / "migrations" / "011_schedule_setup_master.sql"
     ).read_text(encoding="utf-8")
 
     assert "_PREVIEW_HOUR = 22" in announcements

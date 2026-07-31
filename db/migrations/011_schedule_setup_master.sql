@@ -1,3 +1,6 @@
+-- Premium schedule emoji setup, preview target and publication approval.
+SET search_path = public, pg_catalog;
+
 CREATE TABLE IF NOT EXISTS public.schedule_emoji_assets (
     asset_key text PRIMARY KEY,
     custom_emoji_id bigint NOT NULL CHECK (custom_emoji_id > 0),

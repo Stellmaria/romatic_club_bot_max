@@ -29,6 +29,7 @@ exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 database = ["*.sql", "README.md", "migrations/*.sql"]
+db = ["migrations/*.sql"]
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
