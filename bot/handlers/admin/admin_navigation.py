@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot.handlers.admin.action_support.forms import start_preview_schedule
+from bot.handlers.admin.action_support.forms import start_edit_schedule
 from bot.handlers.admin.admin_menu import send_admin_main_menu
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.auction.exchange.catalog import (
@@ -65,7 +65,9 @@ async def callback_to_admin_main_menu(call: CallbackQuery, state: FSMContext) ->
 @router.message(F.text == "📅 Расписание", F.chat.type == "private")
 @admin_only
 async def schedule_button(message: Message, state: FSMContext) -> None:
-    await start_preview_schedule(message, state)
+    """Open the per-lot schedule editor instead of the public grouped preview."""
+
+    await start_edit_schedule(message, state)
 
 
 @router.message(F.text == "🛒 Биржа", F.chat.type == "private")
