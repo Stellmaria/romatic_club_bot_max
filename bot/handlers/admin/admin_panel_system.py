@@ -26,11 +26,16 @@ router = Router(name=__name__)
 _FALLBACK_TEXT = (
     "🖥 <b>Система Romatic Club</b>\n\n"
     "Server Supervisor недоступен. Можно безопасно перезапустить только основной "
-    "процесс бота через Docker fallback. Обновление Git и откат временно недоступны."
+    "процесс бота через Docker fallback. Обновление Git, перезапуск userbot и откат "
+    "временно недоступны."
 )
 _RESTART_CONFIRM_TEXT = (
     "♻️ <b>Перезапустить основной бот?</b>\n\n"
     "Перезапустится только сервис <code>bot</code>. PostgreSQL и userbot останутся работать."
+)
+_USERBOT_RESTART_CONFIRM_TEXT = (
+    "🔄 <b>Перезапустить userbot?</b>\n\n"
+    "Перезапустится только сервис <code>userbot</code>. PostgreSQL и основной бот останутся работать."
 )
 _UPDATE_CONFIRM_TEXT = (
     "⬇️ <b>Обновить Romatic Club из main?</b>\n\n"
@@ -59,12 +64,14 @@ async def _require_owner(target: Message | CallbackQuery) -> bool:
     return False
 
 
-def _admin_main_keyboard():
-    return menu_keyboard(
+def _admin_main_keyboard(*, include_system: bool):
+    rows = [
         ["⚙️ Модерация", "👥 Пользователи", "🎴 Карты"],
         ["📊 Статистика", "📣 Рассылка", "🚫 Логи"],
-        ["🖥 Система"],
-    )
+    ]
+    if include_system:
+        rows.append(["🖥 Система"])
+    return menu_keyboard(*rows)
 
 
 def _system_keyboard(*, rollback_available: bool = False) -> InlineKeyboardMarkup:
@@ -76,6 +83,12 @@ def _system_keyboard(*, rollback_available: bool = False) -> InlineKeyboardMarku
             InlineKeyboardButton(
                 text="♻️ Перезапустить основной бот",
                 callback_data="system:restart:ask",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔄 Перезапустить userbot",
+                callback_data="system:userbot-restart:ask",
             )
         ],
         [
@@ -191,38 +204,43 @@ async def _show_system_message(message: Message) -> None:
 async def show_admin_menu_with_system(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("↩️ Возврат в главное меню...", reply_markup=ReplyKeyboardRemove())
+    user = message.from_user
     await message.answer(
         ADMIN_MESSAGES.get(
             "admin_panel_greeting",
             "Добро пожаловать в админ-панель! Выберите раздел:",
         ),
-        reply_markup=_admin_main_keyboard(),
+        reply_markup=_admin_main_keyboard(
+            include_system=_is_owner(user.id if user is not None else None)
+        ),
     )
 
 
 @router.message(Command("system"))
 @router.message(Command("supervisor"))
 @router.message(F.text == "🖥 Система", F.chat.type == "private")
-@admin_only
 async def show_system_menu(message: Message) -> None:
     if await _require_owner(message):
         await _show_system_message(message)
 
 
 @router.message(Command("restart"))
-@admin_only
+@router.message(Command("restart_userbot"))
 async def show_restart_confirmation(message: Message) -> None:
     if not await _require_owner(message):
         return
+    is_userbot = (message.text or "").split(maxsplit=1)[0].lower() == "/restart_userbot"
+    text = _USERBOT_RESTART_CONFIRM_TEXT if is_userbot else _RESTART_CONFIRM_TEXT
+    action = "userbot-restart" if is_userbot else "restart"
+    label = "🔄 Перезапустить userbot" if is_userbot else "♻️ Перезапустить"
     await message.answer(
-        _RESTART_CONFIRM_TEXT,
+        text,
         parse_mode="HTML",
-        reply_markup=_confirm_keyboard("restart", "♻️ Перезапустить"),
+        reply_markup=_confirm_keyboard(action, label),
     )
 
 
 @router.callback_query(F.data == "system:menu")
-@admin_only
 async def show_system_callback(call: CallbackQuery) -> None:
     if not await _require_owner(call):
         return
@@ -231,13 +249,26 @@ async def show_system_callback(call: CallbackQuery) -> None:
     await call.answer()
 
 
-@router.callback_query(F.data.in_({"system:restart:ask", "system:update:ask", "system:rollback:ask"}))
-@admin_only
+@router.callback_query(
+    F.data.in_(
+        {
+            "system:restart:ask",
+            "system:userbot-restart:ask",
+            "system:update:ask",
+            "system:rollback:ask",
+        }
+    )
+)
 async def show_system_confirmation(call: CallbackQuery) -> None:
     if not await _require_owner(call):
         return
     mapping = {
         "system:restart:ask": (_RESTART_CONFIRM_TEXT, "restart", "♻️ Перезапустить"),
+        "system:userbot-restart:ask": (
+            _USERBOT_RESTART_CONFIRM_TEXT,
+            "userbot-restart",
+            "🔄 Перезапустить userbot",
+        ),
         "system:update:ask": (_UPDATE_CONFIRM_TEXT, "update", "⬇️ Обновить main"),
         "system:rollback:ask": (_ROLLBACK_CONFIRM_TEXT, "rollback", "↩️ Откатить"),
     }
@@ -262,6 +293,8 @@ async def _accept_supervisor_operation(call: CallbackQuery, action: str) -> None
     try:
         if action == "restart":
             result = await supervisor_client.restart()
+        elif action == "userbot-restart":
+            result = await supervisor_client.restart_userbot()
         elif action == "update":
             result = await supervisor_client.update()
         else:
@@ -279,8 +312,16 @@ async def _accept_supervisor_operation(call: CallbackQuery, action: str) -> None
     await call.answer("Операция принята.")
 
 
-@router.callback_query(F.data.in_({"system:restart:do", "system:update:do", "system:rollback:do"}))
-@admin_only
+@router.callback_query(
+    F.data.in_(
+        {
+            "system:restart:do",
+            "system:userbot-restart:do",
+            "system:update:do",
+            "system:rollback:do",
+        }
+    )
+)
 async def run_system_operation(call: CallbackQuery) -> None:
     if not await _require_owner(call):
         return
@@ -289,7 +330,6 @@ async def run_system_operation(call: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "system:logs")
-@admin_only
 async def show_system_logs(call: CallbackQuery) -> None:
     if not await _require_owner(call):
         return
@@ -313,7 +353,6 @@ async def show_system_logs(call: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "system:close")
-@admin_only
 async def close_system_callback(call: CallbackQuery) -> None:
     if not await _require_owner(call):
         return
