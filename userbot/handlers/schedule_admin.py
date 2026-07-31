@@ -1,8 +1,8 @@
-"""Private owner commands for Premium schedule announcement setup."""
+"""Owner commands and approval callbacks for Premium schedule publication."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from telethon import events
 
@@ -14,9 +14,14 @@ from userbot.schedule_announcements import (
     preview_schedule_announcement,
     store_emoji_assignments,
 )
+from userbot.schedule_review_service import (
+    decide_schedule_review,
+    get_schedule_review,
+    schedule_review_snapshot,
+)
 
 
-async def _is_authorized(event: events.NewMessage.Event) -> bool:
+async def _is_authorized(event: object) -> bool:
     if getattr(event, "out", False):
         return True
     sender_id = getattr(event, "sender_id", None)
@@ -37,13 +42,10 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
         source = await event.get_reply_message()
         if source is None:
             await event.reply(
-                "Ответьте этой командой на сообщение-шаблон вида:\n\n"
-                "header = 🦋\n"
-                "card = 🎴\n"
-                "diamond = 💎\n"
-                "tea = ☕\n"
-                "hero:Сонхва = 🧑\n\n"
-                "Справа должны стоять именно кастомные Premium-эмодзи."
+                "Массовый шаблон оставлен для совместимости. "
+                "Новый каталог настраивается в основном боте командой /schedule_setup.\n\n"
+                "Для импорта ответьте на сообщение вида:\n"
+                "header = 🦋\ncard = 🎴\ndiamond = 💎\ntea = ☕"
             )
             return
 
@@ -57,12 +59,14 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
             {key: assignments.get(key, 1) for key in stored_keys}
         )
         suffix = (
-            "\n\nОбязательный набор готов."
+            "\n\nСтарый обязательный набор готов."
             if not missing
-            else "\n\nЕщё нужны ключи: " + ", ".join(missing)
+            else "\n\nВ старом наборе ещё нужны ключи: " + ", ".join(missing)
         )
         await event.reply(
-            "Сохранены Premium-эмодзи: " + ", ".join(sorted(assignments)) + suffix
+            "Сохранены совместимые Premium-эмодзи: "
+            + ", ".join(sorted(assignments))
+            + suffix
         )
         return
 
@@ -81,14 +85,77 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
         return
 
     if command == "/schedule_status":
-        state_path = settings.schedule_announcement_state_file
+        target_date = datetime.now(MOSCOW).date() + timedelta(days=1)
+        target, review = await schedule_review_snapshot(target_date)
+        target_text = (
+            f"чат {target['chat_id']}, ветка {target.get('thread_id') or 'основная'}"
+            if target
+            else "не задано"
+        )
+        review_text = str(review.get("status")) if review else "превью ещё не создано"
         await event.reply(
             "Автопубликация расписания: "
             + ("включена" if settings.schedule_announcements_enabled else "выключена")
-            + f"\nВремя: {settings.schedule_announcements_hour:02d}:"
+            + "\nПревью: 22:30 МСК"
+            + f"\nПубликация: {settings.schedule_announcements_hour:02d}:"
             f"{settings.schedule_announcements_minute:02d} МСК"
-            + f"\nФайл состояния: {state_path}"
+            + f"\nАдминская ветка: {target_text}"
+            + f"\nСтатус на {target_date:%d.%m.%Y}: {review_text}"
         )
 
 
-__all__ = ["on_schedule_admin_command"]
+async def on_schedule_review_callback(event: events.CallbackQuery.Event) -> None:
+    if not await _is_authorized(event):
+        await event.answer("Нет доступа", alert=True)
+        return
+
+    try:
+        raw = bytes(event.data).decode("utf-8")
+        _, action, raw_date = raw.split(":", 2)
+        target_date = date.fromisoformat(raw_date)
+    except (ValueError, TypeError):
+        await event.answer("Некорректная кнопка", alert=True)
+        return
+
+    review = await get_schedule_review(target_date)
+    if not review:
+        await event.answer("Превью уже устарело или не найдено", alert=True)
+        return
+    if review.get("status") == "published":
+        await event.answer("Расписание уже опубликовано", alert=True)
+        return
+
+    if action == "approve":
+        await decide_schedule_review(
+            target_date,
+            approved=True,
+            reviewed_by=int(event.sender_id),
+        )
+        await event.answer("Расписание подтверждено")
+        status_text = (
+            f"✅ Расписание на {target_date:%d.%m.%Y} подтверждено. "
+            f"Публикация произойдёт в {settings.schedule_announcements_hour:02d}:"
+            f"{settings.schedule_announcements_minute:02d} МСК."
+        )
+    elif action == "reject":
+        await decide_schedule_review(
+            target_date,
+            approved=False,
+            reviewed_by=int(event.sender_id),
+        )
+        await event.answer("Публикация отклонена")
+        status_text = (
+            f"❌ Расписание на {target_date:%d.%m.%Y} отклонено и в канал не уйдёт."
+        )
+    else:
+        await event.answer("Неизвестное действие", alert=True)
+        return
+
+    await event.client.send_message(
+        event.chat_id,
+        status_text,
+        reply_to=int(event.message_id),
+    )
+
+
+__all__ = ["on_schedule_admin_command", "on_schedule_review_callback"]

@@ -1,4 +1,4 @@
-"""Daily auction schedule announcements published by the Premium userbot."""
+"""Daily auction schedule previews and publication by the Premium userbot."""
 
 from __future__ import annotations
 
@@ -11,12 +11,19 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from telethon import TelegramClient
+from telethon import Button, TelegramClient
 from telethon.tl.types import MessageEntityCustomEmoji
 
 from bot.core.settings import Settings, settings
 from bot.core.time import MOSCOW, to_moscow
-from db.auctions import get_auctions_by_date_with_owners
+from db.schedule_setup import (
+    get_emoji_assets,
+    get_preview_target,
+    get_publication_review,
+    get_schedule_lots_for_day,
+    mark_publication_published,
+    record_pending_preview,
+)
 
 logger = logging.getLogger("userbot.schedule_announcements")
 
@@ -38,10 +45,12 @@ _RU_MONTHS = (
 _REQUIRED_EMOJI_KEYS = frozenset({"header", "card", "diamond", "tea"})
 _STATE_LOCK = asyncio.Lock()
 _USERNAME_RE = re.compile(r"@\w+")
+_PREVIEW_HOUR = 22
+_PREVIEW_MINUTE = 30
 
 
 class ScheduleEmojiConfigurationError(RuntimeError):
-    """Raised when Premium emoji publication is enabled but not configured."""
+    """Raised when a schedule cannot be rendered with verified Premium assets."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +79,8 @@ def _state_template() -> dict[str, Any]:
 
 
 def load_announcement_state(path: Path) -> dict[str, Any]:
+    """Read the legacy JSON registry retained for backwards-compatible commands."""
+
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -133,21 +144,28 @@ def announcement_target_date(
     return local_now.date() + timedelta(days=1)
 
 
-def _emoji_id(emoji_ids: Mapping[str, int], *keys: str) -> int | None:
+def _value_emoji_id(value: object) -> int | None:
+    if isinstance(value, Mapping):
+        value = value.get("custom_emoji_id")
+    try:
+        parsed = int(value) if value is not None else 0
+    except (TypeError, ValueError):
+        parsed = 0
+    return parsed or None
+
+
+def _asset_id(assets: Mapping[str, object], *keys: str) -> int | None:
     for key in keys:
-        value = emoji_ids.get(normalize_emoji_key(key))
-        try:
-            parsed = int(value) if value is not None else 0
-        except (TypeError, ValueError):
-            parsed = 0
+        value = assets.get(normalize_emoji_key(key))
+        parsed = _value_emoji_id(value)
         if parsed:
             return parsed
     return None
 
 
 class _RichTextBuilder:
-    def __init__(self, emoji_ids: Mapping[str, int]) -> None:
-        self._emoji_ids = emoji_ids
+    def __init__(self, assets: Mapping[str, object]) -> None:
+        self._assets = assets
         self._parts: list[str] = []
         self._entities: list[MessageEntityCustomEmoji] = []
         self._offset = 0
@@ -157,25 +175,69 @@ class _RichTextBuilder:
         self._parts.append(rendered)
         self._offset += utf16_length(rendered)
 
-    def emoji(self, fallback: str, *keys: str) -> None:
-        document_id = _emoji_id(self._emoji_ids, *keys)
+    def emoji_id(self, fallback: str, document_id: object) -> None:
+        parsed_id = _value_emoji_id(document_id)
         self._parts.append(fallback)
         length = utf16_length(fallback)
-        if document_id:
+        if parsed_id:
             self._entities.append(
                 MessageEntityCustomEmoji(
                     offset=self._offset,
                     length=length,
-                    document_id=document_id,
+                    document_id=parsed_id,
                 )
             )
         self._offset += length
+
+    def emoji(self, fallback: str, *keys: str) -> None:
+        self.emoji_id(fallback, _asset_id(self._assets, *keys))
 
     def build(self) -> RenderedScheduleAnnouncement:
         return RenderedScheduleAnnouncement(
             text="".join(self._parts),
             entities=tuple(self._entities),
         )
+
+
+def _normalize_rarity(value: object) -> str | None:
+    normalized = normalize_emoji_key(value)
+    aliases = {
+        "bronze": "bronze",
+        "бронза": "bronze",
+        "бронзовая": "bronze",
+        "silver": "silver",
+        "серебро": "silver",
+        "серебряная": "silver",
+        "gold": "gold",
+        "золото": "gold",
+        "золотая": "gold",
+        "epic": "epic",
+        "эпик": "epic",
+        "diamond": "epic",
+        "diamonds": "epic",
+        "алмаз": "epic",
+        "алмазная": "epic",
+    }
+    return aliases.get(normalized)
+
+
+def _normalize_reward_type(value: object) -> str | None:
+    normalized = normalize_emoji_key(value)
+    if normalized in {"diamonds", "diamond", "алмазы", "алмаз", "gems"}:
+        return "diamonds"
+    if normalized in {"tea", "cups", "cup", "чай", "чашка", "чашки"}:
+        return "tea"
+    return None
+
+
+def _expected_reward(rarity: object, reward_type: object) -> int | None:
+    normalized_rarity = _normalize_rarity(rarity)
+    normalized_type = _normalize_reward_type(reward_type)
+    if not normalized_rarity or not normalized_type:
+        return None
+    diamonds = {"bronze": 20, "silver": 40, "gold": 80, "epic": 120}
+    tea = {"bronze": 2, "silver": 4, "gold": 8, "epic": 12}
+    return (diamonds if normalized_type == "diamonds" else tea)[normalized_rarity]
 
 
 def _display_name(lot: Mapping[str, Any]) -> str:
@@ -193,24 +255,48 @@ def _public_comment(lot: Mapping[str, Any]) -> str:
     return value[:70] + ("…" if len(value) > 70 else "")
 
 
-def _currency_style(raw_currency: object) -> tuple[str, str]:
+def _start_currency_label(raw_currency: object) -> str:
     value = normalize_emoji_key(raw_currency)
-    if any(token in value for token in ("diamond", "diamonds", "алмаз", "кристалл", "gem")):
-        return "💎", "diamond"
-    if any(token in value for token in ("tea", "чай", "cup")):
-        return "☕", "tea"
-    if any(token in value for token in ("fire", "огонь", "плам")):
-        return "🔥", "fire"
-    if any(token in value for token in ("card", "карт")):
-        return "🃏", "cards"
-    return "💰", f"currency:{value}" if value else "money"
+    has_tea = any(token in value for token in ("tea", "чай", "cup"))
+    has_diamonds = any(token in value for token in ("diamond", "алмаз", "gem"))
+    if has_tea and has_diamonds:
+        return "за чай и алмазы"
+    if has_tea:
+        return "за чай"
+    if has_diamonds:
+        return "за алмазы"
+    return ""
+
+
+def _append_reward(
+    builder: _RichTextBuilder,
+    *,
+    amount: object,
+    reward_type: object,
+) -> None:
+    try:
+        parsed_amount = int(amount or 0)
+    except (TypeError, ValueError):
+        parsed_amount = 0
+    if not parsed_amount:
+        return
+    normalized = _normalize_reward_type(reward_type)
+    builder.text(f" +{parsed_amount}")
+    if normalized == "diamonds":
+        builder.emoji("💎", "currency:diamonds", "diamond")
+    elif normalized == "tea":
+        builder.emoji("☕", "currency:tea", "tea")
+    else:
+        builder.text("?")
 
 
 def render_schedule_announcement(
     target_date: date,
     lots: Sequence[Mapping[str, Any]],
-    emoji_ids: Mapping[str, int],
+    emoji_ids: Mapping[str, object],
 ) -> RenderedScheduleAnnouncement:
+    """Render the approved visual template while retaining legacy test inputs."""
+
     builder = _RichTextBuilder(emoji_ids)
     title = f"АНОНС НА {target_date.day} {_RU_MONTHS[target_date.month]}"
     builder.emoji("🦋", "header")
@@ -227,35 +313,129 @@ def render_schedule_announcement(
     )
     for index, lot in enumerate(sorted_lots):
         start_time = lot.get("start_time")
-        start_label = to_moscow(start_time).strftime("%H:%M") if isinstance(start_time, datetime) else "--:--"
-        display_name = _display_name(lot)
-        hero_key = f"hero:{str(lot.get('hero_name') or '').strip()}"
-        card_key = f"card:{str(lot.get('card_name') or '').strip()}"
-        builder.emoji("🎴", hero_key, card_key, "card")
-        builder.text(f" {start_label} {display_name}")
+        start_label = (
+            to_moscow(start_time).strftime("%H:%M")
+            if isinstance(start_time, datetime)
+            else "--:--"
+        )
+        whole_deck = bool(lot.get("whole_deck"))
 
-        price = lot.get("start_price")
-        try:
-            amount = int(price) if price not in (None, "") else 0
-        except (TypeError, ValueError):
-            amount = 0
-        if amount:
-            fallback, currency_key = _currency_style(lot.get("currency"))
-            builder.text(f" +{amount}")
-            builder.emoji(fallback, currency_key)
+        if whole_deck:
+            builder.emoji("🃏", "whole_deck")
+        else:
+            card_emoji_id = lot.get("card_emoji_id")
+            if card_emoji_id:
+                builder.emoji_id("🎴", card_emoji_id)
+            else:
+                hero_key = f"hero:{str(lot.get('hero_name') or '').strip()}"
+                card_key = f"card:{str(lot.get('card_name') or '').strip()}"
+                builder.emoji("🎴", hero_key, card_key, "card")
+
+        builder.text(f" {start_label} ")
+
+        rarity = _normalize_rarity(lot.get("rarity"))
+        if rarity and not whole_deck:
+            builder.emoji("🔹", f"rarity:{rarity}")
+            builder.text(" ")
+
+        builder.text(_display_name(lot))
+
+        deck_emoji_id = lot.get("deck_emoji_id")
+        if deck_emoji_id:
+            builder.text(" ")
+            builder.emoji_id("🗂", deck_emoji_id)
+
+        if whole_deck:
+            _append_reward(
+                builder,
+                amount=lot.get("deck_diamonds"),
+                reward_type="diamonds",
+            )
+            _append_reward(builder, amount=lot.get("deck_tea"), reward_type="tea")
+        else:
+            reward_amount = lot.get("obtain_amount")
+            reward_type = lot.get("obtain_type")
+            if reward_amount in (None, ""):
+                # Compatibility with the first implementation and its tests.
+                reward_amount = lot.get("start_price")
+                reward_type = lot.get("currency")
+            _append_reward(builder, amount=reward_amount, reward_type=reward_type)
 
         comment = _public_comment(lot)
-        if comment:
-            builder.text(f" ({comment})")
+        start_label_text = comment if comment.casefold().startswith("за ") else _start_currency_label(
+            lot.get("currency")
+        )
+        if start_label_text:
+            builder.text(f" ({start_label_text})")
         if index != len(sorted_lots) - 1:
-            builder.text("\n\n")
+            builder.text("\n")
 
     return builder.build()
 
 
-def missing_required_emoji_keys(emoji_ids: Mapping[str, int]) -> tuple[str, ...]:
-    normalized = {normalize_emoji_key(key) for key, value in emoji_ids.items() if value}
+def missing_required_emoji_keys(emoji_ids: Mapping[str, object]) -> tuple[str, ...]:
+    normalized = {
+        normalize_emoji_key(key)
+        for key, value in emoji_ids.items()
+        if _value_emoji_id(value)
+    }
     return tuple(sorted(_REQUIRED_EMOJI_KEYS - normalized))
+
+
+def schedule_configuration_issues(
+    lots: Sequence[Mapping[str, Any]],
+    assets: Mapping[str, object],
+) -> tuple[str, ...]:
+    issues: list[str] = []
+    for lot in lots:
+        auction_id = int(lot.get("auction_id") or 0)
+        whole_deck = bool(lot.get("whole_deck"))
+        deck_id = lot.get("resolved_deck_id") or lot.get("deck_id")
+
+        if not deck_id:
+            issues.append(f"лот {auction_id}: не определена колода")
+        elif not lot.get("deck_emoji_id"):
+            issues.append(f"колода {deck_id}: не настроен Premium-эмодзи")
+
+        if whole_deck:
+            if not _asset_id(assets, "whole_deck"):
+                issues.append("не настроен общий эмодзи «Вся колода»")
+            continue
+
+        if not lot.get("card_id"):
+            issues.append(f"лот {auction_id}: карточка не найдена в каталоге")
+            continue
+        if not lot.get("card_emoji_id"):
+            issues.append(f"карта {lot.get('card_id')}: не настроен мини-эмодзи")
+        elif not bool(lot.get("card_emoji_verified")):
+            issues.append(f"карта {lot.get('card_id')}: эмодзи и экономика не подтверждены")
+
+        rarity = _normalize_rarity(lot.get("rarity"))
+        reward_type = _normalize_reward_type(lot.get("obtain_type"))
+        expected = _expected_reward(rarity, reward_type)
+        try:
+            actual = int(lot.get("obtain_amount") or 0)
+        except (TypeError, ValueError):
+            actual = 0
+        if not rarity:
+            issues.append(f"карта {lot.get('card_id')}: неизвестная редкость")
+        elif not reward_type:
+            issues.append(f"карта {lot.get('card_id')}: неизвестный тип награды")
+        elif actual != expected:
+            issues.append(
+                f"карта {lot.get('card_id')}: награда {actual}, ожидалось {expected}"
+            )
+        elif not _asset_id(assets, f"rarity:{rarity}"):
+            issues.append(f"не настроен эмодзи редкости {rarity}")
+
+        if reward_type and not _asset_id(
+            assets,
+            f"currency:{reward_type}",
+            "diamond" if reward_type == "diamonds" else "tea",
+        ):
+            issues.append(f"не настроен эмодзи награды {reward_type}")
+
+    return tuple(dict.fromkeys(issues))
 
 
 async def store_emoji_assignments(
@@ -263,6 +443,8 @@ async def store_emoji_assignments(
     *,
     config: Settings = settings,
 ) -> tuple[str, ...]:
+    """Retain the original JSON import command for existing deployments."""
+
     async with _STATE_LOCK:
         state = load_announcement_state(config.schedule_announcement_state_file)
         current = dict(state.get("emoji_ids") or {})
@@ -283,12 +465,78 @@ async def preview_schedule_announcement(
     *,
     config: Settings = settings,
 ) -> RenderedScheduleAnnouncement | None:
-    lots = await get_auctions_by_date_with_owners(target_date)
+    del config
+    lots = await get_schedule_lots_for_day(target_date)
     if not lots:
         return None
-    async with _STATE_LOCK:
-        state = load_announcement_state(config.schedule_announcement_state_file)
-    return render_schedule_announcement(target_date, lots, state.get("emoji_ids") or {})
+    assets = await get_emoji_assets()
+    return render_schedule_announcement(target_date, lots, assets)
+
+
+async def send_schedule_review_preview(
+    telegram_client: TelegramClient,
+    target_date: date,
+) -> int | None:
+    review = await get_publication_review(target_date)
+    if review and review.get("preview_message_id"):
+        return int(review["preview_message_id"])
+
+    target = await get_preview_target()
+    if not target:
+        raise ScheduleEmojiConfigurationError(
+            "не задан админский чат: выполните /set расписание в нужной ветке"
+        )
+
+    lots = await get_schedule_lots_for_day(target_date)
+    if not lots:
+        return None
+    assets = await get_emoji_assets()
+    issues = schedule_configuration_issues(lots, assets)
+    if issues:
+        raise ScheduleEmojiConfigurationError("; ".join(issues))
+
+    rendered = render_schedule_announcement(target_date, lots, assets)
+    buttons = [
+        [
+            Button.inline(
+                "✅ Всё верно",
+                data=f"sched:approve:{target_date.isoformat()}".encode(),
+            ),
+            Button.inline(
+                "❌ Отклонить",
+                data=f"sched:reject:{target_date.isoformat()}".encode(),
+            ),
+        ]
+    ]
+    message = await telegram_client.send_message(
+        int(target["chat_id"]),
+        rendered.text,
+        formatting_entities=list(rendered.entities),
+        buttons=buttons,
+        link_preview=False,
+        reply_to=int(target["thread_id"]) if target.get("thread_id") else None,
+    )
+    await record_pending_preview(
+        target_date,
+        chat_id=int(target["chat_id"]),
+        thread_id=int(target["thread_id"]) if target.get("thread_id") else None,
+        message_id=int(message.id),
+    )
+    return int(message.id)
+
+
+async def _approved_preview_message(
+    telegram_client: TelegramClient,
+    review: Mapping[str, Any],
+) -> Any | None:
+    chat_id = review.get("preview_chat_id")
+    message_id = review.get("preview_message_id")
+    if not chat_id or not message_id:
+        return None
+    preview = await telegram_client.get_messages(int(chat_id), ids=int(message_id))
+    if not preview or not getattr(preview, "message", None):
+        return None
+    return preview
 
 
 async def publish_schedule_announcement(
@@ -297,52 +545,71 @@ async def publish_schedule_announcement(
     *,
     config: Settings = settings,
 ) -> int | None:
-    date_key = target_date.isoformat()
-    async with _STATE_LOCK:
-        state = load_announcement_state(config.schedule_announcement_state_file)
-        existing = (state.get("published") or {}).get(date_key)
-        if isinstance(existing, dict) and existing.get("message_id"):
-            return int(existing["message_id"])
-        emoji_ids = dict(state.get("emoji_ids") or {})
+    review = await get_publication_review(target_date)
+    if review and review.get("status") == "published" and review.get("channel_message_id"):
+        return int(review["channel_message_id"])
 
-    if config.schedule_announcements_require_custom_emoji:
-        missing = missing_required_emoji_keys(emoji_ids)
-        if missing:
+    approved_preview = None
+    if review and review.get("status") == "approved":
+        approved_preview = await _approved_preview_message(telegram_client, review)
+        if approved_preview is None:
             raise ScheduleEmojiConfigurationError(
-                "missing Premium schedule emoji keys: " + ", ".join(missing)
+                "подтверждённое превью не найдено; публикация остановлена"
             )
 
-    lots = await get_auctions_by_date_with_owners(target_date)
-    if not lots:
-        logger.info("No live auctions for %s; schedule announcement not published", target_date)
-        return None
+    if approved_preview is not None:
+        publication_text = str(approved_preview.message)
+        publication_entities = list(getattr(approved_preview, "entities", None) or ())
+    else:
+        # Compatibility path for explicit/manual calls made outside the reviewed
+        # daily watchdog. The automatic 23:00 flow always uses an approved preview.
+        lots = await get_schedule_lots_for_day(target_date)
+        if not lots:
+            logger.info("No live auctions for %s; schedule announcement not published", target_date)
+            return None
+        assets = await get_emoji_assets()
+        issues = schedule_configuration_issues(lots, assets)
+        if config.schedule_announcements_require_custom_emoji and issues:
+            raise ScheduleEmojiConfigurationError("; ".join(issues))
+        rendered = render_schedule_announcement(target_date, lots, assets)
+        publication_text = rendered.text
+        publication_entities = list(rendered.entities)
 
-    rendered = render_schedule_announcement(target_date, lots, emoji_ids)
     message = await telegram_client.send_message(
         config.auction_channel_id,
-        rendered.text,
-        formatting_entities=list(rendered.entities),
+        publication_text,
+        formatting_entities=publication_entities,
         link_preview=False,
         send_as=config.auction_channel_id,
     )
     message_id = int(message.id)
-
-    async with _STATE_LOCK:
-        state = load_announcement_state(config.schedule_announcement_state_file)
-        published = dict(state.get("published") or {})
-        published[date_key] = {
-            "message_id": message_id,
-            "published_at": datetime.now(MOSCOW).isoformat(),
-        }
-        state["published"] = published
-        save_announcement_state(config.schedule_announcement_state_file, state)
-
+    await mark_publication_published(target_date, channel_message_id=message_id)
     logger.info(
-        "Published Premium schedule announcement for %s as message %s",
+        "Published approved Premium schedule announcement for %s as message %s",
         target_date,
         message_id,
     )
     return message_id
+
+
+async def _send_blocked_preview_notice(
+    telegram_client: TelegramClient,
+    target_date: date,
+    error_text: str,
+) -> None:
+    target = await get_preview_target()
+    if not target:
+        return
+    trimmed = error_text[:3500]
+    await telegram_client.send_message(
+        int(target["chat_id"]),
+        "⚠️ <b>Превью расписания не собрано</b>\n\n"
+        f"Дата: <b>{target_date:%d.%m.%Y}</b>\n"
+        f"Причины: {trimmed}\n\n"
+        "Исправьте карточки через /schedule_setup и проверьте /schedule_audit.",
+        parse_mode="html",
+        reply_to=int(target["thread_id"]) if target.get("thread_id") else None,
+    )
 
 
 async def schedule_announcement_watchdog(
@@ -350,30 +617,52 @@ async def schedule_announcement_watchdog(
     *,
     config: Settings = settings,
 ) -> None:
-    warned_for_date: date | None = None
+    warned: dict[date, str] = {}
     while True:
         try:
             if config.schedule_announcements_enabled:
-                target_date = announcement_target_date(
-                    datetime.now(MOSCOW),
+                now = datetime.now(MOSCOW)
+                preview_date = announcement_target_date(
+                    now,
+                    hour=_PREVIEW_HOUR,
+                    minute=_PREVIEW_MINUTE,
+                )
+                if preview_date is not None:
+                    try:
+                        preview_message_id = await send_schedule_review_preview(
+                            telegram_client,
+                            preview_date,
+                        )
+                        if preview_message_id:
+                            warned.pop(preview_date, None)
+                    except ScheduleEmojiConfigurationError as exc:
+                        error_text = str(exc)
+                        if warned.get(preview_date) != error_text:
+                            logger.warning(
+                                "Schedule preview for %s is blocked: %s",
+                                preview_date,
+                                error_text,
+                            )
+                            await _send_blocked_preview_notice(
+                                telegram_client,
+                                preview_date,
+                                error_text,
+                            )
+                            warned[preview_date] = error_text
+
+                publication_date = announcement_target_date(
+                    now,
                     hour=config.schedule_announcements_hour,
                     minute=config.schedule_announcements_minute,
                 )
-                if target_date is not None:
-                    try:
+                if publication_date is not None:
+                    review = await get_publication_review(publication_date)
+                    if review and review.get("status") == "approved":
                         await publish_schedule_announcement(
                             telegram_client,
-                            target_date,
+                            publication_date,
                             config=config,
                         )
-                    except ScheduleEmojiConfigurationError as exc:
-                        if warned_for_date != target_date:
-                            logger.warning(
-                                "Schedule announcement for %s is waiting for Premium emoji setup: %s",
-                                target_date,
-                                exc,
-                            )
-                            warned_for_date = target_date
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -394,6 +683,8 @@ __all__ = [
     "render_schedule_announcement",
     "save_announcement_state",
     "schedule_announcement_watchdog",
+    "schedule_configuration_issues",
+    "send_schedule_review_preview",
     "store_emoji_assignments",
     "utf16_length",
 ]

@@ -13,6 +13,7 @@ from bot.handlers.admin.helper.new.card_economy import router as card_economy_ro
 from bot.handlers.admin.media_assets import router as media_assets_router
 from bot.handlers.admin.moderation import router as moderation_router
 from bot.handlers.admin.outbox import router as outbox_admin_router
+from bot.handlers.admin.schedule_setup import router as schedule_setup_router
 from bot.handlers.admin.services.market_add_flow import router as market_flow
 from bot.handlers.admin.services.market_diamonds_flow import router as market_diamonds
 from bot.handlers.admin.services.market_manage_flow import router as market_manage
@@ -70,6 +71,9 @@ def register_all_routers(
     # broad FSM router, otherwise /admin and Back expose the stale keyboard.
     dispatcher.include_router(admin_navigation_router)
     dispatcher.include_router(admin_panel_system_router)
+    # The setup master consumes active private setup sessions and the /set
+    # schedule target command, so it must precede broad legacy FSM handlers.
+    dispatcher.include_router(schedule_setup_router)
 
     # Focused command routers go before broad legacy/FSM routers.
     dispatcher.include_router(auction_schedule_router)
