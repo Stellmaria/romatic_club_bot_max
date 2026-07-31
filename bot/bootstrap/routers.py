@@ -5,6 +5,7 @@ from __future__ import annotations
 from aiogram import Dispatcher
 
 from bot.handlers.admin.admin_panel import router as admin_panel_router
+from bot.handlers.admin.admin_panel_system import router as admin_panel_system_router
 from bot.handlers.admin.broadcast import register_broadcast_handlers
 from bot.handlers.admin.cards_admin import register_cards_admin_handlers
 from bot.handlers.admin.helper.new.card_economy import router as card_economy_router
@@ -63,6 +64,10 @@ def register_all_routers(
 
     if debug_messages:
         dispatcher.message.outer_middleware(DebugAllMessages())
+
+    # Owner-only operational commands must precede every broad legacy/FSM
+    # router so an unfinished conversation cannot consume /supervisor first.
+    dispatcher.include_router(admin_panel_system_router)
 
     # Focused command routers go before broad legacy/FSM routers.
     dispatcher.include_router(auction_schedule_router)

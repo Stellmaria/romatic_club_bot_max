@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_PANEL = ROOT / "bot" / "handlers" / "admin" / "admin_panel.py"
 SYSTEM_PANEL = ROOT / "bot" / "handlers" / "admin" / "admin_panel_system.py"
+ROUTER_BOOTSTRAP = ROOT / "bot" / "bootstrap" / "routers.py"
 CLIENT = ROOT / "bot" / "core" / "supervisor_client.py"
 
 
@@ -14,10 +15,13 @@ def _source(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_system_router_is_registered_before_legacy_admin_menu() -> None:
-    source = _source(ADMIN_PANEL)
-    tree = ast.parse(source)
+def test_system_router_is_registered_before_legacy_fsm_routers() -> None:
+    admin_panel = _source(ADMIN_PANEL)
+    bootstrap = _source(ROUTER_BOOTSTRAP)
 
+    # Keep the public facade inventory intact, but skip nesting the system
+    # router so it can be attached directly at the top of dispatch order.
+    tree = ast.parse(admin_panel)
     feature_assignment = next(
         node
         for node in tree.body
@@ -28,11 +32,26 @@ def test_system_router_is_registered_before_legacy_admin_menu() -> None:
         )
     )
     assert isinstance(feature_assignment.value, ast.Tuple)
-    first_router = feature_assignment.value.elts[0]
-    assert isinstance(first_router, ast.Attribute)
-    assert isinstance(first_router.value, ast.Name)
-    assert first_router.value.id == "admin_panel_system"
-    assert first_router.attr == "router"
+    feature_names = [ast.unparse(element) for element in feature_assignment.value.elts]
+    assert feature_names[0] == "admin_panel_system.router"
+    assert "router.include_routers(*FEATURE_ROUTERS[1:])" in admin_panel
+
+    assert (
+        "from bot.handlers.admin.admin_panel_system import "
+        "router as admin_panel_system_router"
+    ) in bootstrap
+    system_position = bootstrap.index(
+        "dispatcher.include_router(admin_panel_system_router)"
+    )
+    assert system_position < bootstrap.index(
+        "dispatcher.include_router(users_router)"
+    )
+    assert system_position < bootstrap.index(
+        "dispatcher.include_router(auctions_router)"
+    )
+    assert system_position < bootstrap.index(
+        "dispatcher.include_router(admin_panel_router)"
+    )
 
 
 def test_system_panel_is_owner_only_and_hides_button_from_admins() -> None:
