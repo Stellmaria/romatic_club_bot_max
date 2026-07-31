@@ -41,7 +41,7 @@ def test_whois_uses_binding_status_not_decryption_success() -> None:
     repo = (ROOT / "bot/repositories/uid_verification.py").read_text(encoding="utf-8")
 
     assert 'str(uid_record.get("status") or "").lower() == "verified"' in users
-    assert 'UID-верификация: <b>✅ подтверждена</b>' in presentation
+    assert 'UID-верификация: <b>{st}</b>' in presentation
     assert 'SELECT uid, uid_enc' in repo
     assert 'legacy_uid' in repo
 
