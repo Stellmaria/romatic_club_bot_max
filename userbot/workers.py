@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from bot.core.settings import DISCUSSION_CHAT_ID
 from db.auctions import list_autobids
 from userbot.autobid_engine import maybe_place_autobid
+from userbot.schedule_announcements import schedule_announcement_watchdog
 
 if TYPE_CHECKING:
     from telethon import TelegramClient
@@ -33,4 +34,4 @@ async def autobid_watchdog(telegram_client: TelegramClient) -> None:
         await asyncio.sleep(15)
 
 
-__all__ = ["autobid_watchdog"]
+__all__ = ["autobid_watchdog", "schedule_announcement_watchdog"]
