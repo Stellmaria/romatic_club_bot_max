@@ -8,16 +8,16 @@ from telethon import events
 
 from bot.core.settings import ADMINS, ADMINS_OWNERS, settings
 from bot.core.time import MOSCOW
-from db.schedule_setup import (
-    get_preview_target,
-    get_publication_review,
-    set_publication_review_status,
-)
 from userbot.schedule_announcements import (
     extract_custom_emoji_assignments,
     missing_required_emoji_keys,
     preview_schedule_announcement,
     store_emoji_assignments,
+)
+from userbot.schedule_review_service import (
+    decide_schedule_review,
+    get_schedule_review,
+    schedule_review_snapshot,
 )
 
 
@@ -85,9 +85,8 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
         return
 
     if command == "/schedule_status":
-        target = await get_preview_target()
         target_date = datetime.now(MOSCOW).date() + timedelta(days=1)
-        review = await get_publication_review(target_date)
+        target, review = await schedule_review_snapshot(target_date)
         target_text = (
             f"чат {target['chat_id']}, ветка {target.get('thread_id') or 'основная'}"
             if target
@@ -118,7 +117,7 @@ async def on_schedule_review_callback(event: events.CallbackQuery.Event) -> None
         await event.answer("Некорректная кнопка", alert=True)
         return
 
-    review = await get_publication_review(target_date)
+    review = await get_schedule_review(target_date)
     if not review:
         await event.answer("Превью уже устарело или не найдено", alert=True)
         return
@@ -127,9 +126,9 @@ async def on_schedule_review_callback(event: events.CallbackQuery.Event) -> None
         return
 
     if action == "approve":
-        await set_publication_review_status(
+        await decide_schedule_review(
             target_date,
-            status="approved",
+            approved=True,
             reviewed_by=int(event.sender_id),
         )
         await event.answer("Расписание подтверждено")
@@ -139,9 +138,9 @@ async def on_schedule_review_callback(event: events.CallbackQuery.Event) -> None
             f"{settings.schedule_announcements_minute:02d} МСК."
         )
     elif action == "reject":
-        await set_publication_review_status(
+        await decide_schedule_review(
             target_date,
-            status="rejected",
+            approved=False,
             reviewed_by=int(event.sender_id),
         )
         await event.answer("Публикация отклонена")
