@@ -23,11 +23,12 @@ from bot.handlers.auction.bidding import router as auction_bidding_router
 from bot.handlers.auction.exchange import router as auction_exchange_router
 from bot.handlers.auction.exchange_diagnostics import router as auction_exchange_diagnostics_router
 from bot.handlers.auction.schedule import router as auction_schedule_router
+from bot.handlers.auction.submission import addlot_start
+from bot.handlers.auction.submission_recovery import router as submission_recovery_router
 from bot.handlers.auction.warnings import router as auction_warnings_router
 from bot.handlers.auction.winner_exchange import router as auction_winner_exchange_router
 from bot.handlers.auction.winner_manual import router as auction_winner_manual_router
 from bot.handlers.auction.winner_print import router as auction_winner_print_router
-from bot.handlers.auction.submission import addlot_start
 from bot.handlers.auction_comments import router as comments_router
 from bot.handlers.auctions import router as auctions_router
 from bot.handlers.card_subscribe import register_card_subscribe_handlers, start_subscribe_card
@@ -65,6 +66,7 @@ def register_all_routers(
     # Priority commands go before broad FSM handlers in the auction monolith.
     dispatcher.include_router(auction_schedule_router)
     dispatcher.include_router(users_router)
+    dispatcher.include_router(submission_recovery_router)
     dispatcher.include_router(auctions_router)
     # The package router owns submission, moderation and catalog. Diagnostics
     # remains a separate legacy router until its final package extraction.
