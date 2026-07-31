@@ -48,16 +48,10 @@ from .catalog import (  # noqa: F401
     _safe_edit_text_or_caption,
 )
 
-# Diagnostics still lives at the historical top-level module. Import it only
-# after compatibility exports above are bound, because that module imports
-# currency_to_emoji from this package.
-from ..exchange_diagnostics import router as diagnostics_router  # noqa: E402
-
 router = Router(name="auction_exchange")
 router.include_router(submission_router)
 router.include_router(moderation_router)
 router.include_router(catalog_router)
-router.include_router(diagnostics_router)
 
 __all__ = [
     "router",
