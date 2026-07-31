@@ -21,7 +21,7 @@ from telethon.errors import SessionPasswordNeededError
 
 from bot.core.settings import PROJECT_ROOT, Settings, settings
 from db.core import close_db, init_db
-from userbot.handlers import register_handlers
+from userbot.handlers import register_handlers, register_schedule_handlers
 from userbot.workers import autobid_watchdog, schedule_announcement_watchdog
 
 ClientFactory = Callable[[str, int, str], Any]
@@ -108,6 +108,7 @@ async def run_userbot_application() -> None:
     logging.basicConfig(level=logging.INFO)
     telegram_client = create_userbot_client()
     register_handlers(telegram_client)
+    register_schedule_handlers(telegram_client)
     worker_tasks: list[asyncio.Task[None]] = []
 
     try:
