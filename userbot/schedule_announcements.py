@@ -525,6 +525,20 @@ async def send_schedule_review_preview(
     return int(message.id)
 
 
+async def _approved_preview_message(
+    telegram_client: TelegramClient,
+    review: Mapping[str, Any],
+) -> Any | None:
+    chat_id = review.get("preview_chat_id")
+    message_id = review.get("preview_message_id")
+    if not chat_id or not message_id:
+        return None
+    preview = await telegram_client.get_messages(int(chat_id), ids=int(message_id))
+    if not preview or not getattr(preview, "message", None):
+        return None
+    return preview
+
+
 async def publish_schedule_announcement(
     telegram_client: TelegramClient,
     target_date: date,
@@ -535,20 +549,36 @@ async def publish_schedule_announcement(
     if review and review.get("status") == "published" and review.get("channel_message_id"):
         return int(review["channel_message_id"])
 
-    lots = await get_schedule_lots_for_day(target_date)
-    if not lots:
-        logger.info("No live auctions for %s; schedule announcement not published", target_date)
-        return None
-    assets = await get_emoji_assets()
-    issues = schedule_configuration_issues(lots, assets)
-    if config.schedule_announcements_require_custom_emoji and issues:
-        raise ScheduleEmojiConfigurationError("; ".join(issues))
+    approved_preview = None
+    if review and review.get("status") == "approved":
+        approved_preview = await _approved_preview_message(telegram_client, review)
+        if approved_preview is None:
+            raise ScheduleEmojiConfigurationError(
+                "подтверждённое превью не найдено; публикация остановлена"
+            )
 
-    rendered = render_schedule_announcement(target_date, lots, assets)
+    if approved_preview is not None:
+        publication_text = str(approved_preview.message)
+        publication_entities = list(getattr(approved_preview, "entities", None) or ())
+    else:
+        # Compatibility path for explicit/manual calls made outside the reviewed
+        # daily watchdog. The automatic 23:00 flow always uses an approved preview.
+        lots = await get_schedule_lots_for_day(target_date)
+        if not lots:
+            logger.info("No live auctions for %s; schedule announcement not published", target_date)
+            return None
+        assets = await get_emoji_assets()
+        issues = schedule_configuration_issues(lots, assets)
+        if config.schedule_announcements_require_custom_emoji and issues:
+            raise ScheduleEmojiConfigurationError("; ".join(issues))
+        rendered = render_schedule_announcement(target_date, lots, assets)
+        publication_text = rendered.text
+        publication_entities = list(rendered.entities)
+
     message = await telegram_client.send_message(
         config.auction_channel_id,
-        rendered.text,
-        formatting_entities=list(rendered.entities),
+        publication_text,
+        formatting_entities=publication_entities,
         link_preview=False,
         send_as=config.auction_channel_id,
     )
