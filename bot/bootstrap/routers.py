@@ -34,6 +34,7 @@ from bot.handlers.auctions import router as auctions_router
 from bot.handlers.card_subscribe import register_card_subscribe_handlers, start_subscribe_card
 from bot.handlers.emoji_setup import router as emoji_setup_router
 from bot.handlers.helper.appeals import router as admin_appeals_router
+from bot.handlers.profile import router as profile_router
 from bot.handlers.uid_verification import router as uid_verification_router
 from bot.handlers.users import router as users_router
 from bot.middlewares.debug import DebugAllMessages
@@ -63,8 +64,9 @@ def register_all_routers(
     if debug_messages:
         dispatcher.message.outer_middleware(DebugAllMessages())
 
-    # Priority commands go before broad FSM handlers in the auction monolith.
+    # Focused command routers go before broad legacy/FSM routers.
     dispatcher.include_router(auction_schedule_router)
+    dispatcher.include_router(profile_router)
     dispatcher.include_router(users_router)
     dispatcher.include_router(submission_recovery_router)
     dispatcher.include_router(auctions_router)
