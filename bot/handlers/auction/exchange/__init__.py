@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-"""Auction exchange package.
-
-Phase 7 separates the former handler monolith into focused routers while
-preserving the historic import surface for the rest of the application.
-"""
+"""Auction exchange compatibility package."""
 
 from aiogram import Router
 
 from .submission import router as submission_router
 from .moderation import router as moderation_router
 from .catalog import router as catalog_router
+from .diagnostics import router as diagnostics_router
 from .common import (  # noqa: F401
     EX_MODE_CARD,
     EX_MODE_CARDLIKE,
@@ -52,6 +49,7 @@ router = Router(name="auction_exchange")
 router.include_router(submission_router)
 router.include_router(moderation_router)
 router.include_router(catalog_router)
+router.include_router(diagnostics_router)
 
 __all__ = [
     "router",
