@@ -1,0 +1,22 @@
+name: Admin button audit snapshot
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package source tree
+        run: git archive --format=tar.gz -o admin-button-audit-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: admin-button-audit-source
+          path: admin-button-audit-source.tar.gz
+          retention-days: 1
