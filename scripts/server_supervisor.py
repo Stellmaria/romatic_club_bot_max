@@ -264,6 +264,12 @@ def _restart_bot() -> str:
     return result.combined or "Основной bot перезапущен."
 
 
+def _restart_userbot() -> str:
+    result = _compose("restart", "userbot")
+    _wait_running("userbot")
+    return result.combined or "Userbot перезапущен."
+
+
 def _deploy_main() -> str:
     previous_sha = _git("rev-parse", "HEAD").stdout.strip()
     result = _run(["bash", "deploy/server/deploy.sh"])
@@ -390,6 +396,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
         actions: dict[str, tuple[str, Callable[[], str]]] = {
             "/v1/restart": ("restart", _restart_bot),
+            "/v1/restart-userbot": ("userbot-restart", _restart_userbot),
             "/v1/update": ("update", _deploy_main),
             "/v1/rollback": ("rollback", _rollback),
         }
