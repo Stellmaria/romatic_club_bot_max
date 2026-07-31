@@ -13,3 +13,4 @@ dist/
 private/
 backups/
 var/
+server-data/
