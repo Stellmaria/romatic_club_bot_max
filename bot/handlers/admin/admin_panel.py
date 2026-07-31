@@ -23,9 +23,9 @@ from bot.handlers.admin.admin_panel_system import *  # noqa: F401,F403
 from bot.handlers.admin.admin_panel_shared import notify_owners_lot_changed
 
 FEATURE_ROUTERS = (
+    admin_panel_system.router,
     admin_panel_requests.router,
     admin_panel_schedule.router,
-    admin_panel_system.router,
     admin_panel_sections.router,
     admin_panel_exchange.router,
 )
@@ -34,8 +34,8 @@ router.include_routers(*FEATURE_ROUTERS)
 
 __all__ = [
     "router", "FEATURE_ROUTERS", "notify_owners_lot_changed",
-    *admin_panel_requests.__all__, *admin_panel_schedule.__all__,
-    *admin_panel_system.__all__, *admin_panel_sections.__all__,
+    *admin_panel_system.__all__, *admin_panel_requests.__all__,
+    *admin_panel_schedule.__all__, *admin_panel_sections.__all__,
     *admin_panel_exchange.__all__,
 ]
 
