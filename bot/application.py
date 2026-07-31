@@ -106,6 +106,7 @@ async def run_bot(settings: Settings | None = None) -> None:
         task_manager.start(
             build_background_task_specs(
                 bot,
+                auction_channel_id=app_settings.auction_channel_id,
                 auction_channel_username=app_settings.auction_channel_username,
             )
         )
