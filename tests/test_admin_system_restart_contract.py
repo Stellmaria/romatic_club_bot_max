@@ -19,8 +19,8 @@ def test_system_router_is_registered_before_legacy_fsm_routers() -> None:
     admin_panel = _source(ADMIN_PANEL)
     bootstrap = _source(ROUTER_BOOTSTRAP)
 
-    # The system router must not remain nested inside the broad admin facade,
-    # otherwise earlier legacy/FSM routers can consume operational commands.
+    # Keep the public facade inventory intact, but skip nesting the system
+    # router so it can be attached directly at the top of dispatch order.
     tree = ast.parse(admin_panel)
     feature_assignment = next(
         node
@@ -32,11 +32,9 @@ def test_system_router_is_registered_before_legacy_fsm_routers() -> None:
         )
     )
     assert isinstance(feature_assignment.value, ast.Tuple)
-    feature_names = {
-        ast.unparse(element)
-        for element in feature_assignment.value.elts
-    }
-    assert "admin_panel_system.router" not in feature_names
+    feature_names = [ast.unparse(element) for element in feature_assignment.value.elts]
+    assert feature_names[0] == "admin_panel_system.router"
+    assert "router.include_routers(*FEATURE_ROUTERS[1:])" in admin_panel
 
     assert (
         "from bot.handlers.admin.admin_panel_system import "
