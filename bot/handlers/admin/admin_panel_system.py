@@ -2,15 +2,19 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    ReplyKeyboardRemove,
 )
 
 from bot.core.process_restart import process_restart_coordinator
 from bot.core.settings import ADMINS_OWNERS
+from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES
+from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
 
 router = Router(name=__name__)
@@ -46,6 +50,14 @@ async def _require_owner(target: Message | CallbackQuery) -> bool:
     else:
         await target.answer("Системные операции доступны только владельцу.")
     return False
+
+
+def _admin_main_keyboard():
+    return menu_keyboard(
+        ["⚙️ Модерация", "👥 Пользователи", "🎴 Карты"],
+        ["📊 Статистика", "📣 Рассылка", "🚫 Логи"],
+        ["🖥 Система"],
+    )
 
 
 def _system_keyboard() -> InlineKeyboardMarkup:
@@ -88,6 +100,23 @@ async def _edit_or_answer(
         await message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
     except Exception:
         await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+@router.message(F.text.in_(["/admin", "/admin_panel"]), F.chat.type == "private")
+@admin_only
+async def show_admin_menu_with_system(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "↩️ Возврат в главное меню...",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await message.answer(
+        ADMIN_MESSAGES.get(
+            "admin_panel_greeting",
+            "Добро пожаловать в админ-панель! Выберите раздел:",
+        ),
+        reply_markup=_admin_main_keyboard(),
+    )
 
 
 @router.message(Command("system"))
@@ -155,6 +184,7 @@ async def close_system_callback(call: CallbackQuery) -> None:
 
 __all__ = [
     "router",
+    "show_admin_menu_with_system",
     "show_system_menu",
     "show_restart_confirmation",
     "show_system_callback",
