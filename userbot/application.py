@@ -22,7 +22,7 @@ from telethon.errors import SessionPasswordNeededError
 from bot.core.settings import PROJECT_ROOT, Settings, settings
 from db.core import close_db, init_db
 from userbot.handlers import register_handlers
-from userbot.workers import autobid_watchdog
+from userbot.workers import autobid_watchdog, schedule_announcement_watchdog
 
 ClientFactory = Callable[[str, int, str], Any]
 logger = logging.getLogger("userbot")
@@ -55,7 +55,7 @@ def resolve_userbot_session(
 ) -> str:
     """Resolve a session base while preserving the historical root session.
 
-    ``Settings`` now defaults to ``var/userbot_session``.  Existing deployments
+    ``Settings`` now defaults to ``var/userbot_session``. Existing deployments
     may still have the live ``userbot_session.session`` beside the entrypoint.
     Unless ``USERBOT_SESSION`` was explicitly configured, keep using that file
     so a refactor cannot silently start a second Telegram authorization session.
@@ -108,7 +108,7 @@ async def run_userbot_application() -> None:
     logging.basicConfig(level=logging.INFO)
     telegram_client = create_userbot_client()
     register_handlers(telegram_client)
-    watchdog_task: asyncio.Task[None] | None = None
+    worker_tasks: list[asyncio.Task[None]] = []
 
     try:
         await init_db()
@@ -123,19 +123,28 @@ async def run_userbot_application() -> None:
                 password = getpass("Введите пароль 2FA: ").strip()
                 await telegram_client.sign_in(phone=phone, password=password)
 
-        watchdog_task = asyncio.create_task(
-            autobid_watchdog(telegram_client),
-            name="userbot-autobid-watchdog",
+        worker_tasks.extend(
+            (
+                asyncio.create_task(
+                    autobid_watchdog(telegram_client),
+                    name="userbot-autobid-watchdog",
+                ),
+                asyncio.create_task(
+                    schedule_announcement_watchdog(telegram_client),
+                    name="userbot-schedule-announcement-watchdog",
+                ),
+            )
         )
         current_user = await telegram_client.get_me()
         logger.info("Userbot logged in as @%s", current_user.username or current_user.id)
         logger.info("Listening discussion chat for bids/moderation/rules…")
         await telegram_client.run_until_disconnected()
     finally:
-        if watchdog_task is not None:
-            watchdog_task.cancel()
+        for task in worker_tasks:
+            task.cancel()
+        for task in worker_tasks:
             with suppress(asyncio.CancelledError):
-                await watchdog_task
+                await task
         try:
             if telegram_client.is_connected():
                 await telegram_client.disconnect()
