@@ -67,6 +67,9 @@ class SupervisorClient:
     async def restart(self) -> dict[str, Any]:
         return await self.request("POST", "/v1/restart")
 
+    async def restart_userbot(self) -> dict[str, Any]:
+        return await self.request("POST", "/v1/restart-userbot")
+
     async def update(self) -> dict[str, Any]:
         return await self.request("POST", "/v1/update")
 
