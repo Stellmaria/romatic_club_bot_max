@@ -5,15 +5,15 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.handlers.admin.helper.admin_constants import NO_ACCESS_MSG
 from bot.handlers.admin.helper.new.utils import sender_id
+from bot.security.admin_access import is_admin_user
 from bot.telegram.callbacks import safe_callback_answer
-from db.legacy import is_admin
 
 
 def admin_only(handler: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
     @wraps(handler)
     async def wrapper(message_or_call, *args, **kwargs):
         uid = sender_id(message_or_call)
-        if uid is None or not await is_admin(uid):
+        if not await is_admin_user(uid):
             if isinstance(message_or_call, CallbackQuery):
                 await safe_callback_answer(message_or_call, NO_ACCESS_MSG, show_alert=True)
             elif isinstance(message_or_call, Message):
