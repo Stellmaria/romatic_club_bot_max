@@ -55,8 +55,8 @@ async def _send_admin_main_menu(message: Message, *, user_id: int | None) -> Non
     )
 
 
-@router.message(Command("admin"))
-@router.message(Command("admin_panel"))
+@router.message(Command("admin"), F.chat.type == "private")
+@router.message(Command("admin_panel"), F.chat.type == "private")
 @admin_only
 async def show_admin_main_menu(message: Message, state: FSMContext) -> None:
     """Open the complete admin menu before the legacy system router can answer."""
