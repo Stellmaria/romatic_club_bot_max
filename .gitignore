@@ -28,6 +28,8 @@ Thumbs.db
 *.session-journal
 *.log
 hs_err_pid*.log
+/var/schedule_announcements.json
+/var/schedule_announcements.json.tmp
 
 # Backups and exports
 backups/
