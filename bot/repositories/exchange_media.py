@@ -12,24 +12,45 @@ class ExchangeMediaRepository:
         self._pool = pool
 
     async def cover_media(self, batch_id: int) -> tuple[str | None, str]:
-        """Return the first card media, then the proof photo as fallback."""
+        """Return the first card media, then the proof photo as fallback.
+
+        Older databases may not have ``cards.media_type`` yet. Keep the read
+        path compatible by retrying without that column and treating the media
+        as a photo.
+        """
 
         async with self._pool.acquire() as connection:
-            row = await connection.fetchrow(
-                """
-                SELECT c.image_id AS media_id,
-                       COALESCE(NULLIF(c.media_type, ''), 'photo') AS kind
-                FROM public.exchange_items ei
-                JOIN public.cards c ON c.card_id = ei.card_id
-                WHERE ei.batch_id = $1
-                ORDER BY ei.item_id
-                LIMIT 1
-                """,
-                int(batch_id),
-            )
+            try:
+                row = await connection.fetchrow(
+                    """
+                    SELECT c.image_id AS media_id,
+                           COALESCE(NULLIF(c.media_type, ''), 'photo') AS kind
+                    FROM public.exchange_items ei
+                    JOIN public.cards c ON c.card_id = ei.card_id
+                    WHERE ei.batch_id = $1
+                    ORDER BY ei.item_id
+                    LIMIT 1
+                    """,
+                    int(batch_id),
+                )
+            except Exception:
+                row = await connection.fetchrow(
+                    """
+                    SELECT c.image_id AS media_id
+                    FROM public.exchange_items ei
+                    JOIN public.cards c ON c.card_id = ei.card_id
+                    WHERE ei.batch_id = $1
+                    ORDER BY ei.item_id
+                    LIMIT 1
+                    """,
+                    int(batch_id),
+                )
+                kind = "photo"
+            else:
+                kind = str(row["kind"] or "photo").strip().lower() if row else "photo"
+
             if row:
                 media_id = str(row["media_id"] or "").strip()
-                kind = str(row["kind"] or "photo").strip().lower()
                 if kind not in {"photo", "video", "animation"}:
                     kind = "photo"
                 if media_id:
