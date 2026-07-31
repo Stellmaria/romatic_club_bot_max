@@ -24,7 +24,6 @@ from .common import (  # noqa: F401
     _exchange_price_for_card as exchange_price_for_card,
     _get_exchange_deck_ids,
     _get_exchange_deck_ids as get_exchange_deck_ids,
-    _get_exchange_deck_ids as get_exchange_deck_ids,
     _get_exchange_decks_for_menu as get_exchange_decks_for_menu,
     _tg_clean as clean_telegram_text,
     currency_to_emoji,
