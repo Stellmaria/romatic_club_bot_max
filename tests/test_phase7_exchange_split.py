@@ -12,7 +12,6 @@ EXCHANGE_MODULES = (
     "bot/handlers/auction/exchange/submission.py",
     "bot/handlers/auction/exchange/moderation.py",
     "bot/handlers/auction/exchange/catalog.py",
-    "bot/handlers/auction/exchange_diagnostics.py",
 )
 
 
@@ -34,39 +33,34 @@ def test_exchange_blocks_are_extracted_by_responsibility() -> None:
     submission = _top_level_functions(EXCHANGE_MODULES[1])
     moderation = _top_level_functions(EXCHANGE_MODULES[2])
     catalog = _top_level_functions(EXCHANGE_MODULES[3])
-    diagnostics = _top_level_functions(EXCHANGE_MODULES[4])
 
     assert "exchange_deck_keyboard" in common
     assert {"ex_deck_selected", "ex_mode_selected"} <= submission
     assert {"pending_menu_pick", "exchange_approve", "show_pending_exchange_requests"} <= moderation
     assert {"_kb_exchange_approved_root", "_q_exchange_approved_decks"} <= catalog
-    assert {"cmd_print_ex_multi", "cmd_ex_lot", "cmd_ex_dump"} <= diagnostics
-
     assert "exchange_approve" not in submission
-    assert "cmd_print_ex_multi" not in catalog
 
 
 def test_exchange_routers_are_registered_once_in_handler_order() -> None:
     package = _source("bot/handlers/auction/exchange/__init__.py")
     bootstrap = _source("bot/bootstrap/routers.py")
 
-    for child in ("submission_router", "moderation_router", "catalog_router"):
+    for child in (
+        "submission_router",
+        "moderation_router",
+        "catalog_router",
+        "diagnostics_router",
+    ):
         assert package.count(f"router.include_router({child})") == 1
 
     assert bootstrap.count("dispatcher.include_router(auction_exchange_router)") == 1
-    assert bootstrap.count("dispatcher.include_router(auction_exchange_diagnostics_router)") == 1
+    assert "auction_exchange_diagnostics_router" not in bootstrap
     assert "auction_exchange_moderation_router" not in bootstrap
     assert "auction_exchange_catalog_router" not in bootstrap
 
-    package_position = bootstrap.index("dispatcher.include_router(auction_exchange_router)")
-    diagnostics_position = bootstrap.index(
-        "dispatcher.include_router(auction_exchange_diagnostics_router)"
-    )
-    assert package_position < diagnostics_position
-
 
 def test_exchange_components_import_shared_contracts_without_sibling_cycles() -> None:
-    for relative in EXCHANGE_MODULES[1:4]:
+    for relative in EXCHANGE_MODULES[1:]:
         tree = ast.parse(_source(relative), filename=relative)
         top_level_imports = {
             node.module
@@ -87,23 +81,20 @@ def test_admin_consumers_use_current_exchange_owners() -> None:
 
 def test_exchange_split_has_no_unresolved_globals() -> None:
     known = set(dir(builtins)) | {
-        "__conditional_annotations__",  # synthetic Python 3.14 symtable name
+        "__conditional_annotations__",
         "__doc__",
         "__file__",
         "__name__",
         "__package__",
     }
-
     for relative in EXCHANGE_MODULES:
         table = symtable.symtable(_source(relative), relative, "exec")
         defined = {
             name
             for name in table.get_identifiers()
-            if (
-                table.lookup(name).is_assigned()
-                or table.lookup(name).is_imported()
-                or table.lookup(name).is_namespace()
-            )
+            if table.lookup(name).is_assigned()
+            or table.lookup(name).is_imported()
+            or table.lookup(name).is_namespace()
         }
         referenced_globals: set[str] = set()
         pending = [table]
@@ -115,5 +106,4 @@ def test_exchange_split_has_no_unresolved_globals() -> None:
                 if current.lookup(name).is_global() and current.lookup(name).is_referenced()
             )
             pending.extend(current.get_children())
-
         assert not (referenced_globals - defined - known), relative
