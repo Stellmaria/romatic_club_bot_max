@@ -1,0 +1,10 @@
+FROM python:3.13-alpine
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN adduser -D -u 10001 appuser
+WORKDIR /app
+COPY --chown=10001:10001 scripts/server_supervisor_proxy.py /app/server_supervisor_proxy.py
+USER appuser
+CMD ["python", "/app/server_supervisor_proxy.py"]
