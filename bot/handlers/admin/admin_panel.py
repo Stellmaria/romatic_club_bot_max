@@ -22,17 +22,18 @@ from bot.handlers.admin.admin_panel_sections import *  # noqa: F401,F403
 from bot.handlers.admin.admin_panel_system import *  # noqa: F401,F403
 from bot.handlers.admin.admin_panel_shared import notify_owners_lot_changed
 
-# System commands are attached directly by bot.bootstrap.routers before broad
-# legacy/FSM routers. Keeping them inside this aggregate router lets active FSM
-# handlers consume /supervisor, /system and restart commands first.
+# Preserve the historical feature inventory and ordering for compatibility.
+# The system router itself is attached directly by bot.bootstrap.routers before
+# broad legacy/FSM routers, so it must not also be nested under this facade.
 FEATURE_ROUTERS = (
+    admin_panel_system.router,
     admin_panel_requests.router,
     admin_panel_schedule.router,
     admin_panel_sections.router,
     admin_panel_exchange.router,
 )
 router = Router(name=__name__)
-router.include_routers(*FEATURE_ROUTERS)
+router.include_routers(*FEATURE_ROUTERS[1:])
 
 __all__ = [
     "router", "FEATURE_ROUTERS", "notify_owners_lot_changed",
