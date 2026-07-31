@@ -66,10 +66,10 @@ def register_all_routers(
     if debug_messages:
         dispatcher.message.outer_middleware(DebugAllMessages())
 
-    # Owner/admin operational navigation must precede every broad legacy/FSM
-    # router so an unfinished conversation cannot consume menu actions first.
-    dispatcher.include_router(admin_panel_system_router)
+    # Complete admin navigation must precede the legacy system router and every
+    # broad FSM router, otherwise /admin and Back expose the stale keyboard.
     dispatcher.include_router(admin_navigation_router)
+    dispatcher.include_router(admin_panel_system_router)
 
     # Focused command routers go before broad legacy/FSM routers.
     dispatcher.include_router(auction_schedule_router)

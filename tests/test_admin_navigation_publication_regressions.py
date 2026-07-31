@@ -8,17 +8,32 @@ def _source(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_priority_admin_navigation_precedes_stateful_routers() -> None:
+def test_priority_admin_navigation_precedes_conflicting_routers() -> None:
     source = _source("bot/bootstrap/routers.py")
 
     priority = source.index("dispatcher.include_router(admin_navigation_router)")
     for later_router in (
+        "dispatcher.include_router(admin_panel_system_router)",
         "dispatcher.include_router(users_router)",
         "dispatcher.include_router(auctions_router)",
         "dispatcher.include_router(auction_exchange_router)",
         "dispatcher.include_router(admin_panel_router)",
     ):
         assert priority < source.index(later_router)
+
+
+def test_complete_admin_menu_exposes_schedule_exchange_and_legacy_sections() -> None:
+    source = _source("bot/handlers/admin/admin_navigation.py")
+
+    assert '@router.message(Command("admin"), F.chat.type == "private")' in source
+    assert '@router.message(Command("admin_panel"), F.chat.type == "private")' in source
+    assert '["⚙️ Модерация", "👥 Пользователи", "🎴 Карты"]' in source
+    assert '["📊 Статистика", "📣 Рассылка", "🚫 Логи"]' in source
+    assert '["📅 Расписание", "🛒 Биржа"]' in source
+    assert 'rows.append(["🖥 Система"])' in source
+    assert 'F.text.lower().in_(["назад", "⬅️ назад", "отмена"])' in source
+    assert '"admin_back"' in source
+    assert '"universal_cancel"' in source
 
 
 def test_exchange_navigation_uses_supported_catalog_callbacks() -> None:
