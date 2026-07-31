@@ -22,9 +22,17 @@ def build_background_task_specs(
     bot: Bot,
     *,
     auction_channel_username: str,
+    auction_channel_id: int | str | None = None,
 ) -> list[BackgroundTaskSpec]:
     return [
-        BackgroundTaskSpec("auction-publisher", lambda: auction_publisher_loop(bot)),
+        BackgroundTaskSpec(
+            "auction-publisher",
+            lambda: auction_publisher_loop(
+                bot,
+                channel_id=auction_channel_id,
+                channel_username=auction_channel_username,
+            ),
+        ),
         BackgroundTaskSpec(
             "auction-notifications",
             lambda: auction_notifications_loop(bot, auction_channel_username),
