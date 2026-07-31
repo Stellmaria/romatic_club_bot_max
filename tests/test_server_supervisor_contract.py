@@ -17,11 +17,13 @@ def test_server_runtime_exposes_only_fixed_actions() -> None:
         '"/v1/status"',
         '"/v1/logs"',
         '"/v1/restart"',
+        '"/v1/restart-userbot"',
         '"/v1/update"',
         '"/v1/rollback"',
     ):
         assert route in runtime
     assert '"restart", "bot"' in runtime
+    assert '"restart", "userbot"' in runtime
     assert '["bash", "deploy/server/deploy.sh"]' in runtime
     assert "shell=True" not in runtime
     assert "docker.sock" not in runtime
@@ -41,12 +43,15 @@ def test_proxy_is_isolated_from_docker_and_checkout() -> None:
     assert "ports:" not in service
 
 
-def test_restart_only_targets_main_bot_but_update_rebuilds_userbot() -> None:
+def test_restart_targets_are_separate_but_update_rebuilds_both() -> None:
     runtime = source("scripts/server_supervisor.py")
     deploy = source("deploy/server/deploy.sh")
 
+    assert 'def _restart_bot()' in runtime
     assert '_compose("restart", "bot")' in runtime
-    assert 'restart", "userbot"' not in runtime
+    assert 'def _restart_userbot()' in runtime
+    assert '_compose("restart", "userbot")' in runtime
+    assert '"/v1/restart-userbot": ("userbot-restart", _restart_userbot)' in runtime
     assert "build --pull bot userbot supervisor-proxy" in deploy
     assert "up -d --remove-orphans postgres supervisor-proxy bot userbot" in deploy
 
