@@ -129,17 +129,13 @@ def _top_level_import_index(tree: ast.Module, module_name: str) -> int:
 
 
 def test_process_entrypoints_bootstrap_before_application_imports() -> None:
-    # Test executable process/module entrypoints. Historical helper wrappers
-    # such as find_discussion_id.py contain their own standalone implementation
-    # and are not production process composition roots.
+    # These are the two production processes from compose.yaml plus the legacy
+    # config compatibility surface. Standalone maintenance utilities have their
+    # own command-specific contracts and are not process composition roots.
     boundaries = {
         "main.py": "bot.application",
         "config.py": "bot.core.settings",
         "userbot/entrypoint.py": "bot.core.settings",
-        "scripts/backfill_bids.py": "bot.core.settings",
-        "scripts/migrate_uid_encryption.py": "bot.uid_crypto",
-        "bot/tools/refresh_users.py": "bot.core.settings",
-        "bot/tools/import_post_scans.py": "bot.core.settings",
     }
     for relative_path, guarded_import in boundaries.items():
         tree = ast.parse((ROOT / relative_path).read_text(encoding="utf-8"))
