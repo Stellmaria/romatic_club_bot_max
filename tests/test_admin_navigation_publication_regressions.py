@@ -25,8 +25,8 @@ def test_priority_admin_navigation_precedes_conflicting_routers() -> None:
 def test_complete_admin_menu_exposes_schedule_exchange_and_legacy_sections() -> None:
     source = _source("bot/handlers/admin/admin_navigation.py")
 
-    assert '@router.message(Command("admin"))' in source
-    assert '@router.message(Command("admin_panel"))' in source
+    assert '@router.message(Command("admin"), F.chat.type == "private")' in source
+    assert '@router.message(Command("admin_panel"), F.chat.type == "private")' in source
     assert '["⚙️ Модерация", "👥 Пользователи", "🎴 Карты"]' in source
     assert '["📊 Статистика", "📣 Рассылка", "🚫 Логи"]' in source
     assert '["📅 Расписание", "🛒 Биржа"]' in source
