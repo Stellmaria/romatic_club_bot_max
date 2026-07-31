@@ -35,11 +35,13 @@ def test_active_admin_panel_has_workflow_imports_and_immediate_callback_answer()
 
 def test_whois_uses_binding_status_not_decryption_success() -> None:
     users = (ROOT / "bot/handlers/users.py").read_text(encoding="utf-8")
-    admin = (ROOT / "bot/handlers/admin/uid_verification_admin.py").read_text(encoding="utf-8")
+    presentation = (
+        ROOT / "bot/handlers/admin/uid_admin_presentation.py"
+    ).read_text(encoding="utf-8")
     repo = (ROOT / "bot/repositories/uid_verification.py").read_text(encoding="utf-8")
 
     assert 'str(uid_record.get("status") or "").lower() == "verified"' in users
-    assert 'UID-верификация: <b>✅ подтверждена</b>' in admin
+    assert 'UID-верификация: <b>✅ подтверждена</b>' in presentation
     assert 'SELECT uid, uid_enc' in repo
     assert 'legacy_uid' in repo
 
