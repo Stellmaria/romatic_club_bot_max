@@ -21,7 +21,6 @@ jobs:
         run: |
           test -f .admin-audit-gz/part-10.b64
           cat .admin-audit-gz/part-*.b64 > /tmp/admin-audit.patch.gz.b64
-          echo "31fe524a8705535b8ac1e22e675783df9d3436b129634153d8084f21bfcbb539  /tmp/admin-audit.patch.gz.b64" | sha256sum -c -
           base64 -d /tmp/admin-audit.patch.gz.b64 > /tmp/admin-audit.patch.gz
           echo "e66644c9310e6bc58436cd5a0413f80afb660df23d5ed99a636a58bba0278c20  /tmp/admin-audit.patch.gz" | sha256sum -c -
           gzip -dc /tmp/admin-audit.patch.gz > /tmp/admin-audit.patch
