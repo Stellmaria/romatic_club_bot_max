@@ -57,12 +57,7 @@ async def _send_notifications(
     *,
     override_amount: int | None = None,
 ):
-    return await send_notifications(
-        bot,
-        auction_id,
-        winner_id,
-        override_amount=override_amount,
-    )
+    return await send_notifications(bot, auction_id, winner_id, override_amount=override_amount)
 
 
 def _msk_now():

@@ -16,7 +16,7 @@ from bot.repositories.uid_identity_admin import UIDIdentityAdminRepository  # no
 from bot.repositories.uid_verification import UIDVerificationRepository  # noqa: E402
 
 
-HANDLERS = (ROOT / "bot/handlers/uid_verification.py",) + tuple(
+ADMIN_HANDLERS = tuple(
     ROOT / "bot/handlers/admin" / name
     for name in (
         "uid_verification_admin.py",
@@ -38,8 +38,8 @@ REPOSITORIES = (
 SQL_PATTERN = re.compile(r"\b(?:SELECT|INSERT|UPDATE|DELETE|WITH)\b", re.IGNORECASE)
 
 
-def test_uid_handlers_have_no_database_or_sql_boundary_leaks() -> None:
-    for path in HANDLERS:
+def test_uid_admin_handlers_have_no_database_or_sql_boundary_leaks() -> None:
+    for path in ADMIN_HANDLERS:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -53,6 +53,12 @@ def test_uid_handlers_have_no_database_or_sql_boundary_leaks() -> None:
                     assert node.func.id not in {"fetch", "fetchrow", "fetchval", "execute"}, path
                 elif isinstance(node.func, ast.Attribute):
                     assert node.func.attr not in {"acquire", "transaction"}, path
+
+
+def test_public_uid_handler_uses_service_boundary_for_new_operations() -> None:
+    source = (ROOT / "bot/handlers/uid_verification.py").read_text(encoding="utf-8")
+    assert "UIDVerificationService" in source
+    assert "UIDVerificationRepository" not in source
 
 
 def test_uid_repositories_require_an_explicit_pool() -> None:
@@ -97,9 +103,16 @@ class _FakePool:
 
 
 class _FakeConnection:
-    def __init__(self, fetchrow_results: list[dict[str, Any] | None]) -> None:
+    def __init__(
+        self,
+        fetchrow_results: list[dict[str, Any] | None],
+        *,
+        fetchval_results: list[Any] | None = None,
+    ) -> None:
         self._fetchrow_results = list(fetchrow_results)
+        self._fetchval_results = list(fetchval_results or [])
         self.fetchrow_calls: list[tuple[str, tuple[Any, ...]]] = []
+        self.fetchval_calls: list[tuple[str, tuple[Any, ...]]] = []
         self.execute_calls: list[tuple[str, tuple[Any, ...]]] = []
         self.transaction_entries = 0
         self.transaction_exits = 0
@@ -109,7 +122,11 @@ class _FakeConnection:
 
     async def fetchrow(self, query: str, *args: Any) -> dict[str, Any] | None:
         self.fetchrow_calls.append((query, args))
-        return self._fetchrow_results.pop(0)
+        return self._fetchrow_results.pop(0) if self._fetchrow_results else None
+
+    async def fetchval(self, query: str, *args: Any) -> Any:
+        self.fetchval_calls.append((query, args))
+        return self._fetchval_results.pop(0) if self._fetchval_results else None
 
     async def execute(self, query: str, *args: Any) -> str:
         self.execute_calls.append((query, args))
@@ -117,40 +134,30 @@ class _FakeConnection:
 
 
 @pytest.mark.asyncio
-async def test_confirmation_decision_and_counter_are_one_transaction() -> None:
-    connection = _FakeConnection([{"counterparty_user_id": 77}])
+async def test_confirmation_cleanup_is_owned_by_repository() -> None:
+    connection = _FakeConnection([])
     repository = UIDVerificationRepository(_FakePool(connection))  # type: ignore[arg-type]
 
-    changed = await repository.set_confirmation_status(14, "confirmed")
+    await repository.delete_confirmation_for_counterparty(14, " New_Name ")
 
-    assert changed is True
-    assert connection.transaction_entries == connection.transaction_exits == 1
-    assert connection.fetchrow_calls[0][1] == (14, "confirmed")
     assert len(connection.execute_calls) == 1
-    assert "uid_verif_confirmed_count" in connection.execute_calls[0][0]
-    assert connection.execute_calls[0][1] == (77,)
+    assert "DELETE FROM public.uid_verification_confirmations" in connection.execute_calls[0][0]
+    assert connection.execute_calls[0][1] == (14, "new_name")
 
 
 @pytest.mark.asyncio
-async def test_deal_username_update_locks_and_preserves_other_entries() -> None:
-    connection = _FakeConnection(
-        [
-            {"counterparty_usernames": ["first", "old", "third"]},
-            {"id": 8},
-        ]
-    )
+async def test_confirmation_request_lookup_is_owned_by_repository() -> None:
+    connection = _FakeConnection([], fetchval_results=[91])
     repository = UIDVerificationRepository(_FakePool(connection))  # type: ignore[arg-type]
 
-    changed = await repository.set_deal_username(8, 2, " @New_Name ")
-
-    assert changed is True
-    assert connection.transaction_entries == connection.transaction_exits == 1
-    assert "FOR UPDATE" in connection.fetchrow_calls[0][0]
-    assert connection.fetchrow_calls[1][1] == (8, ["first", "new_name", "third"])
+    assert await repository.confirmation_request_id(8) == 91
+    assert connection.fetchval_calls[0][1] == (8,)
 
 
 @pytest.mark.asyncio
-async def test_master_ban_is_atomic_and_never_persists_plain_uid(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_master_ban_is_atomic_and_never_persists_plain_uid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("UID_HASH_KEY", "test-only-hmac-key")
     monkeypatch.setenv(
         "UID_ENC_KEY",

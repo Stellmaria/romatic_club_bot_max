@@ -8,10 +8,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXCHANGE_MODULES = (
-    "bot/handlers/auction/exchange.py",
-    "bot/handlers/auction/exchange_moderation.py",
-    "bot/handlers/auction/exchange_catalog.py",
-    "bot/handlers/auction/exchange_diagnostics.py",
+    "bot/handlers/auction/exchange/common.py",
+    "bot/handlers/auction/exchange/submission.py",
+    "bot/handlers/auction/exchange/moderation.py",
+    "bot/handlers/auction/exchange/catalog.py",
 )
 
 
@@ -29,97 +29,72 @@ def _top_level_functions(relative: str) -> set[str]:
 
 
 def test_exchange_blocks_are_extracted_by_responsibility() -> None:
-    submission = _top_level_functions(EXCHANGE_MODULES[0])
-    moderation = _top_level_functions(EXCHANGE_MODULES[1])
-    catalog = _top_level_functions(EXCHANGE_MODULES[2])
-    diagnostics = _top_level_functions(EXCHANGE_MODULES[3])
+    common = _top_level_functions(EXCHANGE_MODULES[0])
+    submission = _top_level_functions(EXCHANGE_MODULES[1])
+    moderation = _top_level_functions(EXCHANGE_MODULES[2])
+    catalog = _top_level_functions(EXCHANGE_MODULES[3])
 
-    assert {"exchange_deck_keyboard", "_finalize_exchange_request"} <= submission
-    assert "show_pending_exchange_requests" in submission  # compatibility wrapper
+    assert "exchange_deck_keyboard" in common
+    assert {"ex_deck_selected", "ex_mode_selected"} <= submission
     assert {"pending_menu_pick", "exchange_approve", "show_pending_exchange_requests"} <= moderation
-    assert {"_kb_exchange_approved_root", "ex_appr_decks", "ex_view_card"} <= catalog
-    assert {"cmd_print_ex_multi", "cmd_ex_lot", "cmd_ex_dump"} <= diagnostics
-
-    moved = {
-        "pending_menu_pick",
-        "exchange_approve",
-        "_kb_exchange_approved_root",
-        "ex_appr_decks",
-        "cmd_print_ex_multi",
-        "cmd_ex_lot",
-    }
-    assert not (moved & submission)
+    assert {"_kb_exchange_approved_root", "_q_exchange_approved_decks"} <= catalog
+    assert "exchange_approve" not in submission
 
 
-def test_exchange_routers_are_registered_contiguously_in_handler_order() -> None:
-    main = _source("bot/bootstrap/routers.py")
-    registrations = (
-        "dispatcher.include_router(auction_exchange_router)",
-        "dispatcher.include_router(auction_exchange_moderation_router)",
-        "dispatcher.include_router(auction_exchange_catalog_router)",
-        "dispatcher.include_router(auction_exchange_diagnostics_router)",
-    )
-    positions = [main.index(registration) for registration in registrations]
-    assert positions == sorted(positions)
+def test_exchange_routers_are_registered_once_in_handler_order() -> None:
+    package = _source("bot/handlers/auction/exchange/__init__.py")
+    bootstrap = _source("bot/bootstrap/routers.py")
 
-    between = main[positions[0]: positions[-1] + len(registrations[-1])]
-    assert between.count("dispatcher.include_router(") == len(registrations)
+    for child in (
+        "submission_router",
+        "moderation_router",
+        "catalog_router",
+        "diagnostics_router",
+    ):
+        assert package.count(f"router.include_router({child})") == 1
 
-
-def test_submission_has_no_top_level_import_of_extracted_modules() -> None:
-    tree = ast.parse(_source(EXCHANGE_MODULES[0]), filename=EXCHANGE_MODULES[0])
-    top_level_imports = {
-        node.module
-        for node in tree.body
-        if isinstance(node, ast.ImportFrom) and node.module is not None
-    }
-    assert "bot.handlers.auction.exchange_moderation" not in top_level_imports
-    assert "bot.handlers.auction.exchange_catalog" not in top_level_imports
-    assert "bot.handlers.auction.exchange_diagnostics" not in top_level_imports
-
-    finalize = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_finalize_exchange_request"
-    )
-    assert any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "bot.handlers.auction.exchange_moderation"
-        for node in finalize.body
-    )
+    assert bootstrap.count("dispatcher.include_router(auction_exchange_router)") == 1
+    assert "auction_exchange_diagnostics_router" not in bootstrap
+    assert "auction_exchange_moderation_router" not in bootstrap
+    assert "auction_exchange_catalog_router" not in bootstrap
 
 
-def test_admin_consumers_import_extracted_implementations_directly() -> None:
+def test_exchange_components_import_shared_contracts_without_sibling_cycles() -> None:
+    for relative in EXCHANGE_MODULES[1:]:
+        tree = ast.parse(_source(relative), filename=relative)
+        top_level_imports = {
+            node.module
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom) and node.module is not None
+        }
+        assert "bot.handlers.auction.exchange" not in top_level_imports
+
+
+def test_admin_consumers_use_current_exchange_owners() -> None:
     admin_panel = _source("bot/handlers/admin/admin_panel_shared.py")
     moderation = _source("bot/handlers/admin/moderation_shared.py")
 
-    assert "from bot.handlers.auction.exchange_moderation import (" in admin_panel
-    assert "from bot.handlers.auction.exchange_catalog import (" in admin_panel
-    assert (
-        "from bot.handlers.auction.exchange_moderation "
-        "import show_pending_exchange_requests"
-    ) in moderation
+    assert "exchange_moderation" in admin_panel or "exchange.moderation" in admin_panel
+    assert "exchange_catalog" in admin_panel or "exchange.catalog" in admin_panel
+    assert "show_pending_exchange_requests" in moderation
 
 
 def test_exchange_split_has_no_unresolved_globals() -> None:
     known = set(dir(builtins)) | {
-        "__conditional_annotations__",  # synthetic Python 3.14 symtable name
+        "__conditional_annotations__",
         "__doc__",
         "__file__",
         "__name__",
         "__package__",
     }
-
     for relative in EXCHANGE_MODULES:
         table = symtable.symtable(_source(relative), relative, "exec")
         defined = {
             name
             for name in table.get_identifiers()
-            if (
-                table.lookup(name).is_assigned()
-                or table.lookup(name).is_imported()
-                or table.lookup(name).is_namespace()
-            )
+            if table.lookup(name).is_assigned()
+            or table.lookup(name).is_imported()
+            or table.lookup(name).is_namespace()
         }
         referenced_globals: set[str] = set()
         pending = [table]
@@ -131,5 +106,4 @@ def test_exchange_split_has_no_unresolved_globals() -> None:
                 if current.lookup(name).is_global() and current.lookup(name).is_referenced()
             )
             pending.extend(current.get_children())
-
         assert not (referenced_globals - defined - known), relative

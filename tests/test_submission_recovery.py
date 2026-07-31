@@ -6,8 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _source(relative: str) -> str:
+    return (ROOT / relative).read_text(encoding="utf-8")
+
+
 def test_runtime_submission_imports_auction_kind() -> None:
-    source = (ROOT / "bot/handlers/auctions.py").read_text(encoding="utf-8")
+    source = _source("bot/handlers/auction/submission.py")
     tree = ast.parse(source)
     imports = {
         alias.name
@@ -21,7 +25,7 @@ def test_runtime_submission_imports_auction_kind() -> None:
 
 
 def test_all_supported_auction_kinds_continue_to_deck_selection() -> None:
-    source = (ROOT / "bot/handlers/auctions.py").read_text(encoding="utf-8")
+    source = _source("bot/handlers/auction/submission.py")
     assert "selected_kind = AuctionKind.from_raw(kind)" in source
     assert "selected_kind.minimum_luxury_level" in source
     assert "Пока в разработке" not in source
@@ -29,7 +33,7 @@ def test_all_supported_auction_kinds_continue_to_deck_selection() -> None:
 
 
 def test_stale_unpublished_lots_stop_blocking_new_submissions() -> None:
-    source = (ROOT / "db/db.py").read_text(encoding="utf-8")
+    source = _source("db/repositories/auctions.py")
     assert "async def release_stale_unpublished_lots" in source
     assert "CURRENT_TIMESTAMP - INTERVAL '10 minutes'" in source
     assert "SET status = 'publication_failed'" in source
@@ -38,23 +42,25 @@ def test_stale_unpublished_lots_stop_blocking_new_submissions() -> None:
 
 
 def test_owner_has_recovery_command_and_button() -> None:
-    source = (ROOT / "bot/handlers/auctions.py").read_text(encoding="utf-8")
+    source = _source("bot/handlers/auction/submission_recovery.py")
+    bootstrap = _source("bot/bootstrap/routers.py")
+
     assert 'Command("cancel_pending")' in source
     assert 'callback_data="user_cancel_pending_lots"' in source
-    assert "await release_stale_unpublished_lots(message.from_user.id)" in source
+    assert "await release_stale_unpublished_lots(int(user_id))" in source
+    assert "await cancel_owner_unpublished_lots(int(user_id))" in source
+    assert "dispatcher.include_router(submission_recovery_router)" in bootstrap
 
 
 def test_status_constraint_supports_recovery_states() -> None:
-    sql = (
-        ROOT / "db/migrations/007_submission_recovery_and_cancel.sql"
-    ).read_text(encoding="utf-8")
+    sql = _source("db/migrations/007_submission_recovery_and_cancel.sql")
     assert "'publication_failed'" in sql
     assert "'cancelled'" in sql
     assert "ix_auctions_unpublished_owner_recovery" in sql
 
 
 def test_publisher_cleanup_is_timezone_safe() -> None:
-    source = (ROOT / "bot/handlers/auctions.py").read_text(encoding="utf-8")
-    assert "now = utc_now()" in source
-    assert "ensure_utc(start_time) > now" in source
-    assert "released = await release_stale_unpublished_lots()" in source
+    source = _source("bot/handlers/auction/publication.py")
+    assert "stale_ids = await service.recover_stale()" in source
+    assert "service.claim_due(now=utc_now(), limit=20)" in source
+    assert "except asyncio.CancelledError" in source

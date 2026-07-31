@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bot.repositories.admin_schedule import AdminScheduleRepository
-from bot.repositories.exchange_moderation import ExchangeModerationRepository
+from bot.repositories.exchange_media import ExchangeMediaRepository
 from bot.repositories.users import UserRepository
 from bot.services.admin_auctions import AdminAuctionContextService
 from bot.services.admin_diagnostics import AdminDiagnosticsQueries
@@ -80,13 +80,11 @@ def test_user_repository_preserves_private_chat_timestamps() -> None:
 def test_exchange_media_read_model_keeps_legacy_column_fallback() -> None:
     async def scenario() -> None:
         connection = FakeConnection(
-            fetchrows=[RuntimeError("media_type is absent"), {"image_id": "file-1"}]
+            fetchrows=[RuntimeError("media_type is absent"), {"media_id": "file-1"}]
         )
-        repository = ExchangeModerationRepository(
-            FakePool(connection)  # type: ignore[arg-type]
-        )
+        repository = ExchangeMediaRepository(FakePool(connection))  # type: ignore[arg-type]
 
-        media = await repository.first_card_media(17)
+        media = await repository.cover_media(17)
 
         assert media == ("file-1", "photo")
         assert len(connection.calls) == 2
@@ -101,9 +99,7 @@ def test_exchange_media_read_model_keeps_legacy_column_fallback() -> None:
 def test_schedule_repository_returns_scalar_maximum() -> None:
     async def scenario() -> None:
         connection = FakeConnection(fetchvals=[29])
-        repository = AdminScheduleRepository(
-            FakePool(connection)  # type: ignore[arg-type]
-        )
+        repository = AdminScheduleRepository(FakePool(connection))  # type: ignore[arg-type]
 
         assert await repository.last_nonempty_deck_id() == 29
         assert connection.calls[0][0] == "fetchval"
@@ -199,19 +195,33 @@ def test_admin_diagnostics_service_preserves_query_order_and_cutoff() -> None:
 
 class FakeLifecycleRepository:
     def __init__(self) -> None:
-        self.message_id: int | None = None
+        self.channel_message_id: int | None = None
+        self.discussion_message_id: int | None = None
 
-    async def auction_id_by_bid_message(self, message_id: int) -> int | None:
-        self.message_id = message_id
+    async def bind_discussion_by_message(
+        self,
+        *,
+        channel_message_id: int,
+        discussion_message_id: int,
+    ) -> int | None:
+        self.channel_message_id = channel_message_id
+        self.discussion_message_id = discussion_message_id
         return 91
 
 
-def test_lifecycle_service_resolves_bid_message_through_repository() -> None:
+def test_lifecycle_service_binds_discussion_through_repository() -> None:
     async def scenario() -> None:
         repository = FakeLifecycleRepository()
         service = AuctionLifecycleService(repository)  # type: ignore[arg-type]
 
-        assert await service.auction_id_by_bid_message(55) == 91
-        assert repository.message_id == 55
+        assert (
+            await service.bind_by_channel_message(
+                channel_message_id=55,
+                discussion_message_id=77,
+            )
+            == 91
+        )
+        assert repository.channel_message_id == 55
+        assert repository.discussion_message_id == 77
 
     asyncio.run(scenario())

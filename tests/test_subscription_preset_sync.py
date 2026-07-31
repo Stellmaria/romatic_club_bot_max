@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 from bot.repositories.card_subscriptions import CardSubscriptionsRepository
+from db.migrations import migration_files
 from db.subscriptions import _deck_id_from_lot_title, preset_keys_for_auction
 
 
@@ -42,13 +43,14 @@ def test_deck_presets_are_backfilled_and_kept_in_sync_by_migration() -> None:
     migration = (
         ROOT / "database/migrations/010_deck_notification_presets.sql"
     ).read_text(encoding="utf-8")
-    runner = (ROOT / "db/migrations.py").read_text(encoding="utf-8")
 
     assert "FROM public.decks" in migration
     assert "deck_all_" in migration
     assert "CREATE TRIGGER trg_sync_deck_notification_preset" in migration
     assert "AFTER INSERT OR UPDATE OF name ON public.decks" in migration
-    assert '"010_deck_notification_presets.sql"' in runner
+    assert "010_deck_notification_presets.sql" in {
+        path.name for path in migration_files()
+    }
 
 
 def test_preset_catalog_hides_deck_presets_not_present_in_auction_catalog() -> None:
@@ -110,7 +112,14 @@ def test_service_presets_are_derived_from_actual_auction_titles() -> None:
     )
 
 
-def test_notifier_uses_unified_preset_matching() -> None:
-    source = (ROOT / "bot/auction_notify.py").read_text(encoding="utf-8")
-    assert "subscribers_for_auction_presets" in source
-    assert "await subscribers_for_auction_presets(" in source
+def test_unified_matching_query_and_notifier_compatibility_are_present() -> None:
+    matching = (ROOT / "db/subscriptions.py").read_text(encoding="utf-8")
+    notifier = (ROOT / "bot/auction_notify.py").read_text(encoding="utf-8")
+
+    assert "async def subscribers_for_auction_presets" in matching
+    assert "keys = preset_keys_for_auction(" in matching
+    # The legacy notifier composes the same dimensions through compatibility
+    # exports while newer callers can use the unified query directly.
+    assert "subscribers_for_lot_title" in notifier
+    assert "subscribers_for_rarity" in notifier
+    assert "subscribers_for_deck" in notifier

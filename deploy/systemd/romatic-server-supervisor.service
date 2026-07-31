@@ -1,0 +1,31 @@
+[Unit]
+Description=Romatic Club Server Supervisor
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+Before=romatic-compose.service
+
+[Service]
+Type=simple
+User=%SERVICE_USER%
+Group=%SERVICE_USER%
+WorkingDirectory=%APP_DIR%
+EnvironmentFile=%APP_DIR%/.env
+Environment=ROMATIC_APP_DIR=%APP_DIR%
+Environment=ROMATIC_ENV_FILE=.env
+Environment=ROMATIC_COMPOSE_FILE=compose.yaml
+Environment=ROMATIC_DATA_DIR=%DATA_DIR%
+Environment=DOCKER_CONFIG=%DATA_DIR%/runtime/docker-config
+Environment=COMPOSE_BAKE=false
+ExecStart=/usr/bin/python3 %APP_DIR%/scripts/server_supervisor.py
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%APP_DIR% %DATA_DIR% /tmp
+
+[Install]
+WantedBy=multi-user.target
