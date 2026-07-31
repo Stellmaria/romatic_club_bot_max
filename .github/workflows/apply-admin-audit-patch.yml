@@ -24,15 +24,18 @@ jobs:
         run: |
           python - <<'PY'
           import base64
+          import hashlib
           import re
           from pathlib import Path
 
           output = bytearray()
           for part in sorted(Path('.').glob('.admin-audit-patch-part-*')):
               encoded = part.read_text(encoding='utf-8')
-              encoded = re.sub(r'[^A-Za-z0-9+/=]', '', encoded).rstrip('=')
-              encoded += '=' * (-len(encoded) % 4)
-              output.extend(base64.b64decode(encoded, validate=False))
+              encoded = re.sub(r'[^A-Za-z0-9+/=]', '', encoded)
+              print(part.name, len(encoded), hashlib.sha256(encoded.encode()).hexdigest(), flush=True)
+              normalized = encoded.rstrip('=')
+              normalized += '=' * (-len(normalized) % 4)
+              output.extend(base64.b64decode(normalized, validate=False))
           Path('/tmp/admin-audit.patch').write_bytes(output)
           PY
           git apply --check /tmp/admin-audit.patch
