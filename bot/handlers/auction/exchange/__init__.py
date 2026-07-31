@@ -7,6 +7,7 @@ from aiogram import Router
 from .submission import router as submission_router
 from .moderation import router as moderation_router
 from .catalog import router as catalog_router
+from .editor import router as editor_router
 from .diagnostics import router as diagnostics_router
 from .common import (  # noqa: F401
     EX_MODE_CARD,
@@ -22,6 +23,7 @@ from .common import (  # noqa: F401
     _exchange_gain_for_card as exchange_gain_for_card,
     _exchange_price_for_card as exchange_price_for_card,
     _get_exchange_deck_ids,
+    _get_exchange_deck_ids as get_exchange_deck_ids,
     _get_exchange_deck_ids as get_exchange_deck_ids,
     _get_exchange_decks_for_menu as get_exchange_decks_for_menu,
     _tg_clean as clean_telegram_text,
@@ -49,6 +51,7 @@ router = Router(name="auction_exchange")
 router.include_router(submission_router)
 router.include_router(moderation_router)
 router.include_router(catalog_router)
+router.include_router(editor_router)
 router.include_router(diagnostics_router)
 
 __all__ = [
