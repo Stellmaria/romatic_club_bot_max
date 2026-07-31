@@ -22,9 +22,9 @@ def test_media_registry_migration_is_persistent_and_unique() -> None:
 
 
 def test_admin_media_router_is_registered() -> None:
-    source = (ROOT / "main.py").read_text(encoding="utf-8")
+    source = (ROOT / "bot/bootstrap/routers.py").read_text(encoding="utf-8")
     assert "from bot.handlers.admin.media_assets import router as media_assets_router" in source
-    assert "dp.include_router(media_assets_router)" in source
+    assert "dispatcher.include_router(media_assets_router)" in source
 
 
 def test_media_command_supports_direct_file_id_and_deck_alias() -> None:
