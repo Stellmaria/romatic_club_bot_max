@@ -53,6 +53,7 @@ _RARITY_ALIASES = {
 }
 _DIAMOND_REWARDS = {"bronze": 20, "silver": 40, "gold": 80, "epic": 120}
 _TEA_REWARDS = {"bronze": 2, "silver": 4, "gold": 8, "epic": 12}
+_CARD_TEXT_LIMIT = 180
 
 
 def normalize_rarity(value: object) -> str | None:
@@ -109,11 +110,12 @@ def reward_text(card: Mapping[str, Any]) -> str:
 
 def extract_single_custom_emoji(message: Message) -> int | None:
     entities = list(message.entities or ()) + list(message.caption_entities or ())
-    ids = [
-        str(entity.custom_emoji_id)
-        for entity in entities
-        if str(entity.type) == "custom_emoji" and entity.custom_emoji_id
-    ]
+    ids: list[str] = []
+    for entity in entities:
+        entity_type = getattr(entity.type, "value", entity.type)
+        if str(entity_type) != "custom_emoji" or not entity.custom_emoji_id:
+            continue
+        ids.append(str(entity.custom_emoji_id))
     if len(ids) != 1:
         return None
     try:
@@ -128,13 +130,20 @@ def custom_emoji_html(custom_emoji_id: int | None, fallback: str = "🎴") -> st
     return f'<tg-emoji emoji-id="{int(custom_emoji_id)}">{fallback}</tg-emoji>'
 
 
+def _short_field(value: object, *, limit: int = _CARD_TEXT_LIMIT) -> str:
+    text = " ".join(str(value or "—").split())
+    if len(text) > limit:
+        text = text[: limit - 1].rstrip() + "…"
+    return html.escape(text)
+
+
 def format_card_review(card: Mapping[str, Any]) -> str:
     economy_ok, economy_message = validate_card_economy(card)
     emoji_id = card.get("card_emoji_id")
     emoji_preview = custom_emoji_html(int(emoji_id) if emoji_id else None)
     status = "✅" if economy_ok else "❌"
-    story = html.escape(str(card.get("story") or "—"))
-    quote = html.escape(str(card.get("quote") or "—"))
+    story = _short_field(card.get("story"))
+    quote = _short_field(card.get("quote"))
     return (
         f"{emoji_preview} <b>Проверка карточки</b>\n\n"
         f"<b>ID:</b> <code>{int(card['card_id'])}</code>\n"
