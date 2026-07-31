@@ -149,6 +149,8 @@ def test_source_contract_has_preview_approval_and_topic_target() -> None:
     assert "_PREVIEW_HOUR = 22" in announcements
     assert "_PREVIEW_MINUTE = 30" in announcements
     assert 'review.get("status") == "approved"' in announcements
+    assert "telegram_client.get_messages" in announcements
+    assert "approved_preview.message" in announcements
     assert "Button.inline" in announcements
     assert "message.message_thread_id" in handler
     assert "Всё верно, следующая" in handler
