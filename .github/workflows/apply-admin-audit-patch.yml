@@ -28,14 +28,39 @@ jobs:
           import re
           from pathlib import Path
 
+          expected = {
+              '.admin-audit-patch-part-00': (18000, 'e687f1d696df354b0a75829c571b7cd0defbc35ff612ded1a393c0be4eed2b51'),
+              '.admin-audit-patch-part-01': (18000, '57f2bda0fadb5025d0a607725a326ca24f4f150f275b4b511a68247a1b9ea081'),
+              '.admin-audit-patch-part-02': (18000, '0700b0409c0879ee572634cac8a25684129eeb48e178d340f172b7c1aee20de3'),
+              '.admin-audit-patch-part-03': (18000, '5de269c576df0e994f9ae1190e093919491be96ea17ebaef7985256465e456f1'),
+              '.admin-audit-patch-part-04': (18000, '2e52397aab80496b1752c3b06d75650dcecdcbcccc264650c12589265624e8c9'),
+              '.admin-audit-patch-part-05': (15528, 'd66136ab2f274bbfe9a50b1b231b3f90f05bad386a3be76c21770df6b91d717b'),
+          }
+
+          def digest(value: str) -> str:
+              return hashlib.sha256(value.encode()).hexdigest()
+
           output = bytearray()
           for part in sorted(Path('.').glob('.admin-audit-patch-part-*')):
-              encoded = part.read_text(encoding='utf-8')
-              encoded = re.sub(r'[^A-Za-z0-9+/=]', '', encoded)
-              print(part.name, len(encoded), hashlib.sha256(encoded.encode()).hexdigest(), flush=True)
+              encoded = re.sub(r'[^A-Za-z0-9+/=]', '', part.read_text(encoding='utf-8'))
+              expected_len, expected_hash = expected[part.name]
+              if digest(encoded) != expected_hash:
+                  if len(encoded) != expected_len + 1:
+                      raise RuntimeError(f'{part.name}: unexpected length {len(encoded)}')
+                  repaired = None
+                  for index in range(len(encoded)):
+                      candidate = encoded[:index] + encoded[index + 1:]
+                      if digest(candidate) == expected_hash:
+                          repaired = candidate
+                          break
+                  if repaired is None:
+                      raise RuntimeError(f'{part.name}: single-character repair failed')
+                  encoded = repaired
+              if len(encoded) != expected_len or digest(encoded) != expected_hash:
+                  raise RuntimeError(f'{part.name}: checksum validation failed')
               normalized = encoded.rstrip('=')
               normalized += '=' * (-len(normalized) % 4)
-              output.extend(base64.b64decode(normalized, validate=False))
+              output.extend(base64.b64decode(normalized, validate=True))
           Path('/tmp/admin-audit.patch').write_bytes(output)
           PY
           git apply --check /tmp/admin-audit.patch
