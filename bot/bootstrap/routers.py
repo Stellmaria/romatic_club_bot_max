@@ -8,6 +8,7 @@ from bot.handlers.admin.admin_panel import router as admin_panel_router
 from bot.handlers.admin.broadcast import register_broadcast_handlers
 from bot.handlers.admin.cards_admin import register_cards_admin_handlers
 from bot.handlers.admin.helper.new.card_economy import router as card_economy_router
+from bot.handlers.admin.media_assets import router as media_assets_router
 from bot.handlers.admin.moderation import router as moderation_router
 from bot.handlers.admin.outbox import router as outbox_admin_router
 from bot.handlers.admin.services.market_add_flow import router as market_flow
@@ -21,7 +22,6 @@ from bot.handlers.auction.admin_lifecycle import router as auction_admin_lifecyc
 from bot.handlers.auction.autobid import router as auction_autobid_router
 from bot.handlers.auction.bidding import router as auction_bidding_router
 from bot.handlers.auction.exchange import router as auction_exchange_router
-from bot.handlers.auction.exchange_diagnostics import router as auction_exchange_diagnostics_router
 from bot.handlers.auction.schedule import router as auction_schedule_router
 from bot.handlers.auction.submission import addlot_start
 from bot.handlers.auction.submission_recovery import router as submission_recovery_router
@@ -70,10 +70,8 @@ def register_all_routers(
     dispatcher.include_router(users_router)
     dispatcher.include_router(submission_recovery_router)
     dispatcher.include_router(auctions_router)
-    # The package router owns submission, moderation and catalog. Diagnostics
-    # remains a separate legacy router until its final package extraction.
+    # The package router owns submission, moderation, catalog and diagnostics.
     dispatcher.include_router(auction_exchange_router)
-    dispatcher.include_router(auction_exchange_diagnostics_router)
     dispatcher.include_router(emoji_setup_router)
 
     dispatcher.update.outer_middleware(ExpiredCallbackMiddleware())
@@ -90,6 +88,7 @@ def register_all_routers(
     dispatcher.include_router(auction_winner_print_router)
     dispatcher.include_router(comments_router)
     dispatcher.include_router(outbox_admin_router)
+    dispatcher.include_router(media_assets_router)
     dispatcher.include_router(admin_panel_router)
     dispatcher.include_router(moderation_router)
     dispatcher.include_router(admin_appeals_router)
