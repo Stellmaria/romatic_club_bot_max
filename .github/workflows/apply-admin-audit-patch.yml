@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
       - name: Apply audited changes
         run: |
-          cat .admin-audit-patch-part-* | base64 -d > /tmp/admin-audit.patch
+          cat .admin-audit-patch-part-* | base64 --decode --ignore-garbage > /tmp/admin-audit.patch
           git apply --check /tmp/admin-audit.patch
           git apply /tmp/admin-audit.patch
           rm -f .admin-audit-patch-part-*
