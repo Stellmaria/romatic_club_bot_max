@@ -10,13 +10,11 @@ from aiogram import Bot, Dispatcher
 
 from bot.bootstrap import build_background_task_specs, register_all_routers
 from bot.core.settings import Settings, settings as default_settings
+from bot.core.supervisor_client import supervisor_client
 from bot.core.tasks import BackgroundTaskManager
 from bot.telegram.protection import patch_bot_protect_content
-from db.core import (
-    close_db,
-    init_db,
-)
 from db.admin import is_admin
+from db.core import close_db, init_db
 
 logger = logging.getLogger("auction_bot")
 
@@ -67,9 +65,6 @@ async def _run_polling_with_worker_monitor(
         await asyncio.gather(worker_monitor, return_exceptions=True)
         await polling
     finally:
-        # External cancellation (service stop, SIGTERM, test timeout) may occur
-        # while both child tasks are pending.  Never leave polling alive while
-        # the surrounding lifecycle is already closing Bot/DB resources.
         for task in (polling, worker_monitor):
             if not task.done():
                 task.cancel()
@@ -87,6 +82,10 @@ async def run_bot(settings: Settings | None = None) -> None:
     try:
         await init_db()
         logger.info("Database startup complete")
+
+        if supervisor_client is not None:
+            await supervisor_client.start()
+            logger.info("Supervisor client session initialized")
 
         bot = Bot(token=app_settings.bot_token)
         patch_bot_protect_content(bot, is_admin=is_admin)
@@ -122,6 +121,8 @@ async def run_bot(settings: Settings | None = None) -> None:
             cleanup_steps.append(("background tasks", task_manager.stop))
         if bot is not None:
             cleanup_steps.append(("Telegram bot session", bot.session.close))
+        if supervisor_client is not None:
+            cleanup_steps.append(("Supervisor client session", supervisor_client.close))
         cleanup_steps.append(("database pool", close_db))
 
         cleanup_error: BaseException | None = None

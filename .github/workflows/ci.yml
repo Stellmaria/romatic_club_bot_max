@@ -18,6 +18,8 @@ jobs:
           cp .env.example .env
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_only_password/' .env
           sed -i 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://auction_bot:ci_only_password@postgres:5432/auction_bot#' .env
+          sed -i 's#^SUPERVISOR_TOKEN_FILE_HOST=.*#SUPERVISOR_TOKEN_FILE_HOST=./.ci-supervisor-token#' .env
+          printf '%s\n' 'ci-only-supervisor-token-value' > .ci-supervisor-token
       - name: Validate Compose contract
         run: docker compose config -q
       - name: Build production images
@@ -57,6 +59,7 @@ jobs:
             tests/test_process_restart.py \
             tests/test_admin_system_restart_contract.py \
             tests/test_server_supervisor_contract.py \
+            tests/test_supervisor_security_boundary.py \
             tests/test_hermes_incident_monitor_contract.py
 
   test:
