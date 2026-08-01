@@ -14,6 +14,7 @@ SPLITS = {
         "admin_panel_requests",
         "admin_panel_schedule",
         "admin_panel_sections",
+        "admin_user_lists",
         "admin_panel_exchange",
     ),
     "moderation": (
@@ -34,6 +35,7 @@ EXPECTED_HANDLER_BOUNDS = {
     "admin_panel_requests": ("admreq_back", "cb_exchange_approved_root", 21),
     "admin_panel_schedule": ("edit_schedule_button", "edit_price_handler", 19),
     "admin_panel_sections": ("show_decks_for_cards", "admin_help", 25),
+    "admin_user_lists": ("show_admins_list", "paginate_admin_user_list", 4),
     "admin_panel_exchange": ("cmd_card_video", "ex1_reject_reason", 16),
     "moderation_lots": ("fsm_back_handler", "add_deck_command", 18),
     "moderation_schedule": ("schedule_command", "force_publish_handler", 5),
@@ -93,7 +95,7 @@ def test_every_admin_handler_has_one_feature_owner_in_original_order() -> None:
             all_names.extend(names)
 
         assert len(all_names) == len(set(all_names))
-        expected_total = 89 if facade == "admin_panel" else 81
+        expected_total = 93 if facade == "admin_panel" else 81
         assert len(all_names) == expected_total
 
         compatibility_module = importlib.import_module(
