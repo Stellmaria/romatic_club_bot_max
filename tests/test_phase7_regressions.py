@@ -35,6 +35,7 @@ def test_exchange_monolith_is_a_compatibility_package() -> None:
         "submission.py",
         "moderation.py",
         "catalog.py",
+        "editor.py",
     }
     assert expected <= {path.name for path in EXCHANGE_DIR.glob("*.py")}
     assert (EXCHANGE_DIR / "diagnostics" / "__init__.py").exists()
@@ -44,6 +45,7 @@ def test_exchange_monolith_is_a_compatibility_package() -> None:
         "submission_router",
         "moderation_router",
         "catalog_router",
+        "editor_router",
         "diagnostics_router",
     ):
         assert f"router.include_router({router_name})" in facade
@@ -58,10 +60,17 @@ def test_exchange_handlers_are_distributed_without_duplicates() -> None:
     assert len(by_module["submission.py"]) == 12
     assert len(by_module["moderation.py"]) == 11
     assert len(by_module["catalog.py"]) == 18
-    assert sum(len(names) for path, names in by_module.items() if path.startswith("diagnostics/")) == 10
+    assert len(by_module["editor.py"]) == 11
+    diagnostics_count = sum(
+        len(names)
+        for path, names in by_module.items()
+        if path.startswith("diagnostics/")
+    )
+    assert diagnostics_count == 10
 
     all_handlers = [name for names in by_module.values() for name in names]
-    assert len(all_handlers) == 51
+    expected_total = 12 + 11 + 18 + 11 + diagnostics_count
+    assert len(all_handlers) == expected_total
     assert not [name for name, count in Counter(all_handlers).items() if count > 1]
 
 
@@ -118,6 +127,7 @@ def test_exchange_components_have_bounded_size() -> None:
         "submission.py": 1_000,
         "moderation.py": 1_350,
         "catalog.py": 1_300,
+        "editor.py": 650,
     }
     for filename, limit in limits.items():
         assert len(_source(EXCHANGE_DIR / filename).splitlines()) < limit
