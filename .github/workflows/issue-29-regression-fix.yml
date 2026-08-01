@@ -20,21 +20,14 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           keyboards = Path('bot/handlers/admin/helper/new/keyboards.py')
           source = keyboards.read_text(encoding='utf-8')
-          old = '''def menu_keyboard(*rows: Any) -> ReplyKeyboardMarkup:
-              kb = ReplyKeyboardBuilder()
-              for row in rows:
-                  if isinstance(row, (list, tuple)):
-                      kb.add(*(KeyboardButton(text=str(text)) for text in row))
-                      kb.adjust(len(row))
-                  else:
-                      kb.add(KeyboardButton(text=str(row)))
-                      kb.adjust(1)
-              return kb.as_markup(resize_keyboard=True)
-          '''
-          new = '''def menu_keyboard(*rows: Any) -> ReplyKeyboardMarkup:
+          start = source.index('def menu_keyboard(*rows: Any) -> ReplyKeyboardMarkup:')
+          end = source.index('from aiogram.types import InlineKeyboardMarkup', start)
+          replacement = dedent('''\
+          def menu_keyboard(*rows: Any) -> ReplyKeyboardMarkup:
               """Build a reply keyboard without reflowing previously added rows."""
 
               kb = ReplyKeyboardBuilder()
@@ -42,20 +35,15 @@ jobs:
                   values = row if isinstance(row, (list, tuple)) else (row,)
                   kb.row(*(KeyboardButton(text=str(text)) for text in values))
               return kb.as_markup(resize_keyboard=True)
-          '''
-          old = '\n'.join(line[10:] if line.startswith('          ') else line for line in old.splitlines())
-          new = '\n'.join(line[10:] if line.startswith('          ') else line for line in new.splitlines())
-          if source.count(old) != 1:
-              raise SystemExit(f'unexpected menu_keyboard block: {source.count(old)}')
-          keyboards.write_text(source.replace(old, new), encoding='utf-8')
+          ''').rstrip()
+          keyboards.write_text(source[:start] + replacement + '\n\n\n' + source[end:], encoding='utf-8')
 
           tests = Path('tests/test_admin_handler_split.py')
           source = tests.read_text(encoding='utf-8')
-          old = '''def _registered_handler_count(router: object) -> int:
-              observers = getattr(router, "observers")
-              return sum(len(observer.handlers) for observer in observers.values())
-          '''
-          new = '''def _registered_handler_count(router: object) -> int:
+          start = source.index('def _registered_handler_count(router: object) -> int:')
+          end = source.index('def test_admin_facades_compose_each_feature_once_in_priority_order', start)
+          replacement = dedent('''\
+          def _registered_handler_count(router: object) -> int:
               observers = getattr(router, "observers")
               return sum(len(observer.handlers) for observer in observers.values())
 
@@ -71,12 +59,8 @@ jobs:
                       for item in ast.walk(decorator)
                   )
               )
-          '''
-          old = '\n'.join(line[10:] if line.startswith('          ') else line for line in old.splitlines())
-          new = '\n'.join(line[10:] if line.startswith('          ') else line for line in new.splitlines())
-          if source.count(old) != 1:
-              raise SystemExit(f'unexpected handler-count helper: {source.count(old)}')
-          source = source.replace(old, new)
+          ''').rstrip()
+          source = source[:start] + replacement + '\n\n\n' + source[end:]
           old_assertion = '            assert _registered_handler_count(module.router) == len(names)\n'
           new_assertion = (
               '            assert _registered_handler_count(module.router) == (\n'
