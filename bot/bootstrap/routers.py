@@ -42,6 +42,7 @@ from bot.handlers.uid_verification import router as uid_verification_router
 from bot.handlers.users import router as users_router
 from bot.middlewares.debug import DebugAllMessages
 from bot.middlewares.expired_callback import ExpiredCallbackMiddleware
+from bot.middlewares.telegram_boundary import TelegramBoundaryMiddleware
 from bot.middlewares.user_sync import UserSyncMiddleware
 from bot.telegram.user_entrypoints import configure_user_entrypoints
 
@@ -85,6 +86,7 @@ def register_all_routers(
     dispatcher.include_router(auction_exchange_router)
     dispatcher.include_router(emoji_setup_router)
 
+    dispatcher.update.outer_middleware(TelegramBoundaryMiddleware())
     dispatcher.update.outer_middleware(ExpiredCallbackMiddleware())
     dispatcher.update.outer_middleware(UserSyncMiddleware())
 
