@@ -86,6 +86,9 @@ class Settings:
     database_pool_max_size: int
     uid_hash_key: str
     uid_enc_key: str
+    # Deprecated compatibility fields. Telegram shared-secret authorization was
+    # retired in issue #23; these values are always empty and will be removed
+    # together with the remaining legacy settings facade.
     admin_secret: str
     legacy_bridge_secret: str
     legacy_bridge_max_skew_seconds: int
@@ -145,7 +148,7 @@ class Settings:
             database_pool_max_size=max_pool,
             uid_hash_key=get_str("UID_HASH_KEY"),
             uid_enc_key=get_str("UID_ENC_KEY"),
-            admin_secret=get_str("ADMIN_SECRET"),
+            admin_secret="",
             legacy_bridge_secret=get_str("LEGACY_BRIDGE_SECRET"),
             legacy_bridge_max_skew_seconds=max(
                 1,
@@ -166,9 +169,7 @@ class Settings:
             userbot_api_hash=_first_str("USERBOT_API_HASH", "TELETHON_API_HASH", "TG_API_HASH"),
             userbot_session=get_str("USERBOT_SESSION", str(runtime_dir / "userbot_session")),
             backfill_limit_posts=max(1, get_int("BACKFILL_LIMIT_POSTS", 500)),
-            # Keep this assignment form for compatibility with historical
-            # source-level regression tests.
-            autobid_set_password=os.getenv("AUTOBID_SET_PASSWORD", "").strip(),
+            autobid_set_password="",
             winner_notify_deadline_minutes=max(1, get_int("WINNER_NOTIFY_DEADLINE_MINUTES", 5)),
             log_level=get_str("LOG_LEVEL", "INFO").upper(),
             aiogram_debug=get_bool("AIOGRAM_DEBUG"),
@@ -224,7 +225,7 @@ DISCUSSION_CHAT_ID = settings.discussion_chat_id
 DATABASE_URL = settings.database_url
 DATABASE_POOL_MIN_SIZE = settings.database_pool_min_size
 DATABASE_POOL_MAX_SIZE = settings.database_pool_max_size
-ADMIN_SECRET = settings.admin_secret
+ADMIN_SECRET = ""
 LEGACY_BRIDGE_SECRET = settings.legacy_bridge_secret
 LEGACY_BRIDGE_MAX_SKEW_SECONDS = settings.legacy_bridge_max_skew_seconds
 LEGACY_BRIDGE_NONCE_CACHE_SIZE = settings.legacy_bridge_nonce_cache_size
@@ -240,6 +241,6 @@ USERBOT_API_ID = settings.userbot_api_id
 USERBOT_API_HASH = settings.userbot_api_hash
 USERBOT_SESSION = settings.userbot_session
 BACKFILL_LIMIT_POSTS = settings.backfill_limit_posts
-AUTOBID_SET_PASSWORD = os.getenv("AUTOBID_SET_PASSWORD", "").strip()
+AUTOBID_SET_PASSWORD = ""
 WINNER_NOTIFY_DEADLINE_MINUTES = settings.winner_notify_deadline_minutes
 RUNTIME_DIR = settings.runtime_dir
