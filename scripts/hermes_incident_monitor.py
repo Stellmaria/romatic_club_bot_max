@@ -20,7 +20,9 @@ ACTIVE_STATUSES = frozenset({"queued", "submitted", "running", "started", "stopp
 SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization\s*:\s*bearer\s+)[^\s,;]+"),
     re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{8,}"),
-    re.compile(r"(?i)([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)[^\s,;]+"),
+    re.compile(
+        r"(?i)([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)[^\s,;]+"
+    ),
     re.compile(r"(?i)(postgres(?:ql)?://[^:\s/]+:)[^@\s]+(@)"),
     re.compile(r"\b\d{8,12}:[A-Za-z0-9_-]{20,}\b"),
 )
@@ -39,9 +41,8 @@ def redact(value: str) -> str:
 
 
 def _integer(name: str, default: int, minimum: int, maximum: int) -> int:
-    raw = os.getenv(name, str(default)).strip()
     try:
-        value = int(raw)
+        value = int(os.getenv(name, str(default)).strip())
     except ValueError as error:
         raise RuntimeError(f"{name} must be an integer") from error
     if not minimum <= value <= maximum:
@@ -102,6 +103,7 @@ class Monitor:
         self.state_dir = self.data_dir / "runtime" / "supervisor"
         self.state_path = self.state_dir / "hermes-incident-monitor.json"
         self.log_path = self.state_dir / "hermes-incident-monitor.log"
+        self.state_dir.mkdir(parents=True, exist_ok=True)
         self.hermes_url = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642").rstrip("/")
         self.hermes_key = os.getenv("HERMES_API_KEY", "").strip()
         if len(self.hermes_key) < 24:
@@ -109,33 +111,30 @@ class Monitor:
         self.poll_seconds = _integer("HERMES_INCIDENT_POLL_SECONDS", 30, 5, 3600)
         self.unhealthy_polls = _integer("HERMES_INCIDENT_UNHEALTHY_POLLS", 2, 1, 20)
         self.cooldown_seconds = _integer("HERMES_INCIDENT_COOLDOWN_SECONDS", 600, 30, 86400)
-        self.run_timeout_seconds = _integer("HERMES_INCIDENT_RUN_TIMEOUT_SECONDS", 3600, 60, 14400)
+        self.run_timeout_seconds = _integer(
+            "HERMES_INCIDENT_RUN_TIMEOUT_SECONDS", 3600, 60, 14400
+        )
         self.log_lines = _integer("HERMES_INCIDENT_LOG_LINES", 200, 20, 2000)
         self.services = ("bot", "userbot")
         self._stop = threading.Event()
         self._state = self._load_state()
         self._unhealthy_counts: dict[str, int] = {}
-        self._active_run: str | None = None
-        self._active_status = "idle"
+        active_run = self._state.get("active_run")
+        self._active_run = active_run if isinstance(active_run, str) and active_run else None
+        self._active_status = str(self._state.get("active_status") or "idle")
         self._last_event_key = str(self._state.get("last_event_key") or "")
-        self._last_event_at = float(self._state.get("last_event_at") or 0.0)
+        try:
+            self._last_event_at = float(self._state.get("last_event_at") or 0.0)
+        except (TypeError, ValueError):
+            self._last_event_at = 0.0
         self.telegram_token = os.getenv("BOT_TOKEN", "").strip()
         self.telegram_chat_id = _notification_chat_id()
-        self.state_dir.mkdir(parents=True, exist_ok=True)
 
     def stop(self) -> None:
         self._stop.set()
 
     def _compose(self, *args: str) -> list[str]:
-        return [
-            "docker",
-            "compose",
-            "--env-file",
-            self.env_file,
-            "-f",
-            self.compose_file,
-            *args,
-        ]
+        return ["docker", "compose", "--env-file", self.env_file, "-f", self.compose_file, *args]
 
     def _run(self, args: list[str], timeout: int = 60) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -159,13 +158,13 @@ class Monitor:
             state = item.get("State") or {}
             health = state.get("Health") or {}
             return Probe(
-                service=service,
-                container_id=container_id,
-                running=bool(state.get("Running")),
-                status=str(state.get("Status") or "") or None,
-                health=str(health.get("Status") or "") or None,
-                restart_count=max(0, int(item.get("RestartCount", 0) or 0)),
-                exit_code=int(state.get("ExitCode")) if state.get("ExitCode") is not None else None,
+                service,
+                container_id,
+                bool(state.get("Running")),
+                str(state.get("Status") or "") or None,
+                str(health.get("Status") or "") or None,
+                max(0, int(item.get("RestartCount", 0) or 0)),
+                int(state.get("ExitCode")) if state.get("ExitCode") is not None else None,
             )
         except (ValueError, TypeError, KeyError, IndexError, json.JSONDecodeError):
             logger.exception("Could not parse Docker inspect for %s", service)
@@ -180,17 +179,14 @@ class Monitor:
 
     def _previous(self, service: str) -> dict[str, Any]:
         probes = self._state.get("probes")
-        if not isinstance(probes, dict):
-            return {}
-        value = probes.get(service)
+        value = probes.get(service) if isinstance(probes, dict) else None
         return value if isinstance(value, dict) else {}
 
     def reason(self, probe: Probe) -> str | None:
         previous = self._previous(probe.service)
         if not previous:
             return "initial-not-running" if not probe.running else None
-        previous_restarts = max(0, int(previous.get("restart_count", 0) or 0))
-        if probe.restart_count > previous_restarts:
+        if probe.restart_count > max(0, int(previous.get("restart_count", 0) or 0)):
             return "container-auto-restarted"
         if not probe.running:
             return "container-not-running"
@@ -221,18 +217,21 @@ class Monitor:
 
     def _logs(self, service: str) -> str:
         result = self._run(
-            self._compose("logs", "--no-color", "--tail", str(self.log_lines), service),
-            60,
+            self._compose("logs", "--no-color", "--tail", str(self.log_lines), service), 60
         )
         return redact(result.stdout)[-12000:]
 
-    def _request(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(
+        self, method: str, path: str, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         data = None
         headers = {"Authorization": f"Bearer {self.hermes_key}", "Accept": "application/json"}
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(self.hermes_url + path, data=data, headers=headers, method=method)
+        request = urllib.request.Request(
+            self.hermes_url + path, data=data, headers=headers, method=method
+        )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 raw = response.read().decode("utf-8", errors="replace")
@@ -240,7 +239,7 @@ class Monitor:
             details = error.read().decode("utf-8", errors="replace")[:1000]
             raise RuntimeError(f"Hermes HTTP {error.code}: {redact(details)}") from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
-            raise RuntimeError(f"Hermes unavailable: {error}") from error
+            raise RuntimeError(f"Hermes unavailable: {type(error).__name__}") from error
         value = json.loads(raw)
         if not isinstance(value, dict):
             raise RuntimeError("Hermes returned unexpected response")
@@ -263,10 +262,11 @@ class Monitor:
         try:
             with urllib.request.urlopen(request, timeout=15) as response:
                 response.read()
-        except Exception:
-            logger.exception("Could not send Telegram notification")
+        except Exception as error:
+            logger.warning("Could not send Telegram notification (%s)", type(error).__name__)
 
-    def _event_key(self, probe: Probe, reason: str) -> str:
+    @staticmethod
+    def _event_key(probe: Probe, reason: str) -> str:
         return "|".join(
             (
                 probe.service,
@@ -347,6 +347,8 @@ class Monitor:
             self._active_run = None
 
     def run(self) -> int:
+        if self._active_run and self._active_status in ACTIVE_STATUSES:
+            threading.Thread(target=self._wait_run, args=(self._active_run,), daemon=True).start()
         while not self._stop.is_set():
             probes = [self.probe(service) for service in self.services]
             for probe in probes:
@@ -354,8 +356,8 @@ class Monitor:
                 if reason:
                     try:
                         self.submit(probe, reason)
-                    except Exception:
-                        logger.exception("Could not submit Max incident")
+                    except Exception as error:
+                        logger.warning("Could not submit Max incident (%s)", type(error).__name__)
             self._save(probes)
             self._stop.wait(self.poll_seconds)
         return 0
@@ -366,7 +368,10 @@ def main() -> int:
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[logging.FileHandler(monitor.log_path, encoding="utf-8"), logging.StreamHandler()],
+        handlers=[
+            logging.FileHandler(monitor.log_path, encoding="utf-8"),
+            logging.StreamHandler(),
+        ],
     )
 
     def stop(_signum: int, _frame: Any) -> None:
