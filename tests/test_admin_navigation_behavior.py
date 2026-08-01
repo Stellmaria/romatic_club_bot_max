@@ -26,7 +26,7 @@ def _callback_data(markup) -> list[list[str | None]]:
     return [[button.callback_data for button in row] for row in markup.inline_keyboard]
 
 
-def test_admin_root_menu_preserves_schedule_exchange_and_owner_section() -> None:
+def test_admin_root_menu_keeps_exchange_and_owner_section() -> None:
     regular = _reply_texts(
         admin_menu.build_admin_main_keyboard(include_system=False)
     )
@@ -37,7 +37,7 @@ def test_admin_root_menu_preserves_schedule_exchange_and_owner_section() -> None
     assert regular == [
         ["⚙️ Модерация", "👥 Пользователи", "🎴 Карты"],
         ["📊 Статистика", "📣 Рассылка", "🚫 Логи"],
-        ["📅 Расписание", "🛒 Биржа"],
+        ["🛒 Биржа"],
     ]
     assert owner == [*regular, ["🖥 Система"]]
 
