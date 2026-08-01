@@ -140,10 +140,6 @@ from db.auctions import (
     get_auctions_by_date_with_owners as get_auctions_by_date,
     get_auctions_by_date_with_owners,
 )
-from db.core import (
-    fetch,
-    fetchrow,
-)
 from db.exchange import get_exchange_batch
 
 

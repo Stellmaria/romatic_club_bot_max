@@ -120,8 +120,17 @@ async def get_pending_auctions(
         limit: int = 50,
         offset: int = 0,
 ) -> List[Dict[str, Any]]:
-    where = ["a.status='pending'"]
-    args: List[Any] = []
+    """Return every application that still requires moderator scheduling.
+
+    Creation and moderation paths legitimately use ``draft``,
+    ``moderation`` or ``approved`` before a slot is assigned. Keeping
+    these states in the review queue prevents valid submissions from
+    disappearing before schedule assignment.
+    """
+
+    review_statuses = ("draft", "moderation", "pending", "approved")
+    args: List[Any] = [list(review_statuses)]
+    where = ["a.status = ANY($1::text[])"]
 
     if auction_kind:
         where.append("a.auction_kind=$%d" % (len(args) + 1))
@@ -136,45 +145,51 @@ async def get_pending_auctions(
 
     sql = f"""
         SELECT
-            a.auction_id,
-            a.card_name,
-            a.hero_name,
-            COALESCE(NULLIF(a.image_id, ''), c.image_id) AS image_id,
-            a.start_price,
-            a.currency,
-            a.comment,
-            a.created_at,
-            a.proof_photo_id,
-            a.auction_kind,
-            a.created_at,
-a.proof_photo_id,
-a.craft_uid_possible,
-a.auction_kind,
-            c.card_id,
-            c.num AS card_num,
-            c.deck_id,
-            d.name AS deck_name,
-            c.rarity,
-            c.obtain_type,
-            c.obtain_amount,
-            c.story,
-            c.quote,
-            c.image_id AS card_image_id
+  a.auction_id,
+  a.status,
+  a.card_name,
+  a.hero_name,
+  COALESCE(NULLIF(a.image_id, ''), c.image_id) AS image_id,
+  a.start_price,
+  a.currency,
+  a.comment,
+  a.created_at,
+  a.proof_photo_id,
+  a.craft_uid_possible,
+  a.auction_kind,
+  COALESCE(a.card_id, c.card_id) AS card_id,
+  c.num AS card_num,
+  c.deck_id,
+  d.name AS deck_name,
+  c.rarity,
+  c.obtain_type,
+  c.obtain_amount,
+  c.story,
+  c.quote,
+  c.image_id AS card_image_id
         FROM public.auctions a
-        LEFT JOIN public.cards c
-            ON lower(trim(c.card_name)) = lower(trim(a.card_name))
-           AND lower(trim(coalesce(c.hero_name, ''))) = lower(trim(coalesce(a.hero_name, '')))
-        LEFT JOIN public.decks d
-            ON d.id = c.deck_id
+        LEFT JOIN LATERAL (
+  SELECT c0.*
+  FROM public.cards c0
+  WHERE c0.card_id = a.card_id
+     OR (
+          a.card_id IS NULL
+          AND lower(trim(c0.card_name)) = lower(trim(a.card_name))
+          AND lower(trim(coalesce(c0.hero_name, ''))) =
+              lower(trim(coalesce(a.hero_name, '')))
+        )
+  ORDER BY (c0.card_id = a.card_id) DESC, c0.card_id
+  LIMIT 1
+        ) c ON TRUE
+        LEFT JOIN public.decks d ON d.id = c.deck_id
         WHERE {where_sql}
-        ORDER BY a.created_at ASC
+        ORDER BY a.created_at ASC, a.auction_id ASC
         LIMIT ${limit_i} OFFSET ${offset_i}
     """
 
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(sql, *args)
         return [dict(r) for r in rows]
-
 
 @require_db_pool
 async def get_auctions_by_date(selected_date: date) -> List[Dict[str, Any]]:

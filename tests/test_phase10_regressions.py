@@ -35,7 +35,10 @@ def _literal_all(path: Path) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in tree.body:
         if isinstance(node, ast.Assign):
-            if any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets):
+            if any(
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in node.targets
+            ):
                 return list(ast.literal_eval(node.value))
     raise AssertionError(f"{path} has no literal __all__")
 
@@ -119,18 +122,27 @@ def test_cross_domain_compatibility_bridge_is_small_and_explicit() -> None:
         assert "from db.repositories._compat import *" not in source
 
 
-def test_pool_lifecycle_has_a_stable_proxy_for_legacy_imports() -> None:
-    source = (ROOT / "db/core.py").read_text(encoding="utf-8")
+def test_pool_lifecycle_has_one_application_owned_runtime() -> None:
+    pool_source = (ROOT / "db/pool.py").read_text(encoding="utf-8")
+    core_source = (ROOT / "db/core.py").read_text(encoding="utf-8")
     lifecycle = (ROOT / "db/lifecycle.py").read_text(encoding="utf-8")
-    assert "class PoolProxy" in source
-    assert "db_pool = PoolProxy()" in source
-    assert "db_pool.bind(pool)" in source
-    assert "db_pool.clear()" in lifecycle
-    assert "@wraps(func)" in source
+    combined = "\n".join((pool_source, core_source, lifecycle))
+
+    assert "class DatabaseRuntime" in pool_source
+    assert pool_source.count("asyncpg.create_pool(") == 1
+    assert "class PoolProxy" not in core_source
+    assert "class DatabaseAccess" in core_source
+    assert "install_database_runtime(runtime)" in lifecycle
+    assert "await target.close()" in lifecycle
+    assert "legacy_impl.db_pool" not in combined
+    assert "@wraps(func)" in core_source
 
 
 def test_application_services_use_core_pool_not_legacy_facade() -> None:
-    paths = [*sorted((ROOT / "bot/services").glob("*.py")), ROOT / "bot/telegram/outbox.py"]
+    paths = [
+        *sorted((ROOT / "bot/services").glob("*.py")),
+        ROOT / "bot/telegram/outbox.py",
+    ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in paths)
     assert "from db.db import get_db_pool" not in combined
     assert combined.count("from db.core import get_db_pool") >= 10

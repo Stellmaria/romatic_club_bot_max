@@ -309,21 +309,35 @@ async def migrate_database_url(database_url: str) -> list[str]:
     if not database_url:
         raise RuntimeError("DATABASE_URL не задан")
 
-    pool = await asyncpg.create_pool(database_url, min_size=1, max_size=2)
+    from bot.core.settings import DatabaseSettings
+    from db.pool import DatabaseRuntime
+
+    runtime = DatabaseRuntime(
+        DatabaseSettings(
+            database_url,
+            auto_migrate=False,
+            pool_min_size=1,
+            pool_max_size=2,
+        )
+    )
+    pool = await runtime.start()
     try:
         return await apply_migrations(pool)
     finally:
-        await pool.close()
+        await runtime.close()
 
 
 async def _main() -> None:
-    from bot.core.legacy_config import legacy_config
+    from bot.core.environment import load_project_environment
+    from bot.core.settings import DatabaseSettings
 
+    load_project_environment()
+    settings = DatabaseSettings.from_env()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-    await migrate_database_url(legacy_config.DATABASE_URL)
+    await migrate_database_url(settings.url)
 
 
 if __name__ == "__main__":

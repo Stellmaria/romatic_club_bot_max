@@ -13,7 +13,7 @@ from db.errors import (
     record_database_failure,
     translate_database_error,
 )
-from db.pool import get_db_pool as _runtime_get_db_pool
+from db.pool import DatabaseConfigurationError, DatabaseRuntime
 
 logger = logging.getLogger("auction_bot")
 
@@ -24,6 +24,58 @@ _DATABASE_EXCEPTIONS = (
     OSError,
     TimeoutError,
 )
+_active_runtime: DatabaseRuntime | None = None
+
+
+def current_database_runtime() -> DatabaseRuntime | None:
+    """Return the runtime installed by the application composition root."""
+
+    return _active_runtime
+
+
+def install_database_runtime(runtime: DatabaseRuntime) -> None:
+    """Expose one application-owned runtime to temporary compatibility APIs."""
+
+    global _active_runtime
+    current = _active_runtime
+    if current is runtime:
+        return
+    if current is not None and current.started:
+        raise RuntimeError("a different database runtime is already active")
+    _active_runtime = runtime
+
+
+def uninstall_database_runtime(runtime: DatabaseRuntime | None = None) -> None:
+    """Remove a closed runtime without touching another process lifecycle."""
+
+    global _active_runtime
+    current = _active_runtime
+    if current is None:
+        return
+    if runtime is not None and current is not runtime:
+        raise RuntimeError("cannot uninstall a different database runtime")
+    if current.started:
+        raise RuntimeError("cannot uninstall database runtime while its pool is open")
+    _active_runtime = None
+
+
+def configure_database(settings: DatabaseSettings) -> DatabaseRuntime:
+    """Compatibility helper that configures, but does not start, one runtime."""
+
+    runtime = _active_runtime
+    if runtime is None:
+        runtime = DatabaseRuntime(settings)
+        install_database_runtime(runtime)
+    else:
+        runtime.configure(settings)
+    return runtime
+
+
+def reset_database_configuration_for_testing() -> None:
+    global _active_runtime
+    if _active_runtime is not None and _active_runtime.started:
+        raise RuntimeError("cannot reset database settings while the pool is open")
+    _active_runtime = None
 
 
 class _TransactionProxy:
@@ -59,9 +111,6 @@ class _ConnectionProxy:
             method = getattr(self.raw_connection, method_name)
             return await method(*args, **kwargs)
         except asyncpg.IntegrityConstraintViolationError as exc:
-            # Repositories intentionally map several constraints to domain
-            # errors. Record the failure for legacy boundaries, but preserve
-            # the asyncpg type for those explicit mappings.
             record_database_failure(
                 translate_database_error(exc, f"database.{method_name}")
             )
@@ -136,49 +185,62 @@ class _AcquireProxy:
         return acquire_one().__await__()
 
 
-class PoolProxy:
-    """Stable, instrumented reference to the current asyncpg pool."""
+class DatabaseAccess:
+    """Non-owning compatibility view of the installed DatabaseRuntime.
 
-    def __init__(self) -> None:
-        self._pool: Optional[Any] = None
+    It intentionally stores no pool.  The application lifecycle owns the
+    runtime; this object only keeps legacy query functions operational while
+    they are migrated to constructor-injected repositories.
+    """
 
     @property
-    def pool(self) -> Optional[Any]:
-        return self._pool
+    def runtime(self) -> DatabaseRuntime:
+        runtime = _active_runtime
+        if runtime is None:
+            raise DatabaseConfigurationError("database runtime is not installed")
+        return runtime
+
+    @property
+    def pool(self) -> Any | None:
+        runtime = _active_runtime
+        return None if runtime is None else runtime.pool
 
     def bind(self, pool: Any) -> None:
-        self._pool = pool
+        """Install a fake pool for compatibility tests only."""
+
+        global _active_runtime
+        _active_runtime = DatabaseRuntime.for_testing(pool)
 
     def clear(self) -> None:
-        self._pool = None
+        """Detach the compatibility runtime without closing a test double."""
+
+        global _active_runtime
+        _active_runtime = None
 
     def require(self) -> Any:
-        if self._pool is None:
-            raise RuntimeError("db_pool is not initialized")
-        return self._pool
+        return self.runtime.require_pool()
 
     def acquire(self, *args: Any, **kwargs: Any) -> _AcquireProxy:
-        return _AcquireProxy(self.require().acquire(*args, **kwargs))
+        return _AcquireProxy(self.runtime.acquire(*args, **kwargs))
 
     async def release(self, connection: Any, *args: Any, **kwargs: Any) -> Any:
         raw_connection = getattr(connection, "raw_connection", connection)
         try:
-            return await self.require().release(raw_connection, *args, **kwargs)
+            return await self.runtime.release(raw_connection, *args, **kwargs)
         except _DATABASE_EXCEPTIONS as exc:
             error = translate_database_error(exc, "database.release")
             record_database_failure(error)
             raise error from exc
 
     def __bool__(self) -> bool:
-        return self._pool is not None
+        return self.pool is not None
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.require(), name)
 
 
-db_pool = PoolProxy()
-# Historical query modules import this spelling. Keep both names pointed at
-# the same instrumented reference instead of creating a second pool owner.
+db_pool = DatabaseAccess()
+# Deprecated spelling retained only as a non-owning adapter.
 pool_proxy = db_pool
 
 
@@ -190,31 +252,25 @@ async def fetchall(query: str, *args: Any) -> list[dict[str, Any]]:
 
 
 async def get_db_pool(settings: DatabaseSettings | None = None) -> Any:
-    """Return the real managed pool while binding strict legacy instrumentation."""
+    """Start and return the pool owned by the installed runtime."""
 
-    pool = db_pool.pool
-    if pool is None:
-        pool = await _runtime_get_db_pool(settings)
-        db_pool.bind(pool)
-        logger.info("Database pool initialized")
-
-    # Legacy compatibility functions must use the instrumented proxy. Modern
-    # repositories receive the real pool and already propagate exceptions.
-    try:
-        from db import legacy_impl
-
-        legacy_impl.db_pool = db_pool
-    except ImportError:
-        pass
-    return pool
+    runtime = _active_runtime
+    if runtime is None:
+        if settings is None:
+            raise DatabaseConfigurationError("database runtime is not installed")
+        runtime = DatabaseRuntime(settings)
+        install_database_runtime(runtime)
+    elif settings is not None:
+        runtime.configure(settings)
+    return await runtime.start()
 
 
 def require_db_pool(func: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         if not db_pool:
-            logger.error("Database pool not initialized")
-            raise RuntimeError("Database pool not initialized")
+            logger.error("Database runtime is not started")
+            raise RuntimeError("Database runtime is not started")
         async with persistence_boundary(f"{func.__module__}.{func.__name__}"):
             return await func(*args, **kwargs)
 
@@ -291,15 +347,21 @@ from db.lifecycle import close_db, init_db
 
 __all__ = [
     "PersistenceError",
+    "DatabaseAccess",
+    "configure_database",
+    "current_database_runtime",
     "db_pool",
     "pool_proxy",
     "fetchall",
     "get_db_pool",
     "init_db",
     "close_db",
+    "install_database_runtime",
+    "uninstall_database_runtime",
     "fetch",
     "fetchrow",
     "fetchval",
     "execute",
     "require_db_pool",
+    "reset_database_configuration_for_testing",
 ]
