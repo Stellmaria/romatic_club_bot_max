@@ -28,6 +28,8 @@ from db.legacy import count_sold_by_card_id, count_sold_same_card, list_auctions
 
 logger = logging.getLogger("auction_bot.publication")
 
+_UNSET = object()
+
 
 def _without_usernames(value: object) -> str:
     return re.sub(r"@\w+", "", str(value or "")).strip()
@@ -50,9 +52,6 @@ def _publication_targets(
     as an explicit fallback because Telegram migrations and stale environment
     values can leave a valid public channel reachable only by its username.
     """
-
-    if configured_username is None:
-        configured_username = legacy_config.AUCTION_CHANNEL_USERNAME
 
     targets: list[int | str] = []
     if isinstance(configured, int) and configured:
@@ -169,13 +168,20 @@ async def publish_auction_lot(
     channel_id: int | str | None = None,
     lot_number: int | None = None,
     publication_service: AuctionPublicationService | None = None,
-    channel_username: str | None = None,
+    channel_username: str | None | object = _UNSET,
 ) -> int | None:
     """Deliver one claimed auction and atomically record its Telegram message."""
     if channel_id is None:
         channel_id = legacy_config.AUCTION_CHANNEL_ID
-    if channel_username is None:
-        channel_username = legacy_config.AUCTION_CHANNEL_USERNAME
+    resolved_channel_username = (
+        legacy_config.AUCTION_CHANNEL_USERNAME
+        if channel_username is _UNSET
+        else channel_username
+    )
+    if resolved_channel_username is not None and not isinstance(
+        resolved_channel_username, str
+    ):
+        raise TypeError("channel_username must be a string or None")
     del lot_number  # retained for compatibility with existing admin calls
     auction_id = int(auction["auction_id"])
     if auction.get("message_id"):
@@ -202,7 +208,7 @@ async def publish_auction_lot(
 
         message = None
         last_delivery_error: Exception | None = None
-        for target in _publication_targets(channel_id, channel_username):
+        for target in _publication_targets(channel_id, resolved_channel_username):
             try:
                 message = await _send_publication(
                     bot,

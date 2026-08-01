@@ -86,4 +86,4 @@ def test_publisher_receives_both_channel_addresses() -> None:
     assert "channel_id=auction_channel_id" in workers
     assert "channel_username=auction_channel_username" in workers
     assert "def _publication_targets(" in publication
-    assert "for target in _publication_targets(channel_id, channel_username):" in publication
+    assert "for target in _publication_targets(channel_id, resolved_channel_username):" in publication

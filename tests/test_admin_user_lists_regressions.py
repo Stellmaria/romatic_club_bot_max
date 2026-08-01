@@ -37,7 +37,7 @@ def test_admin_list_combines_database_admins_and_configured_owners() -> None:
 
     assert "await list_admins()" in lists
     assert "await get_all_users()" in lists
-    assert "for raw_owner_id in ADMINS_OWNERS:" in lists
+    assert "for raw_owner_id in legacy_config.ADMINS_OWNERS:" in lists
     assert 'current["is_owner"] = True' in lists
 
 

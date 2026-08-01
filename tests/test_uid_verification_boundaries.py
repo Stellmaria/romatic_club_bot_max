@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from bot.repositories.uid_identity_admin import UIDIdentityAdminRepository  # noqa: E402
+from bot.uid_crypto import configure_uid_crypto, reset_uid_crypto_for_testing  # noqa: E402
 from bot.repositories.uid_verification import UIDVerificationRepository  # noqa: E402
 
 
@@ -155,34 +156,34 @@ async def test_confirmation_request_lookup_is_owned_by_repository() -> None:
 
 
 @pytest.mark.asyncio
-async def test_master_ban_is_atomic_and_never_persists_plain_uid(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("UID_HASH_KEY", "test-only-hmac-key")
-    monkeypatch.setenv(
-        "UID_ENC_KEY",
+async def test_master_ban_is_atomic_and_never_persists_plain_uid() -> None:
+    configure_uid_crypto(
+        "test-only-hmac-key",
         "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
     )
-    uid = "0123456789abcdef01234567"
-    connection = _FakeConnection([{"user_id": 25}, {"uid_last4": "4567"}])
-    repository = UIDIdentityAdminRepository(_FakePool(connection))  # type: ignore[arg-type]
+    try:
+        uid = "0123456789abcdef01234567"
+        connection = _FakeConnection([{"user_id": 25}, {"uid_last4": "4567"}])
+        repository = UIDIdentityAdminRepository(_FakePool(connection))  # type: ignore[arg-type]
 
-    result = await repository.apply_master_ban(
-        uid=uid,
-        user_id=31,
-        banned_by=9,
-        reason="policy",
-        uid_banned_until=None,
-        user_banned_until=datetime.fromisoformat("2030-01-01T00:00:00+00:00"),
-    )
+        result = await repository.apply_master_ban(
+            uid=uid,
+            user_id=31,
+            banned_by=9,
+            reason="policy",
+            uid_banned_until=None,
+            user_banned_until=datetime.fromisoformat("2030-01-01T00:00:00+00:00"),
+        )
 
-    assert result.owner_user_id == 25
-    assert connection.transaction_entries == connection.transaction_exits == 1
-    persisted_args = [
-        value
-        for _, args in (*connection.fetchrow_calls, *connection.execute_calls)
-        for value in args
-    ]
-    assert uid not in persisted_args
-    assert any(value == "4567" for value in persisted_args)
-    assert len(connection.execute_calls) == 2
+        assert result.owner_user_id == 25
+        assert connection.transaction_entries == connection.transaction_exits == 1
+        persisted_args = [
+            value
+            for _, args in (*connection.fetchrow_calls, *connection.execute_calls)
+            for value in args
+        ]
+        assert uid not in persisted_args
+        assert any(value == "4567" for value in persisted_args)
+        assert len(connection.execute_calls) == 2
+    finally:
+        reset_uid_crypto_for_testing()
