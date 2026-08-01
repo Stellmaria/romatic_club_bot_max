@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import os
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from typing import Any
 
 import aiohttp
@@ -11,11 +13,14 @@ class SupervisorUnavailable(RuntimeError):
     """Raised when the host-side Supervisor cannot be reached."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class SupervisorClient:
     base_url: str
     token: str
     timeout_seconds: float = 20.0
+    default_actor: str = "telegram-bot"
+    _session: aiohttp.ClientSession | None = field(default=None, init=False, repr=False)
+    _session_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
     @classmethod
     def from_env(cls) -> "SupervisorClient | None":
@@ -30,7 +35,28 @@ class SupervisorClient:
             timeout = float(os.getenv("SUPERVISOR_CLIENT_TIMEOUT_SECONDS", "20"))
         except ValueError:
             timeout = 20.0
-        return cls(base_url=base_url, token=token, timeout_seconds=max(2.0, timeout))
+        actor = os.getenv("SUPERVISOR_ACTOR", "telegram-bot").strip() or "telegram-bot"
+        return cls(
+            base_url=base_url,
+            token=token,
+            timeout_seconds=max(2.0, timeout),
+            default_actor=actor[:64],
+        )
+
+    async def start(self) -> None:
+        if self._session is not None and not self._session.closed:
+            return
+        async with self._session_lock:
+            if self._session is not None and not self._session.closed:
+                return
+            timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
+            self._session = aiohttp.ClientSession(timeout=timeout)
+
+    async def close(self) -> None:
+        async with self._session_lock:
+            session, self._session = self._session, None
+        if session is not None and not session.closed:
+            await session.close()
 
     async def request(
         self,
@@ -38,43 +64,69 @@ class SupervisorClient:
         path: str,
         *,
         payload: dict[str, Any] | None = None,
+        actor: str | None = None,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
-        timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
-        headers = {"Authorization": f"Bearer {self.token}"}
-        try:
-            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+        await self.start()
+        session = self._session
+        if session is None:
+            raise SupervisorUnavailable("Supervisor HTTP session is unavailable")
+
+        normalized_method = method.upper()
+        operation_request_id = (request_id or uuid.uuid4().hex).strip()[:64]
+        operation_actor = (actor or self.default_actor).strip()[:64] or self.default_actor
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "X-Request-ID": operation_request_id,
+            "X-Actor": operation_actor,
+        }
+
+        attempts = 2
+        for attempt in range(attempts):
+            try:
                 async with session.request(
-                    method,
+                    normalized_method,
                     f"{self.base_url}{path}",
                     json=payload,
+                    headers=headers,
                 ) as response:
                     data = await response.json(content_type=None)
-                    if response.status >= 400:
-                        detail = str(data.get("error") or data.get("message") or response.status)
-                        raise SupervisorUnavailable(detail)
                     if not isinstance(data, dict):
                         raise SupervisorUnavailable("Некорректный ответ Supervisor")
+                    if response.status >= 400:
+                        detail = str(
+                            data.get("error")
+                            or data.get("message")
+                            or response.status
+                        )
+                        raise SupervisorUnavailable(detail)
                     return data
-        except (aiohttp.ClientError, TimeoutError, ValueError) as exc:
-            raise SupervisorUnavailable(str(exc)) from exc
+            except SupervisorUnavailable:
+                raise
+            except (aiohttp.ClientError, TimeoutError, ValueError) as exc:
+                if attempt + 1 >= attempts:
+                    raise SupervisorUnavailable(str(exc)) from exc
+                await asyncio.sleep(0.2)
 
-    async def status(self) -> dict[str, Any]:
-        return await self.request("GET", "/v1/status")
+        raise SupervisorUnavailable("Supervisor request failed")
 
-    async def logs(self) -> dict[str, Any]:
-        return await self.request("GET", "/v1/logs")
+    async def status(self, *, actor: str | None = None) -> dict[str, Any]:
+        return await self.request("GET", "/v1/status", actor=actor)
 
-    async def restart(self) -> dict[str, Any]:
-        return await self.request("POST", "/v1/restart")
+    async def logs(self, *, actor: str | None = None) -> dict[str, Any]:
+        return await self.request("GET", "/v1/logs", actor=actor)
 
-    async def restart_userbot(self) -> dict[str, Any]:
-        return await self.request("POST", "/v1/restart-userbot")
+    async def restart(self, *, actor: str | None = None) -> dict[str, Any]:
+        return await self.request("POST", "/v1/restart", actor=actor)
 
-    async def update(self) -> dict[str, Any]:
-        return await self.request("POST", "/v1/update")
+    async def restart_userbot(self, *, actor: str | None = None) -> dict[str, Any]:
+        return await self.request("POST", "/v1/restart-userbot", actor=actor)
 
-    async def rollback(self) -> dict[str, Any]:
-        return await self.request("POST", "/v1/rollback")
+    async def update(self, *, actor: str | None = None) -> dict[str, Any]:
+        return await self.request("POST", "/v1/update", actor=actor)
+
+    async def rollback(self, *, actor: str | None = None) -> dict[str, Any]:
+        return await self.request("POST", "/v1/rollback", actor=actor)
 
 
 supervisor_client = SupervisorClient.from_env()
