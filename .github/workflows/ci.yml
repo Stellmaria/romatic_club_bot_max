@@ -8,6 +8,39 @@ permissions:
   contents: read
 
 jobs:
+  callback-migration:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/issue-26-telegram-boundary'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/issue-26-telegram-boundary
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Migrate callback parsing
+        run: python scripts/migrate_callback_splits.py --write
+      - name: Validate migrated sources
+        run: |
+          python -m compileall -q bot/handlers
+          python scripts/check_telegram_boundary.py
+          git diff --check
+      - name: Commit migration
+        run: |
+          if git diff --quiet -- bot/handlers; then
+            echo "Callback handlers are already migrated."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- bot/handlers
+          git commit -m "refactor(security): route callbacks through shared parser"
+          git push origin HEAD:fix/issue-26-telegram-boundary
+
   deployment-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 20
