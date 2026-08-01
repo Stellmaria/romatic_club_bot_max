@@ -12,37 +12,27 @@ from bot.domain.auctions import (
     AutobidLimitTooLow,
     AutobidTargetNotFound,
 )
+from bot.handlers.admin.action_support.transport import owner_required
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.auction_autobids import AuctionAutobidService
-from bot.core.legacy_config import AUTOBID_SET_PASSWORD
 
 logger = logging.getLogger("auction_bot.autobid_commands")
 router = Router(name="auction-autobid")
 
 
 def _usage() -> str:
-    suffix = " [password]" if AUTOBID_SET_PASSWORD else ""
     return (
         "Формат:\n"
-        f"<code>/autobid_set &lt;lot_id&gt; &lt;@username&gt; &lt;max_amount&gt;{suffix}</code>"
+        "<code>/autobid_set &lt;lot_id&gt; &lt;@username&gt; &lt;max_amount&gt;</code>"
     )
 
 
-def _password_is_valid(parts: list[str]) -> bool:
-    if not AUTOBID_SET_PASSWORD:
-        return True
-    return len(parts) >= 5 and parts[4] == AUTOBID_SET_PASSWORD
-
-
 @router.message(Command("autobid_set"))
-@admin_only
+@owner_required
 async def set_autobid(message: types.Message) -> None:
     parts = (message.text or "").split()
-    if len(parts) < 4:
+    if len(parts) != 4:
         await message.answer(_usage(), parse_mode="HTML")
-        return
-    if not _password_is_valid(parts):
-        await message.answer("Неверный пароль автоставки.")
         return
 
     try:

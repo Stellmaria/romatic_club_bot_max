@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import inspect
+import logging
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Any, Awaitable, Callable, Mapping, Optional, Union
@@ -20,8 +21,11 @@ from bot.handlers.admin.action_support.exchange import safe_answer_photo, tg_cle
 from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES, CANCEL_MSG, CANCEL_TEXTS
 from bot.handlers.admin.helper.new.helper import normalize_chat_id
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
-from bot.security import admin_secret_matches
+from bot.security import is_owner_user
 from bot.services.admin_logging import send_admin_log
+
+logger = logging.getLogger("auction_bot.security.access")
+
 
 def _safe_strip(s: Optional[str]) -> str:
     return s.strip() if isinstance(s, str) else ""
@@ -110,39 +114,83 @@ def format_date_time_block(st: Any, et: Any) -> str:
     return ""
 
 
-def owner_or_secret_required(
-        func: Callable[..., Awaitable[Any]]
+def _owner_access_target(
+    args: tuple[Any, ...],
+    kwargs: Mapping[str, Any],
+) -> Message | CallbackQuery | None:
+    target = next(
+        (item for item in args if isinstance(item, (Message, CallbackQuery))),
+        None,
+    )
+    if target is not None:
+        return target
+    for key in ("message", "call", "callback", "callback_query"):
+        candidate = kwargs.get(key)
+        if isinstance(candidate, (Message, CallbackQuery)):
+            return candidate
+    return None
+
+
+def _owner_access_context(
+    target: Message | CallbackQuery,
+) -> tuple[int | None, int | None, str]:
+    user = target.from_user
+    user_id = int(user.id) if user is not None else None
+    message = target if isinstance(target, Message) else as_message(target)
+    chat_id = int(message.chat.id) if message is not None else None
+    if isinstance(target, CallbackQuery):
+        request_id = str(target.id)
+    else:
+        request_id = f"{chat_id}:{target.message_id}"
+    return user_id, chat_id, request_id
+
+
+def owner_required(
+    func: Callable[..., Awaitable[Any]],
 ) -> Callable[..., Awaitable[Any]]:
+    """Allow a privileged Telegram action only for configured owner IDs."""
+
     @wraps(func)
-    async def wrapper(*args, **kwargs):
-        msg: Optional[Message] = next(
-            (a for a in args if isinstance(a, Message)), None
-        )
-        if msg is None:
-            msg = kwargs.get("message")
-        if msg is None:
-            cq: Optional[CallbackQuery] = next(
-                (a for a in args if isinstance(a, CallbackQuery)), None
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        target = _owner_access_target(args, kwargs)
+        if target is None:
+            logger.error(
+                "owner_access_invalid_target handler=%s",
+                func.__qualname__,
             )
-            msg = as_message(cq) if cq is not None else None
-        if msg is None:
             return None
 
-        text = _safe_strip(getattr(msg, "text", None))
-        parts = text.split() if text else []
-
-        uid = msg.from_user.id if msg.from_user else None
-        is_owner = uid in ADMINS_OWNERS if uid is not None else False
-
-        has_secret = len(parts) > 1 and admin_secret_matches(parts[-1])
-
-        if is_owner or has_secret:
+        user_id, chat_id, request_id = _owner_access_context(target)
+        if is_owner_user(user_id):
+            logger.info(
+                "owner_access_granted handler=%s user_id=%s chat_id=%s request_id=%s",
+                func.__qualname__,
+                user_id,
+                chat_id,
+                request_id,
+            )
             return await func(*args, **kwargs)
 
-        await msg.answer("Требуется пароль владельца.")
+        logger.warning(
+            "owner_access_denied handler=%s user_id=%s chat_id=%s request_id=%s",
+            func.__qualname__,
+            user_id,
+            chat_id,
+            request_id,
+        )
+        denial = "Действие доступно только владельцу."
+        if isinstance(target, CallbackQuery):
+            await target.answer(denial, show_alert=True)
+        else:
+            await target.answer(denial)
         return None
 
     return wrapper
+
+
+# Compatibility alias for feature modules that still import the historical
+# decorator name. A message suffix is no longer parsed and never grants access.
+owner_or_secret_required = owner_required
 
 
 async def safe_edit_message(call: CallbackQuery, new_text: str, reply_markup=None, silent: bool = False) -> None:
@@ -320,4 +368,3 @@ __all__ = (
     'process_universal_cancel_callback',
     'send_lot_card_safe',
 )
-

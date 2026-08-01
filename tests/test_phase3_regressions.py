@@ -65,10 +65,15 @@ def test_oops_workflow_is_implemented() -> None:
     assert "(Вставь сюда твой исходный блок /oops" not in source
 
 
-def test_autobid_password_has_no_public_default() -> None:
-    source = (ROOT / "config.py").read_text(encoding="utf-8")
-    assert 'AUTOBID_SET_PASSWORD = os.getenv("AUTOBID_SET_PASSWORD", "").strip()' in source
-    assert '"2069"' not in source
+def test_autobid_password_is_retired_from_telegram_contract() -> None:
+    config_source = (ROOT / "config.py").read_text(encoding="utf-8")
+    handler_source = (ROOT / "bot/handlers/auction/autobid.py").read_text(encoding="utf-8")
+    env_source = (ROOT / ".env.example").read_text(encoding="utf-8")
+
+    assert 'AUTOBID_SET_PASSWORD = ""' in config_source
+    assert "AUTOBID_SET_PASSWORD" not in handler_source
+    assert "_password_is_valid" not in handler_source
+    assert "AUTOBID_SET_PASSWORD=" not in env_source
 
 
 def test_bidding_router_does_not_swallow_messages_when_disabled() -> None:

@@ -58,7 +58,9 @@ DATABASE_URL: str = get_str("DATABASE_URL")
 DB_AUTO_MIGRATE: bool = get_bool("DB_AUTO_MIGRATE", True)
 
 # --- Админки/логи ---
-ADMIN_SECRET: str = get_str("ADMIN_SECRET")
+# Compatibility constants retained for old imports. Shared passwords sent in
+# Telegram were retired and these values intentionally remain empty.
+ADMIN_SECRET: str = ""
 ADMIN_LOG_CHATS: list[int] = get_int_list("ADMIN_LOG_CHATS")
 ADMIN_LOG_CHAT_1: int = ADMIN_LOG_CHATS[0] if ADMIN_LOG_CHATS else 0
 LOG_CHAT_ID: int = get_int("LOG_CHAT_ID")
@@ -71,7 +73,7 @@ TG_API_ID: int = get_int("TG_API_ID")
 TG_API_HASH: str = get_str("TG_API_HASH")
 TG_SESSION: str = get_str("TG_SESSION", "backfill.session")
 BACKFILL_LIMIT_POSTS: int = get_int("BACKFILL_LIMIT_POSTS", 500)
-AUTOBID_SET_PASSWORD = os.getenv("AUTOBID_SET_PASSWORD", "").strip()
+AUTOBID_SET_PASSWORD = ""
 
 # The typed settings module is the target configuration API. Environment
 # bootstrap above intentionally runs first so both APIs see the same values.
