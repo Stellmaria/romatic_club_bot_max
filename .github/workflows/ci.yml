@@ -80,6 +80,8 @@ jobs:
         run: rm -rf build
       - name: Critical lint checks
         run: python -m ruff check .
+      - name: Persistence exception contract
+        run: python scripts/check_persistence_exceptions.py
       - name: Unit and regression tests
         env:
           BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA

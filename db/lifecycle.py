@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from db.migrator import apply_migrations
 from bot.core.legacy_config import DB_AUTO_MIGRATE
+from db.migrator import apply_migrations
+from db.pool import close_db_pool
 
 
 async def init_db() -> None:
@@ -25,10 +26,9 @@ async def init_db() -> None:
 async def close_db() -> None:
     from db.core import db_pool, logger
 
-    pool = db_pool.pool
-    if pool is None:
+    if db_pool.pool is None:
         return
-    await pool.close()
+    await close_db_pool()
     db_pool.clear()
     try:
         from db import legacy_impl

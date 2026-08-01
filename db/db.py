@@ -4,6 +4,13 @@ import sys
 import types
 
 from db import admin, auctions, cards, core, exchange, market, posts, subscriptions, uid, users
+from db import reliable_mutations
+
+# Keep one public owner for every compatibility symbol. The historical auctions
+# module still owns ``add_auction`` in the facade contract, but its implementation
+# is replaced with the strict transactional version until all callers migrate to
+# the workflow repository.
+auctions.add_auction = reliable_mutations.add_auction
 
 _MODULES = (core, users, auctions, admin, cards, subscriptions, market, exchange, posts, uid)
 for _module in _MODULES:
