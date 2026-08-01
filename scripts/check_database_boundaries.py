@@ -42,17 +42,14 @@ def _forbidden_imports(tree: ast.AST) -> list[tuple[int, str]]:
     return violations
 
 
-def _asyncpg_pool_calls(tree: ast.AST) -> list[int]:
+def _asyncpg_pool_factory_references(tree: ast.AST) -> list[int]:
     lines: list[int] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        function = node.func
         if (
-            isinstance(function, ast.Attribute)
-            and isinstance(function.value, ast.Name)
-            and function.value.id == "asyncpg"
-            and function.attr == "create_pool"
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "asyncpg"
+            and node.attr == "create_pool"
         ):
             lines.append(node.lineno)
     return lines
@@ -71,7 +68,7 @@ def main() -> int:
     pool_owners: list[tuple[Path, int]] = []
     for path in sorted(_python_files(RUNTIME_ROOTS)):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for line in _asyncpg_pool_calls(tree):
+        for line in _asyncpg_pool_factory_references(tree):
             pool_owners.append((path, line))
 
     expected_owner = ROOT / "db/pool.py"
