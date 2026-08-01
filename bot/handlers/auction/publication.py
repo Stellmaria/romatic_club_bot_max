@@ -146,7 +146,6 @@ async def _send_publication(
             file_id=media,
             caption=caption,
             parse_mode="HTML",
-            protect_content=True,
             raise_on_failure=True,
         )
         if message is None:
@@ -158,7 +157,6 @@ async def _send_publication(
         caption,
         parse_mode="HTML",
         disable_web_page_preview=True,
-        protect_content=True,
     )
 
 
