@@ -92,11 +92,15 @@ def validate_bid_for_kind(
     step = currency.bid_step
     amount_i = int(amount)
 
-    # Стартовая цена обратного аукциона является верхним потолком.
-    # Первая ставка не может быть выше него, последующие снижаются на шаг.
-    maximum = int(start_price) if current_best is None else int(current_best) - step
+    # New reverse lots use start_price as the upper ceiling. Existing rows that
+    # were created before that field was collected may still contain zero; only
+    # their first bid keeps the old no-ceiling compatibility path.
+    if current_best is None and int(start_price) <= 0:
+        maximum = amount_i
+    else:
+        maximum = int(start_price) if current_best is None else int(current_best) - step
     if amount_i <= 0 or amount_i > maximum:
-        raise BidTooHigh(maximum=max(1, maximum), current_best=current_best)
+        raise BidTooHigh(maximum=max(0, maximum), current_best=current_best)
     if step > 1 and amount_i % step != 0:
         raise BidStepError(amount=amount_i, start_price=0, step=step)
     return maximum
