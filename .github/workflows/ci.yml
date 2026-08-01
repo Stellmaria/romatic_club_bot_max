@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   callback-migration:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/issue-26-telegram-boundary'
+    if: github.event_name == 'pull_request' && github.head_ref == 'fix/issue-26-telegram-boundary'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
