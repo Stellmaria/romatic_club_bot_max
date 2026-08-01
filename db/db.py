@@ -1,6 +1,6 @@
 """Thin compatibility facade for modular database query implementations."""
 
-from db import admin, auctions, cards, core, exchange, market, posts, subscriptions, uid, users
+from db import admin, auctions, cards, core, exchange, market, posts, schedule_queries, subscriptions, uid, users
 from db import reliable_mutations
 
 # Keep one public owner for every compatibility symbol. The historical auctions
@@ -9,7 +9,19 @@ from db import reliable_mutations
 # the workflow repository.
 auctions.add_auction = reliable_mutations.add_auction
 
-_MODULES = (core, users, auctions, admin, cards, subscriptions, market, exchange, posts, uid)
+_MODULES = (
+    core,
+    users,
+    auctions,
+    admin,
+    cards,
+    schedule_queries,
+    subscriptions,
+    market,
+    exchange,
+    posts,
+    uid,
+)
 for _module in _MODULES:
     globals().update({name: getattr(_module, name) for name in _module.__all__})
 
