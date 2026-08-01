@@ -25,10 +25,6 @@ def _python_files(roots: tuple[Path, ...]):
         yield from root.rglob("*.py")
 
 
-def _module_name(path: Path) -> str:
-    return ".".join(path.relative_to(ROOT).with_suffix("").parts)
-
-
 def _forbidden_imports(tree: ast.AST) -> list[tuple[int, str]]:
     violations: list[tuple[int, str]] = []
     for node in ast.walk(tree):
