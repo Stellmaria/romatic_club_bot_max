@@ -9,7 +9,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.domain.auctions import AuctionKind, Currency, comparison_units
 from bot.services.auction_winners import AuctionWinnerService
-from bot.core.legacy_config import ADMIN_LOG_CHATS, DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 
 from .common import (
     CB_WIN_EDIT_AMT,
@@ -33,7 +33,7 @@ from .common import (
 from bot.telegram.callback_parser import split_callback_data
 
 try:
-    from bot.core.legacy_config import WINNER_NOTIFY_DEADLINE_MINUTES
+    from bot.core.legacy_config import legacy_config
 except Exception:
     WINNER_NOTIFY_DEADLINE_MINUTES = 5
 
@@ -148,14 +148,14 @@ async def announce_winner(telegram_bot: Bot, auction: dict[str, Any], bids: list
         )
         try:
             await telegram_bot.send_message(
-                DISCUSSION_CHAT_ID,
+                legacy_config.DISCUSSION_CHAT_ID,
                 text,
                 parse_mode="HTML",
                 reply_to_message_id=reply_to_id,
             )
         except Exception:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, text, parse_mode="HTML")
-        for chat_id in ADMIN_LOG_CHATS:
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, text, parse_mode="HTML")
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await telegram_bot.send_message(
                     chat_id,
@@ -177,14 +177,14 @@ async def announce_winner(telegram_bot: Bot, auction: dict[str, Any], bids: list
         text = "⏰ <b>Аукцион завершён!</b>\n❌ <i>Победителей нет, ставок не было.</i>"
         try:
             await telegram_bot.send_message(
-                DISCUSSION_CHAT_ID,
+                legacy_config.DISCUSSION_CHAT_ID,
                 text,
                 parse_mode="HTML",
                 reply_to_message_id=reply_to_id,
             )
         except Exception:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, text, parse_mode="HTML")
-        for chat_id in ADMIN_LOG_CHATS:
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, text, parse_mode="HTML")
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await telegram_bot.send_message(chat_id, f"🏁 Лот {auction_id}: ставок не было.", parse_mode="HTML")
             except Exception:
@@ -271,7 +271,7 @@ async def announce_winner(telegram_bot: Bot, auction: dict[str, Any], bids: list
             f"{seller_line}"
         )
         await telegram_bot.send_message(
-            DISCUSSION_CHAT_ID,
+            legacy_config.DISCUSSION_CHAT_ID,
             end_text,
             parse_mode="HTML",
             reply_to_message_id=discussion_message_id,
@@ -281,7 +281,7 @@ async def announce_winner(telegram_bot: Bot, auction: dict[str, Any], bids: list
 
     link = build_channel_link(auction.get("message_id"))
     now = msk_now()
-    deadline = now + timedelta(minutes=int(WINNER_NOTIFY_DEADLINE_MINUTES or 10))
+    deadline = now + timedelta(minutes=int(legacy_config.WINNER_NOTIFY_DEADLINE_MINUTES or 10))
     relative_minutes = int((deadline - now).total_seconds() // 60)
     lot_title = (auction.get("hero_name") or "-") + (
         f" — {auction.get('card_name')}" if auction.get("card_name") else ""
@@ -323,7 +323,7 @@ async def announce_winner(telegram_bot: Bot, auction: dict[str, Any], bids: list
         ],
         [InlineKeyboardButton(text="⛔ Не отправлять", callback_data=f"{CB_WIN_SKIP}:{auction_id}:{winner_id}")],
     ])
-    for chat_id in ADMIN_LOG_CHATS:
+    for chat_id in legacy_config.ADMIN_LOG_CHATS:
         try:
             await telegram_bot.send_message(
                 chat_id,

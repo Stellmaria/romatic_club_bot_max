@@ -10,7 +10,7 @@ from bot.core.time import to_moscow_wall
 from bot.handlers.admin.helper.admin_constants import BUTTONS
 from bot.handlers.constants import USER_MESSAGES
 from bot.keyboards.keyboards import back_to_menu_keyboard
-from bot.core.legacy_config import ADMIN_LOG_CHATS
+from bot.core.legacy_config import legacy_config
 from db.legacy import get_user_by_username, get_user, logger
 
 
@@ -139,7 +139,7 @@ async def log_admin_lot_action(
 
     log_text = "\n".join(msg_parts)
 
-    for chat_id in ADMIN_LOG_CHATS:
+    for chat_id in legacy_config.ADMIN_LOG_CHATS:
         if chat_id:
             try:
                 await bot.send_message(chat_id=chat_id, text=log_text, parse_mode="HTML", disable_web_page_preview=True)

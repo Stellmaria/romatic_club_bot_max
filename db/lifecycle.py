@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from bot.core.legacy_config import DB_AUTO_MIGRATE
+from bot.core.settings import DatabaseSettings
 from db.migrator import apply_migrations
-from db.pool import close_db_pool
+from db.pool import close_db_pool, configure_database
 
 
-async def init_db() -> None:
+async def init_db(settings: DatabaseSettings) -> None:
     """Initialize the pool and apply migrations before serving work."""
+
     from db.core import get_db_pool, logger
 
-    pool = await get_db_pool()
-    if not DB_AUTO_MIGRATE:
-        logger.warning("Automatic migrations are disabled: DB_AUTO_MIGRATE=0")
+    configure_database(settings)
+    pool = await get_db_pool(settings)
+    if not settings.auto_migrate:
+        logger.warning("Automatic migrations are disabled: DB_AUTO_MIGRATE=false")
         return
     try:
         await apply_migrations(pool)

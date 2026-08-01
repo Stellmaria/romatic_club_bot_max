@@ -81,9 +81,9 @@ def test_publisher_receives_both_channel_addresses() -> None:
     workers = _source("bot/bootstrap/workers.py")
     publication = _source("bot/handlers/auction/publication.py")
 
-    assert "auction_channel_id=app_settings.auction_channel_id" in application
-    assert "auction_channel_username=app_settings.auction_channel_username" in application
+    assert "auction_channel_id=bot_settings.auction_channel_id" in application
+    assert "auction_channel_username=bot_settings.auction_channel_username" in application
     assert "channel_id=auction_channel_id" in workers
     assert "channel_username=auction_channel_username" in workers
     assert "def _publication_targets(" in publication
-    assert "for target in _publication_targets(channel_id, channel_username):" in publication
+    assert "for target in _publication_targets(channel_id, resolved_channel_username):" in publication

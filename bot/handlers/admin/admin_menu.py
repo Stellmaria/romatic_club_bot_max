@@ -5,7 +5,7 @@ from __future__ import annotations
 from aiogram import Bot
 from aiogram.types import Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
-from bot.core.settings import ADMINS_OWNERS
+from bot.core.legacy_config import legacy_config
 from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 
@@ -14,7 +14,7 @@ def is_owner_user(user_id: int | None) -> bool:
     """Return whether the Telegram user is configured as an owner."""
 
     return user_id is not None and int(user_id) in {
-        int(value) for value in ADMINS_OWNERS
+        int(value) for value in legacy_config.ADMINS_OWNERS
     }
 
 

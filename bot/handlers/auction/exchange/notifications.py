@@ -7,7 +7,7 @@ from aiogram import Bot
 from aiogram.types import Message
 from bot.services.luxury import get_user_luxury_level, is_luxury_member
 from bot.telegram.media import answer_media_any as _answer_media_any
-from bot.core.legacy_config import LUXURY_CHAT_ID, LUXURY_CHAT_ID_LVL2
+from bot.core.legacy_config import legacy_config
 from db.legacy import count_sold_by_card_id, count_sold_same_card, get_deck_by_id, get_user, is_admin
 
 from .common import (
@@ -42,9 +42,9 @@ async def _format_user_status(bot: Bot, user_id: int) -> str:
 
     # 2) лакшери по чатам (самый надёжный источник)
     try:
-        if LUXURY_CHAT_ID_LVL2 and await is_luxury_member(bot, user_id, LUXURY_CHAT_ID_LVL2):
+        if legacy_config.LUXURY_CHAT_ID_LVL2 and await is_luxury_member(bot, user_id, legacy_config.LUXURY_CHAT_ID_LVL2):
             return "👑 Лакшери 2"
-        if LUXURY_CHAT_ID and await is_luxury_member(bot, user_id, LUXURY_CHAT_ID):
+        if legacy_config.LUXURY_CHAT_ID and await is_luxury_member(bot, user_id, legacy_config.LUXURY_CHAT_ID):
             return "👑 Лакшери"
     except Exception:
         pass

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
-import os
 from datetime import datetime, timedelta
 
 from aiogram import F, Router, types
@@ -27,7 +26,7 @@ from bot.domain.auctions import (
 )
 from bot.services.auction_bids import AuctionBidService
 from bot.core.time import utc_now
-from bot.core.legacy_config import LOG_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from db.legacy import add_warning, get_warnings_count
 
 logger = logging.getLogger("auction_bot.bidding")
@@ -35,9 +34,10 @@ router = Router(name="auction-bidding")
 
 
 def _bot_bid_validation_enabled() -> bool:
-    moderation = os.getenv("USERBOT_BID_MODERATION", "1").strip().lower()
-    mode = os.getenv("BID_VALIDATION_MODE", "userbot").strip().lower()
-    return moderation in {"0", "false", "no", "off"} and mode == "bot"
+    return (
+        not bool(legacy_config.USERBOT_BID_MODERATION)
+        and legacy_config.BID_VALIDATION_MODE == "bot"
+    )
 
 
 async def _mute_for_invalid_bid(message: types.Message) -> None:
@@ -165,10 +165,10 @@ async def accept_bid_message(message: types.Message) -> None:
         )
         return
 
-    if LOG_CHAT_ID:
+    if legacy_config.LOG_CHAT_ID:
         try:
             await message.bot.send_message(
-                LOG_CHAT_ID,
+                legacy_config.LOG_CHAT_ID,
                 "💬 <b>Новая ставка</b>\n"
                 f"Аукцион: <code>{placement.auction.auction_id}</code>\n"
                 f"Пользователь: @{html.escape(username)} "

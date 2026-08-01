@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from bot.core.settings import DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from db.auctions import list_autobids
 from userbot.autobid_engine import maybe_place_autobid
 from userbot.schedule_announcements import schedule_announcement_watchdog
@@ -26,7 +26,7 @@ async def autobid_watchdog(telegram_client: TelegramClient) -> None:
             for auction_id in auction_ids:
                 await maybe_place_autobid(
                     telegram_client,
-                    discussion_chat_id=int(DISCUSSION_CHAT_ID),
+                    discussion_chat_id=int(legacy_config.DISCUSSION_CHAT_ID),
                     auction_id=auction_id,
                 )
         except Exception:  # noqa: BLE001

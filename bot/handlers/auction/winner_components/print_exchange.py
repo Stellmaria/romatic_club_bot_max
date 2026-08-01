@@ -10,7 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.services.auction_winners import AuctionWinnerService
-from bot.core.legacy_config import ADMINS
+from bot.core.legacy_config import legacy_config
 from bot.legacy_fsm import PrintExStates
 
 from .common import mention_html
@@ -91,7 +91,7 @@ async def _refresh_print_ex(call: CallbackQuery, service: AuctionWinnerService, 
 
 @router.message(Command("ex_owners"))
 async def cmd_ex_owners(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = (message.text or "").split(maxsplit=1)
@@ -119,7 +119,7 @@ async def cmd_ex_owners(message: Message) -> None:
 
 @router.message(Command("print_ex"))
 async def cmd_print_ex(message: Message, state: FSMContext) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = (message.text or "").split(maxsplit=1)
@@ -148,7 +148,7 @@ async def cmd_print_ex(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("pex|"))
 async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    if call.from_user.id not in ADMINS:
+    if call.from_user.id not in legacy_config.ADMINS:
         await call.answer("Нет доступа.", show_alert=True)
         return
     try:
@@ -251,7 +251,7 @@ async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
 
 @router.message(PrintExStates.waiting_manual)
 async def ex_manual_input(message: Message, state: FSMContext) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await state.clear()
         return
     data = await state.get_data()

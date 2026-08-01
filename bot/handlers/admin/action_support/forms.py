@@ -8,7 +8,7 @@ from typing import Any, Mapping, Optional, Union
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, User
 
-from bot.core.settings import ADMINS_OWNERS
+from bot.core.legacy_config import legacy_config
 from bot.handlers.admin.action_support.transport import _safe_strip
 from bot.handlers.admin.helper.new.keyboards import back_keyboard, decks_keyboard, period_keyboard
 from bot.presentation.admin import format_owner_html
@@ -60,7 +60,7 @@ async def add_deck_fsm_entry(message: Message, state: FSMContext) -> None:
     from bot.telegram.states import AddDeckFSM
 
     fu = getattr(message, "from_user", None)
-    is_owner = isinstance(fu, User) and (fu.id in ADMINS_OWNERS)
+    is_owner = isinstance(fu, User) and (fu.id in legacy_config.ADMINS_OWNERS)
 
     text = _safe_strip(getattr(message, "text", None))
     parts = text.split(maxsplit=1)
@@ -95,7 +95,7 @@ async def start_add_card_fsm(message: Message, state: FSMContext) -> None:
         await message.answer("Не могу определить отправителя команды.")
         return
 
-    if fu.id in ADMINS_OWNERS:
+    if fu.id in legacy_config.ADMINS_OWNERS:
         decks = await get_all_decks()
         await message.answer(
             "Владелец, доступ разрешён без пароля.\nВыбери колоду:",

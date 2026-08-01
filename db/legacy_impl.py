@@ -17,7 +17,7 @@ from bot.uid_crypto import (
 )
 
 from db.types import Owner
-from bot.core.legacy_config import DATABASE_URL, DB_AUTO_MIGRATE
+from bot.core.legacy_config import legacy_config
 from db.migrator import apply_migrations
 
 logger = logging.getLogger("auction_bot")
@@ -43,12 +43,12 @@ async def fetchall(query: str, *args):
 
 async def get_db_pool() -> asyncpg.Pool:
     global db_pool
-    if not DATABASE_URL:
+    if not legacy_config.DATABASE_URL:
         raise RuntimeError("DATABASE_URL не задан в .env")
 
     if db_pool is None:
         try:
-            db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+            db_pool = await asyncpg.create_pool(legacy_config.DATABASE_URL, min_size=1, max_size=5)
             logger.info("Database pool initialized")
         except Exception as e:
             logger.error(f"Не удалось создать пул соединений с БД: {e}")
@@ -69,7 +69,7 @@ def require_db_pool(func: Callable) -> Callable:
 
 async def init_db() -> None:
     pool = await get_db_pool()
-    if not DB_AUTO_MIGRATE:
+    if not legacy_config.DB_AUTO_MIGRATE:
         logger.warning("Автоматические миграции отключены: DB_AUTO_MIGRATE=0")
         return
 
@@ -1907,7 +1907,7 @@ async def is_user_banned(user_id: int) -> bool:
 
 
 async def get_expected_auction_for_now():
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    conn = await asyncpg.connect(dsn=legacy_config.DATABASE_URL)
     row = await conn.fetchrow("""
                               SELECT auction_id, card_name, start_time
                               FROM auctions

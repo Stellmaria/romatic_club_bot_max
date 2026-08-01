@@ -267,13 +267,13 @@ async def cmd_user_dbg(message: types.Message, bot):
     in_discussion = False
 
     try:
-        m1 = await bot.get_chat_member(AUCTION_CHANNEL_ID, uid)
+        m1 = await bot.get_chat_member(legacy_config.AUCTION_CHANNEL_ID, uid)
         in_channel = _member_ok(m1)
     except Exception:
         in_channel = False
 
     try:
-        m2 = await bot.get_chat_member(DISCUSSION_CHAT_ID, uid)
+        m2 = await bot.get_chat_member(legacy_config.DISCUSSION_CHAT_ID, uid)
         in_discussion = _member_ok(m2)
     except Exception:
         in_discussion = False

@@ -1,27 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 import aiohttp
 
+from bot.core.settings import SupervisorClientSettings
+
 
 class SupervisorUnavailable(RuntimeError):
     """Raised when the host-side Supervisor cannot be reached."""
-
-
-def _read_token() -> str:
-    token_file = os.getenv("SUPERVISOR_TOKEN_FILE", "").strip()
-    if token_file:
-        try:
-            return Path(token_file).read_text(encoding="utf-8").strip()
-        except OSError:
-            return ""
-    return os.getenv("SUPERVISOR_TOKEN", "").strip()
 
 
 @dataclass(slots=True)
@@ -34,24 +24,19 @@ class SupervisorClient:
     _session_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
     @classmethod
-    def from_env(cls) -> "SupervisorClient | None":
-        enabled = os.getenv("SUPERVISOR_ENABLED", "").strip().lower()
-        if enabled not in {"1", "true", "yes", "on"}:
+    def from_settings(
+        cls,
+        settings: SupervisorClientSettings,
+    ) -> "SupervisorClient | None":
+        """Create an optional client from a validated process configuration."""
+
+        if not settings.enabled:
             return None
-        base_url = os.getenv("SUPERVISOR_BASE_URL", "").strip().rstrip("/")
-        token = _read_token()
-        if not base_url or len(token) < 24:
-            return None
-        try:
-            timeout = float(os.getenv("SUPERVISOR_CLIENT_TIMEOUT_SECONDS", "20"))
-        except ValueError:
-            timeout = 20.0
-        actor = os.getenv("SUPERVISOR_ACTOR", "telegram-bot").strip() or "telegram-bot"
         return cls(
-            base_url=base_url,
-            token=token,
-            timeout_seconds=max(2.0, timeout),
-            default_actor=actor[:64],
+            base_url=settings.base_url,
+            token=settings.token,
+            timeout_seconds=settings.timeout_seconds,
+            default_actor=settings.actor,
         )
 
     async def start(self) -> None:
@@ -139,11 +124,4 @@ class SupervisorClient:
         return await self.request("POST", "/v1/rollback", actor=actor)
 
 
-supervisor_client = SupervisorClient.from_env()
-
-
-__all__ = (
-    "SupervisorClient",
-    "SupervisorUnavailable",
-    "supervisor_client",
-)
+__all__ = ("SupervisorClient", "SupervisorUnavailable")

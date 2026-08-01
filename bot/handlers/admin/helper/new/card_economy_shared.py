@@ -27,7 +27,7 @@ from bot.handlers.card_subscribe import _decks_keyboard, _presets_manage_keyboar
 from bot.services.card_economy import CardEconomyService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.telegram.callbacks import safe_callback_answer
-from bot.core.settings import ADMIN_LOG_CHATS
+from bot.core.legacy_config import legacy_config
 from db.cards import (
     get_card,
     get_deck,
@@ -121,7 +121,7 @@ async def _admin_log(bot: Bot, text: str) -> None:
     if sent:
         return
 
-    chats = ADMIN_LOG_CHATS
+    chats = legacy_config.ADMIN_LOG_CHATS
     if isinstance(chats, int):
         targets = [chats]
     elif isinstance(chats, Iterable) and not isinstance(chats, (str, bytes)):

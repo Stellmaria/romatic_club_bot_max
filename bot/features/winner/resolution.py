@@ -9,11 +9,7 @@ from datetime import timedelta
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.core.settings import (
-    ADMIN_LOG_CHATS,
-    DISCUSSION_CHAT_ID,
-    WINNER_NOTIFY_DEADLINE_MINUTES,
-)
+from bot.core.legacy_config import legacy_config
 from bot.domain.auctions import AuctionKind
 from bot.repositories import winner as winner_repository
 from db.pool import get_db_pool
@@ -157,14 +153,14 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
         )
         try:
             await telegram_bot.send_message(
-                DISCUSSION_CHAT_ID,
+                legacy_config.DISCUSSION_CHAT_ID,
                 text,
                 parse_mode="HTML",
                 reply_to_message_id=reply_to_id,
             )
         except Exception:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, text, parse_mode="HTML")
-        for chat_id in ADMIN_LOG_CHATS:
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, text, parse_mode="HTML")
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await telegram_bot.send_message(
                     chat_id,
@@ -189,11 +185,11 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
         txt = "⏰ <b>Аукцион завершён!</b>\n❌ <i>Победителей нет, ставок не было.</i>"
         try:
             await telegram_bot.send_message(
-                DISCUSSION_CHAT_ID, txt, parse_mode="HTML", reply_to_message_id=reply_to_id
+                legacy_config.DISCUSSION_CHAT_ID, txt, parse_mode="HTML", reply_to_message_id=reply_to_id
             )
         except Exception:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, txt, parse_mode="HTML")
-        for chat_id in ADMIN_LOG_CHATS:
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, txt, parse_mode="HTML")
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await telegram_bot.send_message(
                     chat_id, f"🏁 Лот {auction_id}: ставок не было.", parse_mode="HTML"
@@ -297,16 +293,16 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
 
         if dmsg_id:
             await telegram_bot.send_message(
-                DISCUSSION_CHAT_ID, end_text, parse_mode="HTML", reply_to_message_id=dmsg_id
+                legacy_config.DISCUSSION_CHAT_ID, end_text, parse_mode="HTML", reply_to_message_id=dmsg_id
             )
         else:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, end_text, parse_mode="HTML")
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, end_text, parse_mode="HTML")
     except Exception:
         pass
 
     link = _build_channel_link(auction.get("message_id"))
     now_msk = _msk_now()
-    deadline_msk = now_msk + timedelta(minutes=int(WINNER_NOTIFY_DEADLINE_MINUTES or 10))
+    deadline_msk = now_msk + timedelta(minutes=int(legacy_config.WINNER_NOTIFY_DEADLINE_MINUTES or 10))
     rel_minutes = int((deadline_msk - now_msk).total_seconds() // 60)
 
     lot_title = f"{(auction.get('hero_name') or '-')}" + (
@@ -364,7 +360,7 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
         ]
     )
 
-    for chat_id in ADMIN_LOG_CHATS:
+    for chat_id in legacy_config.ADMIN_LOG_CHATS:
         try:
             await telegram_bot.send_message(
                 chat_id,
@@ -423,7 +419,7 @@ async def _post_rules_under_lot(
 
     if not dmsg_id:
         # не нашли — логируем и сдаёмся, без истерик
-        for chat_id in ADMIN_LOG_CHATS:
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await bot.send_message(
                     chat_id,
@@ -436,10 +432,10 @@ async def _post_rules_under_lot(
 
     try:
         await bot.send_message(
-            DISCUSSION_CHAT_ID, RULES_COMMENT, parse_mode="HTML", reply_to_message_id=dmsg_id
+            legacy_config.DISCUSSION_CHAT_ID, RULES_COMMENT, parse_mode="HTML", reply_to_message_id=dmsg_id
         )
         # опционально: короткий лог
-        for chat_id in ADMIN_LOG_CHATS:
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await bot.send_message(
                     chat_id,
@@ -449,7 +445,7 @@ async def _post_rules_under_lot(
             except Exception:
                 pass
     except Exception as e:
-        for chat_id in ADMIN_LOG_CHATS:
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await bot.send_message(
                     chat_id,

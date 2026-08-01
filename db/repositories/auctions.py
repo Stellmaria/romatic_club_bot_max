@@ -11,7 +11,7 @@ import asyncpg
 
 from bot.core.time import ensure_utc
 from db.types import Owner
-from bot.core.legacy_config import DATABASE_URL
+from bot.core.legacy_config import legacy_config
 from db.core import (
     close_db,
     db_pool,
@@ -394,7 +394,7 @@ async def auction_exists(auction_id: int) -> bool:
         ))
 
 async def get_expected_auction_for_now():
-    conn = await asyncpg.connect(dsn=DATABASE_URL)
+    conn = await asyncpg.connect(dsn=legacy_config.DATABASE_URL)
     row = await conn.fetchrow("""
                               SELECT auction_id, card_name, start_time
                               FROM auctions

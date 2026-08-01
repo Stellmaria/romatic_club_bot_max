@@ -6,7 +6,7 @@ from aiogram import Bot, F, Router, types
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
-from bot.core.legacy_config import ADMIN_LOG_CHATS, ADMINS, LOG_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from bot.services.warnings import WarningService
 from db.legacy import (
     add_warning,
@@ -29,7 +29,7 @@ _pending_warning_reasons: dict[int, str] = {}
 
 
 def _is_admin(message: Message) -> bool:
-    return bool(message.from_user and message.from_user.id in ADMINS)
+    return bool(message.from_user and message.from_user.id in legacy_config.ADMINS)
 
 
 async def _deny_unless_admin(message: Message) -> bool:
@@ -54,11 +54,11 @@ def _full_chat_permissions() -> types.ChatPermissions:
 
 def _admin_log_chat_ids() -> list[int]:
     result: list[int] = []
-    for value in ADMIN_LOG_CHATS:
+    for value in legacy_config.ADMIN_LOG_CHATS:
         if isinstance(value, int) and value not in result:
             result.append(value)
-    if isinstance(LOG_CHAT_ID, int) and LOG_CHAT_ID not in result:
-        result.append(LOG_CHAT_ID)
+    if isinstance(legacy_config.LOG_CHAT_ID, int) and legacy_config.LOG_CHAT_ID not in result:
+        result.append(legacy_config.LOG_CHAT_ID)
     return result
 
 

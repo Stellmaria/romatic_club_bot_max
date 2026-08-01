@@ -133,7 +133,7 @@ from bot.services.exchanges import ExchangeService
 from bot.utils import generate_free_slots_for_date
 
 
-from bot.core.settings import ADMINS, AUCTION_CHANNEL_ID, DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 
 
 from db.auctions import (

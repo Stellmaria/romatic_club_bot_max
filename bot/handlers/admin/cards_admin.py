@@ -8,7 +8,7 @@ from bot.handlers.admin.helper.new.keyboards import confirm_keyboard, rarity_key
     decks_menu_keyboard, decks_keyboard, back_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.helper.user_helpers import is_card_num_exists
-from bot.core.legacy_config import ADMINS_OWNERS, ADMIN_SECRET
+from bot.core.legacy_config import legacy_config
 from db.legacy import get_all_decks, log_audit_action, add_card
 from bot.legacy_fsm import AddCardFSM
 from bot.telegram.callback_parser import split_callback_data
@@ -22,7 +22,7 @@ def register_cards_admin_handlers(router: Router):
 
     @router.message(AddCardFSM.waiting_for_admin_password)
     async def check_admin_password_card(message: types.Message, state: FSMContext):
-        if message.from_user.id in ADMINS_OWNERS or message.text.strip() == ADMIN_SECRET:
+        if message.from_user.id in legacy_config.ADMINS_OWNERS or message.text.strip() == legacy_config.ADMIN_SECRET:
             decks = await get_all_decks()
             if not decks:
                 await message.answer("В базе нет ни одной колоды. Сначала добавьте колоду!")

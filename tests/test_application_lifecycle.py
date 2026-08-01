@@ -1,41 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 from unittest.mock import patch
 
 import main as entrypoint
-from bot.application import (
-    ApplicationConfigurationError,
-    _run_polling_with_worker_monitor,
-    validate_settings,
-)
-from bot.core.settings import settings
-
-
-def test_application_validation_reports_all_required_configuration() -> None:
-    invalid = replace(
-        settings,
-        bot_token="",
-        database_url="",
-        auction_channel_id=0,
-        discussion_chat_id=0,
-        uid_hash_key="",
-        uid_enc_key="",
-    )
-    try:
-        validate_settings(invalid)
-    except ApplicationConfigurationError as error:
-        message = str(error)
-    else:  # pragma: no cover
-        raise AssertionError("invalid configuration was accepted")
-
-    assert "BOT_TOKEN" in message
-    assert "DATABASE_URL" in message
-    assert "AUCTION_CHANNEL_ID" in message
-    assert "DISCUSSION_CHAT_ID" in message
-    assert "UID_HASH_KEY" in message
-    assert "UID_ENC_KEY" in message
+from bot.application import _run_polling_with_worker_monitor
+from bot.core.settings import ConfigurationError, ConfigurationIssue
 
 
 def test_polling_is_cancelled_when_a_background_worker_fails() -> None:
@@ -107,7 +77,6 @@ def test_external_cancellation_stops_polling_and_worker_monitor() -> None:
             pass
         else:  # pragma: no cover
             raise AssertionError("application cancellation was suppressed")
-
         assert dispatcher.cancelled
         assert manager.cancelled
 
@@ -115,8 +84,9 @@ def test_external_cancellation_stops_polling_and_worker_monitor() -> None:
 
 
 def test_entrypoint_returns_nonzero_for_configuration_error() -> None:
-    async def invalid_run() -> None:
-        raise ApplicationConfigurationError("missing settings")
-
-    with patch.object(entrypoint, "run_bot", invalid_run):
+    error = ConfigurationError([ConfigurationIssue("BOT_TOKEN", "is required")])
+    with (
+        patch.object(entrypoint, "load_project_environment"),
+        patch.object(entrypoint.BotProcessSettings, "from_env", side_effect=error),
+    ):
         assert entrypoint.main() == 2

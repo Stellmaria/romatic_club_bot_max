@@ -15,7 +15,7 @@ from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import short_media_id
 from bot.services.admin_thanks import admin_tag, build_thanks_kb
 from bot.services.exchange_diagnostics import ExchangeDiagnosticsQueries
-from bot.core.settings import ADMINS
+from bot.core.legacy_config import legacy_config
 from db.cards import get_deck_by_id
 from db.exchange import (
     get_exchange_batch_by_id,
@@ -933,7 +933,7 @@ async def cmd_ex_not_sent(message: Message):
 
 @router.message(Command("ex_unsent"))
 async def cmd_ex_unsent(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 

@@ -29,14 +29,7 @@ from typing import Any
 from aiogram import Bot
 from flask import Flask, request
 
-from bot.core.settings import (
-    BOT_TOKEN,
-    DATABASE_URL,
-    DISCUSSION_CHAT_ID,
-    LEGACY_BRIDGE_MAX_SKEW_SECONDS,
-    LEGACY_BRIDGE_NONCE_CACHE_SIZE,
-    LEGACY_BRIDGE_SECRET,
-)
+from bot.core.legacy_config import legacy_config
 from bot.presentation.warnings import WARN_TEXTS
 from bot.repositories.legacy_bridge import LegacyBridgeWarningGateway
 from bot.security import (
@@ -67,12 +60,12 @@ class LegacyBridgeConfig:
     @classmethod
     def from_settings(cls) -> "LegacyBridgeConfig":
         return cls(
-            secret=LEGACY_BRIDGE_SECRET,
-            allowed_chat_id=DISCUSSION_CHAT_ID,
-            bot_token=BOT_TOKEN,
-            database_url=DATABASE_URL,
-            max_timestamp_skew_seconds=LEGACY_BRIDGE_MAX_SKEW_SECONDS,
-            nonce_cache_size=LEGACY_BRIDGE_NONCE_CACHE_SIZE,
+            secret=legacy_config.LEGACY_BRIDGE_SECRET,
+            allowed_chat_id=legacy_config.DISCUSSION_CHAT_ID,
+            bot_token=legacy_config.BOT_TOKEN,
+            database_url=legacy_config.DATABASE_URL,
+            max_timestamp_skew_seconds=legacy_config.LEGACY_BRIDGE_MAX_SKEW_SECONDS,
+            nonce_cache_size=legacy_config.LEGACY_BRIDGE_NONCE_CACHE_SIZE,
         )
 
 
@@ -220,14 +213,18 @@ def create_legacy_http_app(
     return application
 
 
-app = create_legacy_http_app()
+# Import-safe WSGI placeholder. Deployment should use ``create_legacy_http_app``
+# with an explicit configuration; the placeholder fails closed.
+app = create_legacy_http_app(
+    LegacyBridgeConfig(secret="", allowed_chat_id=None, bot_token="", database_url="")
+)
 notify_bid_deleted = app.view_functions["notify_bid_deleted"]
 
 
-def run_flask() -> None:
-    """Explicit development entrypoint; importing this module never calls it."""
+def run_flask(config: LegacyBridgeConfig) -> None:
+    """Explicit development entrypoint with injected configuration."""
 
-    app.run("127.0.0.1", 8002)
+    create_legacy_http_app(config).run("127.0.0.1", 8002)
 
 
 __all__ = [

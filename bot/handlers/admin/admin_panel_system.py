@@ -15,8 +15,8 @@ from aiogram.types import (
 )
 
 from bot.core.process_restart import process_restart_coordinator
-from bot.core.settings import ADMINS_OWNERS
-from bot.core.supervisor_client import SupervisorUnavailable, supervisor_client
+from bot.core.legacy_config import legacy_config
+from bot.core.supervisor_client import SupervisorClient, SupervisorUnavailable
 from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
@@ -50,7 +50,7 @@ _ROLLBACK_CONFIRM_TEXT = (
 
 
 def _is_owner(user_id: int | None) -> bool:
-    return user_id is not None and int(user_id) in {int(value) for value in ADMINS_OWNERS}
+    return user_id is not None and int(user_id) in {int(value) for value in legacy_config.ADMINS_OWNERS}
 
 
 async def _require_owner(target: Message | CallbackQuery) -> bool:
@@ -184,7 +184,9 @@ def _status_text(payload: dict[str, Any]) -> tuple[str, bool]:
     return "\n".join(lines), bool(rollback_sha)
 
 
-async def _load_system_view() -> tuple[str, InlineKeyboardMarkup]:
+async def _load_system_view(
+    supervisor_client: SupervisorClient | None,
+) -> tuple[str, InlineKeyboardMarkup]:
     if supervisor_client is None:
         return _FALLBACK_TEXT, _fallback_keyboard()
     try:
@@ -195,8 +197,11 @@ async def _load_system_view() -> tuple[str, InlineKeyboardMarkup]:
     return text, _system_keyboard(rollback_available=rollback_available)
 
 
-async def _show_system_message(message: Message) -> None:
-    text, keyboard = await _load_system_view()
+async def _show_system_message(
+    message: Message,
+    supervisor_client: SupervisorClient | None,
+) -> None:
+    text, keyboard = await _load_system_view(supervisor_client)
     await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -220,9 +225,12 @@ async def show_admin_menu_with_system(message: Message, state: FSMContext) -> No
 @router.message(Command("system"))
 @router.message(Command("supervisor"))
 @router.message(F.text == "🖥 Система", F.chat.type == "private")
-async def show_system_menu(message: Message) -> None:
+async def show_system_menu(
+    message: Message,
+    supervisor_client: SupervisorClient | None = None,
+) -> None:
     if await _require_owner(message):
-        await _show_system_message(message)
+        await _show_system_message(message, supervisor_client)
 
 
 @router.message(Command("restart"))
@@ -242,10 +250,13 @@ async def show_restart_confirmation(message: Message) -> None:
 
 
 @router.callback_query(F.data == "system:menu")
-async def show_system_callback(call: CallbackQuery) -> None:
+async def show_system_callback(
+    call: CallbackQuery,
+    supervisor_client: SupervisorClient | None = None,
+) -> None:
     if not await _require_owner(call):
         return
-    text, keyboard = await _load_system_view()
+    text, keyboard = await _load_system_view(supervisor_client)
     await _edit_or_answer(call, text, keyboard)
     await call.answer()
 
@@ -278,7 +289,11 @@ async def show_system_confirmation(call: CallbackQuery) -> None:
     await call.answer()
 
 
-async def _accept_supervisor_operation(call: CallbackQuery, action: str) -> None:
+async def _accept_supervisor_operation(
+    call: CallbackQuery,
+    action: str,
+    supervisor_client: SupervisorClient | None,
+) -> None:
     if supervisor_client is None:
         if action != "restart":
             await call.answer("Server Supervisor недоступен.", show_alert=True)
@@ -323,15 +338,21 @@ async def _accept_supervisor_operation(call: CallbackQuery, action: str) -> None
         }
     )
 )
-async def run_system_operation(call: CallbackQuery) -> None:
+async def run_system_operation(
+    call: CallbackQuery,
+    supervisor_client: SupervisorClient | None = None,
+) -> None:
     if not await _require_owner(call):
         return
     action = split_callback_data(str(call.data), ":")[1]
-    await _accept_supervisor_operation(call, action)
+    await _accept_supervisor_operation(call, action, supervisor_client)
 
 
 @router.callback_query(F.data == "system:logs")
-async def show_system_logs(call: CallbackQuery) -> None:
+async def show_system_logs(
+    call: CallbackQuery,
+    supervisor_client: SupervisorClient | None = None,
+) -> None:
     if not await _require_owner(call):
         return
     if supervisor_client is None:

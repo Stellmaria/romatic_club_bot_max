@@ -27,7 +27,7 @@ from bot.handlers.card_subscribe import _decks_keyboard, _presets_manage_keyboar
 from bot.services.card_economy import CardEconomyService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.telegram.callbacks import safe_callback_answer
-from bot.core.settings import ADMIN_LOG_CHATS
+from bot.core.legacy_config import legacy_config
 from db.cards import (
     get_card,
     get_deck,
@@ -94,25 +94,25 @@ def _link(msg_id: int | str | None) -> str:
 
     # username из конфига (на случай если ты опять засунул туда '/@https://')
     try:
-        from bot.core.settings import AUCTION_CHANNEL_USERNAME as _U
+        from bot.core.legacy_config import legacy_config
     except Exception:
         _U = None
 
-    uname = (str(_U or "")).lstrip("@/").strip()
+    uname = (str(legacy_config.AUCTION_CHANNEL_USERNAME or "")).lstrip("@/").strip()
     if uname:
         return f"https://t.me/{uname}/{msg_id}"
 
     # фоллбэк для приватных каналов
     chan_id = None
     try:
-        from bot.core.settings import AUCTION_CHANNEL_ID as _CID
-        chan_id = _CID
+        from bot.core.legacy_config import legacy_config
+        chan_id = legacy_config.AUCTION_CHANNEL_ID
     except Exception:
         pass
     if chan_id is None:
         try:
-            from bot.core.settings import DISCUSSION_CHAT_ID as _DISC
-            chan_id = _DISC
+            from bot.core.legacy_config import legacy_config
+            chan_id = legacy_config.DISCUSSION_CHAT_ID
         except Exception:
             pass
     if chan_id is None:

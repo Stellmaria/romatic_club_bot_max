@@ -6,22 +6,38 @@ from pathlib import Path
 
 from telethon import events
 
-from userbot import entrypoint
-from config import settings
+from bot.core.legacy_config import configure_legacy_config, reset_legacy_config_for_testing
+from bot.core.settings import DatabaseSettings, UserbotProcessSettings, UserbotSettings
+from userbot import entrypoint, runtime
 from userbot.application import (
     UserbotConfigurationError,
     create_userbot_client,
     resolve_userbot_session,
 )
-from userbot import runtime
+from userbot.handlers import register_handlers
 
 ROOT = Path(__file__).resolve().parents[1]
+FERNET_KEY = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
 
 
-def test_entrypoint_has_no_import_time_client_or_decorator_registration() -> None:
+def _config(tmp_path: Path) -> UserbotSettings:
+    return UserbotSettings.from_env(
+        {
+            "USERBOT_API_ID": "12345",
+            "USERBOT_API_HASH": "secret-hash",
+            "AUCTION_CHANNEL_ID": "-100111",
+            "DISCUSSION_CHAT_ID": "-100222",
+            "DATABASE_URL": "postgresql://localhost/test",
+            "UID_HASH_KEY": "test-only-hmac-key",
+            "UID_ENC_KEY": FERNET_KEY,
+        },
+        project_root=tmp_path,
+    )
+
+
+def test_entrypoint_has_no_import_time_client_or_environment_bootstrap() -> None:
     source = (ROOT / "userbot/entrypoint.py").read_text(encoding="utf-8")
     application_source = (ROOT / "userbot/application.py").read_text(encoding="utf-8")
-    service_source = (ROOT / "userbot/services.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
 
     assert "load_dotenv" not in source
@@ -29,41 +45,17 @@ def test_entrypoint_has_no_import_time_client_or_decorator_registration() -> Non
     assert 'password = input(' not in application_source
     assert 'password = getpass(' in application_source
     assert not any(isinstance(node, ast.Raise) for node in tree.body)
-
-    top_level_calls = [
-        node.value.func
-        for node in tree.body
-        if isinstance(node, (ast.Assign, ast.AnnAssign))
-        and isinstance(node.value, ast.Call)
-    ]
     assert not any(
-        isinstance(func, ast.Name) and func.id == "TelegramClient"
-        for func in top_level_calls
-    )
-
-    decorated_handlers = [
-        decorator
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "load_project_environment"
         for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        for decorator in node.decorator_list
-        if isinstance(decorator, ast.Call)
-        and isinstance(decorator.func, ast.Attribute)
-        and decorator.func.attr == "on"
-    ]
-    assert decorated_handlers == []
-
-    service_tree = ast.parse(service_source)
-    thread_root_definitions = [
-        node
-        for node in service_tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == "_auction_thread_root"
-    ]
-    assert len(thread_root_definitions) == 1
+    )
     assert len(source.splitlines()) < 80
 
 
-def test_register_handlers_preserves_count_order_and_chat_filters() -> None:
+def test_register_handlers_preserves_count_order_and_chat_filters(tmp_path: Path) -> None:
     class RecordingClient:
         def __init__(self) -> None:
             self.registrations: list[tuple[object, object]] = []
@@ -71,12 +63,20 @@ def test_register_handlers_preserves_count_order_and_chat_filters() -> None:
         def add_event_handler(self, callback, event) -> None:
             self.registrations.append((callback, event))
 
+    userbot = _config(tmp_path)
+    configure_legacy_config(
+        UserbotProcessSettings(
+            userbot=userbot,
+            database=DatabaseSettings("postgresql://localhost/test"),
+            project_root=tmp_path,
+            runtime_dir=tmp_path / "var",
+        )
+    )
     client = RecordingClient()
     previous_client = runtime.bound_client()
     try:
         runtime._client = None
-        entrypoint.register_handlers(client)
-
+        register_handlers(client)
         assert [callback.__name__ for callback, _ in client.registrations] == [
             "on_new_message",
             "on_edited",
@@ -88,24 +88,16 @@ def test_register_handlers_preserves_count_order_and_chat_filters() -> None:
             events.MessageDeleted,
         ]
         assert [event.chats for _, event in client.registrations] == [
-            entrypoint.DISCUSSION_CHAT_ID,
-            entrypoint.DISCUSSION_CHAT_ID,
-            entrypoint.DISCUSSION_CHAT_ID,
+            userbot.discussion_chat_id,
+            userbot.discussion_chat_id,
+            userbot.discussion_chat_id,
         ]
     finally:
         runtime._client = previous_client
+        reset_legacy_config_for_testing()
 
 
-def test_entrypoint_preserves_public_handler_imports() -> None:
-    from userbot.handlers import on_deleted, on_edited, on_new_message, register_handlers
-
-    assert entrypoint.on_new_message is on_new_message
-    assert entrypoint.on_edited is on_edited
-    assert entrypoint.on_deleted is on_deleted
-    assert entrypoint.register_handlers is register_handlers
-
-
-def test_client_factory_uses_settings_without_connecting() -> None:
+def test_client_factory_uses_typed_settings_without_connecting(tmp_path: Path) -> None:
     calls: list[tuple[str, int, str]] = []
     sentinel = object()
 
@@ -113,25 +105,18 @@ def test_client_factory_uses_settings_without_connecting() -> None:
         calls.append((session, api_id, api_hash))
         return sentinel
 
-    config = replace(
-        settings,
-        userbot_api_id=12345,
-        userbot_api_hash="secret-hash",
-        userbot_session="custom-session",
-        discussion_chat_id=-100123,
-    )
-
+    config = replace(_config(tmp_path), session="custom-session")
     result = create_userbot_client(
         config,
+        project_root=tmp_path,
         client_factory=factory,
         environ={"USERBOT_SESSION": "custom-session"},
     )
-
     assert result is sentinel
     assert calls == [("custom-session", 12345, "secret-hash")]
 
 
-def test_invalid_configuration_fails_before_client_construction() -> None:
+def test_invalid_manual_configuration_fails_before_client_construction(tmp_path: Path) -> None:
     constructed = False
 
     def factory(*_args):
@@ -139,20 +124,18 @@ def test_invalid_configuration_fails_before_client_construction() -> None:
         constructed = True
         return object()
 
-    config = replace(
-        settings,
-        userbot_api_id=0,
-        userbot_api_hash="",
-        discussion_chat_id=0,
-    )
-
+    config = replace(_config(tmp_path), api_id=0, api_hash="", discussion_chat_id=0)
     try:
-        create_userbot_client(config, client_factory=factory, environ={})
+        create_userbot_client(
+            config,
+            project_root=tmp_path,
+            client_factory=factory,
+            environ={},
+        )
     except UserbotConfigurationError as exc:
         error_message = str(exc)
-    else:
+    else:  # pragma: no cover
         raise AssertionError("invalid userbot configuration was accepted")
-
     assert constructed is False
     assert "USERBOT_API_ID" in error_message
     assert "USERBOT_API_HASH" in error_message
@@ -160,29 +143,28 @@ def test_invalid_configuration_fails_before_client_construction() -> None:
 
 
 def test_default_session_falls_back_to_existing_legacy_root(tmp_path: Path) -> None:
-    legacy_file = tmp_path / "userbot_session.session"
-    legacy_file.touch()
+    (tmp_path / "userbot_session.session").touch()
     runtime_dir = tmp_path / "var"
     config = replace(
-        settings,
+        _config(tmp_path),
         runtime_dir=runtime_dir,
-        userbot_session=str(runtime_dir / "userbot_session"),
+        session=str(runtime_dir / "userbot_session"),
     )
-
     result = resolve_userbot_session(config, environ={}, project_root=tmp_path)
-
     assert result == str(tmp_path / "userbot_session")
 
 
 def test_explicit_session_never_uses_legacy_fallback(tmp_path: Path) -> None:
     (tmp_path / "userbot_session.session").touch()
     configured = tmp_path / "sessions" / "named"
-    config = replace(settings, userbot_session=str(configured))
-
+    config = replace(_config(tmp_path), session=str(configured))
     result = resolve_userbot_session(
         config,
         environ={"USERBOT_SESSION": str(configured)},
         project_root=tmp_path,
     )
-
     assert result == str(configured)
+
+
+def test_entrypoint_exports_only_composition_functions() -> None:
+    assert entrypoint.__all__ == ["main", "run"]

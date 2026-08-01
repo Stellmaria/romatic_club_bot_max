@@ -13,7 +13,7 @@ from aiogram.exceptions import (
     TelegramNetworkError,
 )
 
-import bot.core.settings as cfg
+from bot.core.legacy_config import legacy_config
 from bot.presentation.admin import (
     extract_auction_id,
     format_admin_action_log,
@@ -45,15 +45,15 @@ def _parse_chat_id(value: object) -> int | None:
 def _iter_admin_log_chats() -> list[int]:
     """Collect configured admin log chats once, preserving their order."""
     candidates: list[object] = [
-        getattr(cfg, "LOG_CHAT_ID", None),
-        getattr(cfg, "LOG_CHAT_ID2", None),
+        getattr(legacy_config, "LOG_CHAT_ID", None),
+        getattr(legacy_config, "LOG_CHAT_ID2", None),
     ]
 
-    configured_chats = getattr(cfg, "ADMIN_LOG_CHATS", None)
+    configured_chats = getattr(legacy_config, "ADMIN_LOG_CHATS", None)
     if isinstance(configured_chats, (list, tuple, set)):
         candidates.extend(configured_chats)
 
-    raw_multiple = getattr(cfg, "LOG_CHAT_IDS", None)
+    raw_multiple = getattr(legacy_config, "LOG_CHAT_IDS", None)
     if isinstance(raw_multiple, str) and raw_multiple.strip():
         candidates.extend(part.strip() for part in raw_multiple.split(","))
 

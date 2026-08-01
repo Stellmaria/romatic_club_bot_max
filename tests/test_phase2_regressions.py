@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import os
 import sys
 from pathlib import Path
 
@@ -73,16 +72,26 @@ def test_new_uid_writes_use_digest_and_encrypted_value() -> None:
 
 
 def test_uid_crypto_round_trip() -> None:
-    os.environ.setdefault("UID_HASH_KEY", "test-only-hmac-key")
-    os.environ.setdefault("UID_ENC_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=")
+    from bot.uid_crypto import (
+        configure_uid_crypto,
+        reset_uid_crypto_for_testing,
+        uid_decrypt,
+        uid_encrypt,
+        uid_hash,
+    )
 
-    from bot.uid_crypto import uid_decrypt, uid_encrypt, uid_hash
-
-    uid = "0123456789abcdef01234567"
-    token = uid_encrypt(uid)
-    assert token != uid
-    assert uid_decrypt(token) == uid
-    assert uid_hash(uid) == uid_hash(uid.upper())
+    configure_uid_crypto(
+        "test-only-hmac-key",
+        "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+    )
+    try:
+        uid = "0123456789abcdef01234567"
+        token = uid_encrypt(uid)
+        assert token != uid
+        assert uid_decrypt(token) == uid
+        assert uid_hash(uid) == uid_hash(uid.upper())
+    finally:
+        reset_uid_crypto_for_testing()
 
 
 def test_auction_finalization_is_claim_based() -> None:

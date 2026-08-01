@@ -11,20 +11,20 @@ passwords sent through Telegram are not an authorization factor.
 
 from __future__ import annotations
 
-from bot.core.settings import ADMINS, ADMINS_OWNERS
+from bot.core.legacy_config import legacy_config
 from db.admin import is_admin as _is_database_admin
 
 
 def configured_owner_ids() -> frozenset[int]:
     """Return every owner ID configured through the environment."""
 
-    return frozenset(int(value) for value in ADMINS_OWNERS)
+    return frozenset(int(value) for value in legacy_config.ADMINS_OWNERS)
 
 
 def configured_admin_ids() -> frozenset[int]:
     """Return every administrator ID configured through the environment."""
 
-    return frozenset(int(value) for value in (*ADMINS, *ADMINS_OWNERS))
+    return frozenset(int(value) for value in (*legacy_config.ADMINS, *legacy_config.ADMINS_OWNERS))
 
 
 def is_owner_user(user_id: int | None) -> bool:

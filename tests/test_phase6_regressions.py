@@ -204,10 +204,10 @@ def test_stale_callback_updates_are_dropped_and_safely_ignored() -> None:
     middleware = _source("bot/middlewares/expired_callback.py")
     callback_utils = _source("bot/telegram/callbacks.py")
 
-    assert "drop_pending_updates=get_bool(\"DROP_PENDING_UPDATES\", True)" in _source("bot/core/settings.py")
-    assert "await bot.delete_webhook(" in application
-    assert "drop_pending_updates=app_settings.drop_pending_updates" in application
-    assert application.index("await bot.delete_webhook") < application.index("task_manager = BackgroundTaskManager()")
+    assert 'drop_pending_updates=reader.boolean("DROP_PENDING_UPDATES", default=True)' in _source("bot/core/settings.py")
+    assert "await telegram_bot.delete_webhook(" in application
+    assert "drop_pending_updates=bot_settings.drop_pending_updates" in application
+    assert application.index("await telegram_bot.delete_webhook") < application.index("task_manager = BackgroundTaskManager()")
     assert "dispatcher.update.outer_middleware(ExpiredCallbackMiddleware())" in router_bootstrap
     assert '"query is too old"' in callback_utils
     assert '"response timeout expired"' in callback_utils

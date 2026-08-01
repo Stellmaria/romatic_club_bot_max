@@ -44,13 +44,15 @@ def test_supervisor_token_is_file_backed_and_not_shared_through_env() -> None:
     compose = source("compose.yaml")
     env_example = source(".env.example")
     client = source("bot/core/supervisor_client.py")
+    settings = source("bot/core/settings.py")
     unit = source("deploy/systemd/romatic-server-supervisor.service")
 
     assert "SUPERVISOR_TOKEN_FILE: /run/secrets/supervisor_token" in compose
     assert "SUPERVISOR_TOKEN_FILE_HOST" in compose
     assert "SUPERVISOR_TOKEN_FILE_HOST=" in env_example
     assert "SUPERVISOR_TOKEN=change_me" not in env_example
-    assert 'Path(token_file).read_text(encoding="utf-8")' in client
+    assert 'path.read_text(encoding="utf-8")' in settings
+    assert 'os.getenv' not in client
     assert "EnvironmentFile=%DATA_DIR%/runtime/supervisor/supervisor.env" in unit
     assert "EnvironmentFile=%APP_DIR%/.env" not in unit
 

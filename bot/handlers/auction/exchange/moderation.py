@@ -19,7 +19,7 @@ from bot.services.exchange_media import get_exchange_cover_media as _get_exchang
 from bot.services.exchanges import ExchangeService
 from bot.services.exchange_moderation import ExchangeModerationService
 from bot.telegram.media import safe_send_media
-from bot.core.legacy_config import AUCTION_CHANNEL_ID, AUCTION_CHANNEL_USERNAME
+from bot.core.legacy_config import legacy_config
 from bot.legacy_fsm import ModActionFSM
 
 router = Router(name="auction_exchange_moderation")
@@ -1067,13 +1067,13 @@ async def exchange_broadcast(call: CallbackQuery, bot: Bot):
     try:
         if proof and proof.upper() != "NO_PROOF":
             msg = await bot.send_photo(
-                AUCTION_CHANNEL_ID,
+                legacy_config.AUCTION_CHANNEL_ID,
                 photo=proof,
                 caption=text[:1024],
                 parse_mode="HTML",
             )
         else:
-            msg = await bot.send_message(AUCTION_CHANNEL_ID, text, parse_mode="HTML")
+            msg = await bot.send_message(legacy_config.AUCTION_CHANNEL_ID, text, parse_mode="HTML")
     except Exception:
         try:
             await service.release_post_claim(batch_id)
@@ -1087,7 +1087,7 @@ async def exchange_broadcast(call: CallbackQuery, bot: Bot):
     try:
         await service.mark_posted(
             batch_id,
-            chat_id=int(AUCTION_CHANNEL_ID),
+            chat_id=int(legacy_config.AUCTION_CHANNEL_ID),
             message_id=int(msg.message_id),
         )
     except Exception:
@@ -1103,8 +1103,8 @@ async def exchange_broadcast(call: CallbackQuery, bot: Bot):
         return
 
     link = ""
-    if AUCTION_CHANNEL_USERNAME:
-        link = f"\n🔗 https://t.me/{AUCTION_CHANNEL_USERNAME}/{msg.message_id}"
+    if legacy_config.AUCTION_CHANNEL_USERNAME:
+        link = f"\n🔗 https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME}/{msg.message_id}"
 
     await send_admin_log(
         bot,

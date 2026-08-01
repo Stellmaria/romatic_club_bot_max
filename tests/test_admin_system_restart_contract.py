@@ -101,8 +101,9 @@ def test_system_panel_supports_separate_bot_and_userbot_restart() -> None:
 def test_supervisor_client_requires_explicit_enablement_and_token() -> None:
     source = _source(CLIENT)
 
-    assert 'os.getenv("SUPERVISOR_ENABLED"' in source
-    assert 'os.getenv("SUPERVISOR_TOKEN"' in source
+    assert 'def from_settings(' in source
+    assert 'os.getenv' not in source
+    assert 'settings.token' in source
     assert '"Authorization": f"Bearer {self.token}"' in source
     assert '"/v1/restart-userbot"' in source
     assert '"/v1/update"' in source

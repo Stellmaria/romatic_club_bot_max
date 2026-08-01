@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]  # .../E:\python\main\1
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from bot.core.legacy_config import DATABASE_URL
+from bot.core.legacy_config import legacy_config
 
 
 def _to_dt(series: pd.Series) -> pd.Series:
@@ -111,7 +111,7 @@ async def main() -> None:
             )
         )
 
-    conn = await asyncpg.connect(DATABASE_URL)
+    conn = await asyncpg.connect(legacy_config.DATABASE_URL)
     try:
         if args.truncate:
             await conn.execute("TRUNCATE public.auction_posts_backfill CASCADE;")

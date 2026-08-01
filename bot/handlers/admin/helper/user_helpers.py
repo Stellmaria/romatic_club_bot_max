@@ -11,7 +11,7 @@ from bot.core.time import schedule_slot_key, to_moscow_wall
 from bot.handlers.admin.helper.date_utils import all_30min_slots_for_date
 from bot.handlers.admin.helper.new.utils import auction_kind_label
 from bot.handlers.helper.helpers_users import parse_username_userid
-from bot.core.legacy_config import LUXURY_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from db.legacy import get_all_users, set_luxury_status, get_user, add_user, get_user_by_username, get_card_by_num, \
     get_lot_owners, get_users_by_ids, is_luxury_user
 
@@ -22,7 +22,7 @@ async def luxury_status_sync_loop(bot):
         for user in users:
             user_id = user['user_id']
             try:
-                member = await bot.get_chat_member(LUXURY_CHAT_ID, user_id)
+                member = await bot.get_chat_member(legacy_config.LUXURY_CHAT_ID, user_id)
                 is_lux = member.status in ("member", "administrator", "creator")
             except TelegramAPIError:
                 is_lux = False

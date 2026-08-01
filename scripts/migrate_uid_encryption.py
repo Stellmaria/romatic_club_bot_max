@@ -4,11 +4,16 @@ import asyncio
 import re
 from dataclasses import dataclass
 
-from bot.core.environment import load_project_environment
-
-load_project_environment()
-
-from bot.uid_crypto import norm_uid, uid_decrypt, uid_encrypt, uid_hash, uid_last4
+from bot.core.environment import load_project_environment, resolve_project_root
+from bot.core.settings import BotSettings, DatabaseSettings
+from bot.uid_crypto import (
+    configure_uid_crypto,
+    norm_uid,
+    uid_decrypt,
+    uid_encrypt,
+    uid_hash,
+    uid_last4,
+)
 from db.core import (
     close_db,
     get_db_pool,
@@ -199,8 +204,8 @@ async def assert_plaintext_scrubbed(conn) -> None:
         raise RuntimeError(f"Plaintext UID rows remain after migration: {dirty}")
 
 
-async def main() -> None:
-    pool = await get_db_pool()
+async def main(database: DatabaseSettings) -> None:
+    pool = await get_db_pool(database)
     try:
         await apply_migrations(pool)
 
@@ -221,5 +226,14 @@ async def main() -> None:
         await close_db()
 
 
+def run() -> None:
+    project_root = resolve_project_root()
+    load_project_environment(project_root)
+    database = DatabaseSettings.from_env(project_root=project_root)
+    bot = BotSettings.from_env(project_root=project_root)
+    configure_uid_crypto(bot.uid_hash_key, bot.uid_enc_key)
+    asyncio.run(main(database))
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run()

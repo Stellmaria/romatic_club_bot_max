@@ -15,8 +15,8 @@ def test_application_registers_expired_callback_guard_and_drops_backlog() -> Non
 
     assert "from bot.middlewares.expired_callback import ExpiredCallbackMiddleware" in routers
     assert "dispatcher.update.outer_middleware(ExpiredCallbackMiddleware())" in routers
-    assert "drop_pending_updates=app_settings.drop_pending_updates" in application
-    assert application.index("await bot.delete_webhook") < application.index("task_manager.start(")
+    assert "drop_pending_updates=bot_settings.drop_pending_updates" in application
+    assert application.index("await telegram_bot.delete_webhook") < application.index("task_manager.start(")
 
 
 def test_edit_lot_menu_uses_safe_callback_answer() -> None:

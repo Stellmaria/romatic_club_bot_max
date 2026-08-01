@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from bot.handlers.admin.helper.admin_constants import BUTTONS, SYSTEM_MESSAGES
 from bot.utils import resolve_user_id
-from bot.core.legacy_config import ADMIN_SECRET
+from bot.core.legacy_config import legacy_config
 from db.legacy import get_user
 
 
@@ -53,7 +53,7 @@ async def resolve_admin_action_args(message: types.Message, usage: str) -> tuple
         await message.answer(SYSTEM_MESSAGES["syntax_error"].format(example=usage))
         return None, None
     who, password = parts[1], parts[2]
-    if password != ADMIN_SECRET:
+    if password != legacy_config.ADMIN_SECRET:
         await message.answer(SYSTEM_MESSAGES["invalid_password"])
         return None, None
     user_id = await resolve_user_id(who)

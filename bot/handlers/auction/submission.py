@@ -35,7 +35,7 @@ from bot.services.auction_workflows import (
 )
 from bot.services.luxury import get_user_luxury_level
 from bot.telegram.media import answer_media_any as _answer_media_any
-from bot.core.settings import AUCTION_CHANNEL_ID, DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from db.cards import (
     get_all_decks,
     get_cards_by_deck,
@@ -121,7 +121,7 @@ async def addlot_start(message: types.Message, state: FSMContext, bot: Bot) -> N
         is_trusted = False
 
     try:
-        await _ensure_membership(bot, message.from_user.id, AUCTION_CHANNEL_ID, DISCUSSION_CHAT_ID)
+        await _ensure_membership(bot, message.from_user.id, legacy_config.AUCTION_CHANNEL_ID, legacy_config.DISCUSSION_CHAT_ID)
     except PermissionError:
         await message.answer(
             USER_MESSAGES.get(

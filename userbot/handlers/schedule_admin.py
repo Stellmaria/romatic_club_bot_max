@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 
 from telethon import events
 
-from bot.core.settings import ADMINS, ADMINS_OWNERS, settings
+from bot.core.legacy_config import legacy_config
 from bot.core.time import MOSCOW
 from userbot.schedule_announcements import (
     extract_custom_emoji_assignments,
@@ -25,7 +25,7 @@ async def _is_authorized(event: object) -> bool:
     if getattr(event, "out", False):
         return True
     sender_id = getattr(event, "sender_id", None)
-    allowed = set(ADMINS_OWNERS or ADMINS)
+    allowed = set(legacy_config.ADMINS_OWNERS or legacy_config.ADMINS)
     return bool(sender_id and int(sender_id) in allowed)
 
 
@@ -54,7 +54,7 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
             await event.reply("В сообщении не найдено ни одного кастомного эмодзи.")
             return
 
-        stored_keys = await store_emoji_assignments(assignments)
+        stored_keys = await store_emoji_assignments(assignments, config=legacy_config)
         missing = missing_required_emoji_keys(
             {key: assignments.get(key, 1) for key in stored_keys}
         )
@@ -72,7 +72,7 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
 
     if command == "/schedule_preview":
         target_date = datetime.now(MOSCOW).date() + timedelta(days=1)
-        rendered = await preview_schedule_announcement(target_date)
+        rendered = await preview_schedule_announcement(target_date, config=legacy_config)
         if rendered is None:
             await event.reply(f"На {target_date:%d.%m.%Y} нет живых лотов.")
             return
@@ -95,10 +95,10 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
         review_text = str(review.get("status")) if review else "превью ещё не создано"
         await event.reply(
             "Автопубликация расписания: "
-            + ("включена" if settings.schedule_announcements_enabled else "выключена")
+            + ("включена" if legacy_config.SCHEDULE_ANNOUNCEMENTS_ENABLED else "выключена")
             + "\nПревью: 22:30 МСК"
-            + f"\nПубликация: {settings.schedule_announcements_hour:02d}:"
-            f"{settings.schedule_announcements_minute:02d} МСК"
+            + f"\nПубликация: {legacy_config.SCHEDULE_ANNOUNCEMENTS_HOUR:02d}:"
+            f"{legacy_config.SCHEDULE_ANNOUNCEMENTS_MINUTE:02d} МСК"
             + f"\nАдминская ветка: {target_text}"
             + f"\nСтатус на {target_date:%d.%m.%Y}: {review_text}"
         )
@@ -134,8 +134,8 @@ async def on_schedule_review_callback(event: events.CallbackQuery.Event) -> None
         await event.answer("Расписание подтверждено")
         status_text = (
             f"✅ Расписание на {target_date:%d.%m.%Y} подтверждено. "
-            f"Публикация произойдёт в {settings.schedule_announcements_hour:02d}:"
-            f"{settings.schedule_announcements_minute:02d} МСК."
+            f"Публикация произойдёт в {legacy_config.SCHEDULE_ANNOUNCEMENTS_HOUR:02d}:"
+            f"{legacy_config.SCHEDULE_ANNOUNCEMENTS_MINUTE:02d} МСК."
         )
     elif action == "reject":
         await decide_schedule_review(

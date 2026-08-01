@@ -1,9 +1,4 @@
-"""PostgreSQL connection-pool lifecycle.
-
-This module is the infrastructure boundary used by services and repositories.
-The legacy :mod:`db.db` facade still mirrors the pool reference while old query
-functions are migrated into repositories.
-"""
+"""PostgreSQL connection-pool lifecycle."""
 
 from __future__ import annotations
 
@@ -12,20 +7,33 @@ import logging
 
 import asyncpg
 
-from bot.core.settings import (
-    DATABASE_POOL_MAX_SIZE,
-    DATABASE_POOL_MIN_SIZE,
-    DATABASE_URL,
-)
+from bot.core.settings import DatabaseSettings
 
 logger = logging.getLogger("auction_bot.database")
 
 _pool: asyncpg.Pool | None = None
+_database_settings: DatabaseSettings | None = None
 _initialization_lock: asyncio.Lock | None = None
 
 
 class DatabaseConfigurationError(RuntimeError):
-    """Raised when a database connection is requested without a DSN."""
+    """Raised when a database connection is requested before configuration."""
+
+
+def configure_database(settings: DatabaseSettings) -> None:
+    """Bind validated settings without opening a network connection."""
+
+    global _database_settings
+    if _pool is not None and settings != _database_settings:
+        raise RuntimeError("cannot replace database settings while the pool is open")
+    _database_settings = settings
+
+
+def reset_database_configuration_for_testing() -> None:
+    global _database_settings
+    if _pool is not None:
+        raise RuntimeError("cannot reset database settings while the pool is open")
+    _database_settings = None
 
 
 def _get_initialization_lock() -> asyncio.Lock:
@@ -36,35 +44,34 @@ def _get_initialization_lock() -> asyncio.Lock:
 
 
 def current_pool() -> asyncpg.Pool | None:
-    """Return the initialized pool without creating network connections."""
-
     return _pool
 
 
-async def get_db_pool() -> asyncpg.Pool:
+async def get_db_pool(settings: DatabaseSettings | None = None) -> asyncpg.Pool:
     """Return the process pool, creating it exactly once when necessary."""
 
     global _pool
+    if settings is not None:
+        configure_database(settings)
     if _pool is not None:
         return _pool
 
-    if not DATABASE_URL:
-        raise DatabaseConfigurationError("DATABASE_URL is not configured")
+    config = _database_settings
+    if config is None:
+        raise DatabaseConfigurationError("database settings are not configured")
 
     async with _get_initialization_lock():
         if _pool is None:
             _pool = await asyncpg.create_pool(
-                DATABASE_URL,
-                min_size=DATABASE_POOL_MIN_SIZE,
-                max_size=DATABASE_POOL_MAX_SIZE,
+                config.url,
+                min_size=config.pool_min_size,
+                max_size=config.pool_max_size,
             )
             logger.info("Database pool initialized")
     return _pool
 
 
 async def close_db_pool() -> None:
-    """Close and forget the process pool; safe to call more than once."""
-
     global _pool
     pool, _pool = _pool, None
     if pool is not None:
@@ -73,7 +80,16 @@ async def close_db_pool() -> None:
 
 
 def install_pool_for_testing(pool: asyncpg.Pool | None) -> None:
-    """Inject a disposable pool without opening a production connection."""
-
     global _pool
     _pool = pool
+
+
+__all__ = (
+    "DatabaseConfigurationError",
+    "close_db_pool",
+    "configure_database",
+    "current_pool",
+    "get_db_pool",
+    "install_pool_for_testing",
+    "reset_database_configuration_for_testing",
+)

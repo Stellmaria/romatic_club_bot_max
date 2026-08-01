@@ -1,27 +1,47 @@
-import os
-import hmac
-import hashlib
-from pathlib import Path
+from __future__ import annotations
 
-from dotenv import load_dotenv
+import hashlib
+import hmac
+
 from cryptography.fernet import Fernet
 
 
-# Подгружаем .env рядом с корнем проекта
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+class UIDCryptoNotConfigured(RuntimeError):
+    """Raised when identity helpers are used before process composition."""
 
-_uid_hash_key = os.getenv("UID_HASH_KEY")
-_uid_enc_key = os.getenv("UID_ENC_KEY")
 
-if not _uid_hash_key:
-    raise RuntimeError("UID_HASH_KEY is missing in environment/.env")
-if not _uid_enc_key:
-    raise RuntimeError("UID_ENC_KEY is missing in environment/.env")
+_uid_hash_key: bytes | None = None
+_fernet: Fernet | None = None
 
-UID_HASH_KEY = _uid_hash_key.encode("utf-8")
-UID_ENC_KEY = _uid_enc_key.encode("utf-8")
 
-_fernet = Fernet(UID_ENC_KEY)
+def configure_uid_crypto(hash_key: str, encryption_key: str) -> None:
+    """Install validated identity keys for the current process."""
+
+    global _uid_hash_key, _fernet
+    if not hash_key:
+        raise ValueError("UID_HASH_KEY is required")
+    if not encryption_key:
+        raise ValueError("UID_ENC_KEY is required")
+    _uid_hash_key = hash_key.encode("utf-8")
+    _fernet = Fernet(encryption_key.encode("utf-8"))
+
+
+def reset_uid_crypto_for_testing() -> None:
+    global _uid_hash_key, _fernet
+    _uid_hash_key = None
+    _fernet = None
+
+
+def _require_hash_key() -> bytes:
+    if _uid_hash_key is None:
+        raise UIDCryptoNotConfigured("UID crypto is not configured")
+    return _uid_hash_key
+
+
+def _require_fernet() -> Fernet:
+    if _fernet is None:
+        raise UIDCryptoNotConfigured("UID crypto is not configured")
+    return _fernet
 
 
 def norm_uid(uid: str | None) -> str:
@@ -30,30 +50,44 @@ def norm_uid(uid: str | None) -> str:
 
 def uid_hash(uid: str) -> str:
     value = norm_uid(uid).encode("utf-8")
-    return hmac.new(UID_HASH_KEY, value, hashlib.sha256).hexdigest()
+    return hmac.new(_require_hash_key(), value, hashlib.sha256).hexdigest()
 
 
 def uid_encrypt(uid: str) -> str:
     value = norm_uid(uid).encode("utf-8")
-    return _fernet.encrypt(value).decode("utf-8")
+    return _require_fernet().encrypt(value).decode("utf-8")
 
 
 def uid_decrypt(token: str) -> str:
-    return _fernet.decrypt(token.encode("utf-8")).decode("utf-8")
+    return _require_fernet().decrypt(token.encode("utf-8")).decode("utf-8")
 
 
 def uid_last4(uid: str) -> str:
-    s = norm_uid(uid)
-    return s[-4:] if len(s) >= 4 else s
+    value = norm_uid(uid)
+    return value[-4:] if len(value) >= 4 else value
 
 
 def mask_uid(uid: str) -> str:
-    s = norm_uid(uid)
-    if len(s) <= 8:
-        return s
-    return f"{s[:4]}…{s[-4:]}"
+    value = norm_uid(uid)
+    if len(value) <= 8:
+        return value
+    return f"{value[:4]}…{value[-4:]}"
 
 
 def mask_uid_by_last4(last4: str | None) -> str:
-    s = (last4 or "").strip()
-    return f"••••••••••••••••••••{s}" if s else "—"
+    value = (last4 or "").strip()
+    return f"••••••••••••••••••••{value}" if value else "—"
+
+
+__all__ = (
+    "UIDCryptoNotConfigured",
+    "configure_uid_crypto",
+    "mask_uid",
+    "mask_uid_by_last4",
+    "norm_uid",
+    "reset_uid_crypto_for_testing",
+    "uid_decrypt",
+    "uid_encrypt",
+    "uid_hash",
+    "uid_last4",
+)

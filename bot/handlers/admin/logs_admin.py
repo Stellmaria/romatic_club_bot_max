@@ -4,7 +4,7 @@ from typing import List, Optional, Set
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest, TelegramNetworkError
 
-import bot.core.legacy_config as cfg
+from bot.core.legacy_config import legacy_config
 
 
 def _parse_chat_id(value: object) -> Optional[int]:
@@ -27,16 +27,16 @@ def _parse_chat_id(value: object) -> Optional[int]:
 def _iter_admin_log_chats() -> List[int]:
     """Собирает все возможные лог-чаты из config (один или несколько)."""
     candidates: List[object] = [
-        getattr(cfg, "LOG_CHAT_ID", None),
-        getattr(cfg, "LOG_CHAT_ID2", None),
+        getattr(legacy_config, "LOG_CHAT_ID", None),
+        getattr(legacy_config, "LOG_CHAT_ID2", None),
     ]
 
-    admin_log_chats = getattr(cfg, "ADMIN_LOG_CHATS", None)
+    admin_log_chats = getattr(legacy_config, "ADMIN_LOG_CHATS", None)
     if isinstance(admin_log_chats, (list, tuple, set)):
         candidates.extend(list(admin_log_chats))
 
     # Поддержка строки с несколькими id
-    raw_multi = getattr(cfg, "LOG_CHAT_IDS", None)
+    raw_multi = getattr(legacy_config, "LOG_CHAT_IDS", None)
     if isinstance(raw_multi, str) and raw_multi.strip():
         candidates.extend([p.strip() for p in raw_multi.split(",")])
 

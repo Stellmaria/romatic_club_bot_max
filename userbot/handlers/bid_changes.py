@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from telethon import events
 
-from bot.core.settings import DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from userbot.runtime import ACCEPTED_BIDS
 from userbot.services import (
     _add_warning,
@@ -118,8 +118,8 @@ async def on_deleted(event: events.MessageDeleted.Event) -> None:
             except Exception:  # noqa: BLE001
                 pass
 
-        ACCEPTED_BIDS.pop((int(DISCUSSION_CHAT_ID), int(message_id)), None)
-        if await _is_chat_admin(DISCUSSION_CHAT_ID, bidder_id):
+        ACCEPTED_BIDS.pop((int(legacy_config.DISCUSSION_CHAT_ID), int(message_id)), None)
+        if await _is_chat_admin(legacy_config.DISCUSSION_CHAT_ID, bidder_id):
             continue
 
         warnings = await _add_warning(
