@@ -44,6 +44,7 @@ from db.legacy import (
 from bot.legacy_fsm import UserDeleteLotFSM, UserEditLotFSM, PublicWhoFSM
 from bot.telegram.callback_parser import split_callback_data
 
+from bot.telegram.boundary import escape_html
 router = Router()
 logger = logging.getLogger(__name__)
 UID_HEX_RE = re.compile(r"^[0-9a-f]{24}$", re.IGNORECASE)
@@ -186,7 +187,7 @@ async def user_profile(message: types.Message):
     status = "Подписан ✅" if sub else "Не подписан"
     await message.answer(
         f"<b>Профиль</b>\n"
-        f"👤 {message.from_user.full_name}\n"
+        f"👤 {escape_html(message.from_user.full_name)}\n"
         f"ID: <code>{message.from_user.id}</code>\n"
         f"Статус уведомлений: {status}",
         parse_mode="HTML",
@@ -1137,7 +1138,7 @@ async def user_profile(message: types.Message):
 
     await message.answer(
         f"<b>Профиль</b>\n"
-        f"👤 {message.from_user.full_name}\n"
+        f"👤 {escape_html(message.from_user.full_name)}\n"
         f"ID: <code>{message.from_user.id}</code>\n"
         f"Статус уведомлений: {status}\n"
         f"Верификация: {ver_line}"
