@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_review_queue_includes_all_pre_schedule_statuses() -> None:
-    source = (ROOT / "db/legacy_impl.py").read_text(encoding="utf-8")
+    source = (ROOT / "db/auctions.py").read_text(encoding="utf-8")
     assert 'review_statuses = ("draft", "moderation", "pending", "approved")' in source
     assert 'a.status = ANY($1::text[])' in source
     assert 'a.status,' in source
