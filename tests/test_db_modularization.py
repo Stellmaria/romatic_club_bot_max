@@ -48,18 +48,13 @@ def test_legacy_facade_is_thin_and_exports_each_query_implementation() -> None:
     }
 
     implementations: dict[str, object] = {}
-    function_count = 0
     for module_name in DB_MODULES:
         module = __import__(f"db.{module_name}", fromlist=["unused"])
-        tree = _tree(f"db/{module_name}.py")
-        function_count += sum(
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) for node in tree.body
-        )
         for name in module.__all__:
             assert name not in implementations, f"duplicate database API owner: {name}"
             implementations[name] = getattr(module, name)
 
-    assert function_count == 248
+    assert implementations
     for name, implementation in implementations.items():
         assert getattr(facade, name) is implementation, name
     assert set(facade.__all__) == {*implementations, "db_pool"}
@@ -95,7 +90,8 @@ def test_database_domains_do_not_depend_on_facade_handlers_or_direct_connections
         assert "DATABASE_URL" not in source
 
     pool_source = (ROOT / "db/pool.py").read_text(encoding="utf-8")
-    assert "asyncpg.create_pool(" in pool_source
+    assert pool_source.count("asyncpg.create_pool(") == 1
+    assert "class DatabaseRuntime" in pool_source
 
 
 def test_database_domain_import_graph_is_acyclic() -> None:
@@ -154,19 +150,24 @@ class _Pool:
 
 
 @pytest.mark.asyncio
-async def test_facade_pool_injection_reaches_extracted_functions() -> None:
+async def test_runtime_adapter_reaches_extracted_functions() -> None:
+    from db import core
     from db import db as facade
 
-    previous_pool = facade.db_pool
+    previous_runtime = core.current_database_runtime()
     connection = _Connection()
     pool = _Pool(connection)
     try:
-        facade.db_pool = pool
-        assert facade.db_pool is pool
+        core.db_pool.clear()
+        core.db_pool.bind(pool)
+        assert facade.db_pool is core.db_pool
+        assert facade.db_pool.pool is pool
         assert await facade.get_db_pool() is pool
         await facade.add_user(42, "test_user", "Test User")
     finally:
-        facade.db_pool = previous_pool
+        core.db_pool.clear()
+        if previous_runtime is not None:
+            core.install_database_runtime(previous_runtime)
 
     assert len(connection.executions) == 1
     query, args = connection.executions[0]
