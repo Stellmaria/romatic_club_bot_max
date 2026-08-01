@@ -20,7 +20,7 @@ services:
       context: .
       dockerfile: Dockerfile.server-supervisor-proxy
     restart: unless-stopped
-    user: "10001:10001"
+    user: "${ROMATIC_SUPERVISOR_GID:-10001}:${ROMATIC_SUPERVISOR_GID:-10001}"
     environment:
       SERVER_SUPERVISOR_SOCKET: ${SERVER_SUPERVISOR_SOCKET:-/runtime/supervisor/romatic-server-supervisor.sock}
       SERVER_SUPERVISOR_PROXY_HOST: 0.0.0.0
@@ -35,7 +35,7 @@ services:
         - CMD
         - python
         - -c
-        - import socket; s=socket.create_connection(('127.0.0.1',8765),2); s.close()
+        - import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=2); payload = json.load(response); assert response.status == 200 and payload.get('ok') is True
       interval: 15s
       timeout: 3s
       retries: 3

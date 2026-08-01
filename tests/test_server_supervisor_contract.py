@@ -87,7 +87,10 @@ def test_proxy_is_isolated_from_docker_and_checkout() -> None:
 
     assert "Dockerfile.server-supervisor-proxy" in service
     assert "read_only: true" in service
-    assert 'user: "10001:10001"' in service
+    assert (
+        'user: "${ROMATIC_SUPERVISOR_GID:-10001}:'
+        '${ROMATIC_SUPERVISOR_GID:-10001}"'
+    ) in service
     assert "cap_drop:\n      - ALL" in service
     assert "no-new-privileges:true" in service
     assert "docker.sock" not in service
