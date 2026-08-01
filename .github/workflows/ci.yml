@@ -40,11 +40,13 @@ jobs:
             bot/core/supervisor_client.py \
             bot/handlers/admin/admin_panel_system.py \
             scripts/server_supervisor.py \
-            scripts/server_supervisor_proxy.py
+            scripts/server_supervisor_proxy.py \
+            scripts/hermes_incident_monitor.py
       - name: Validate deployment scripts
         run: |
           bash -n deploy/server/deploy.sh
           bash -n deploy/server/install-server-supervisor.sh
+          bash -n deploy/server/install-hermes-incident-monitor.sh
       - name: Run Supervisor regression contracts
         env:
           BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
@@ -54,7 +56,8 @@ jobs:
           python -m pytest -q \
             tests/test_process_restart.py \
             tests/test_admin_system_restart_contract.py \
-            tests/test_server_supervisor_contract.py
+            tests/test_server_supervisor_contract.py \
+            tests/test_hermes_incident_monitor_contract.py
 
   test:
     runs-on: ubuntu-latest
