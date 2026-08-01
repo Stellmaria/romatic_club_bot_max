@@ -14,12 +14,14 @@ from bot.handlers.admin import (
     admin_panel_schedule,
     admin_panel_sections,
     admin_panel_system,
+    admin_user_lists,
 )
 from bot.handlers.admin.admin_panel_exchange import *  # noqa: F401,F403
 from bot.handlers.admin.admin_panel_requests import *  # noqa: F401,F403
 from bot.handlers.admin.admin_panel_schedule import *  # noqa: F401,F403
 from bot.handlers.admin.admin_panel_sections import *  # noqa: F401,F403
 from bot.handlers.admin.admin_panel_system import *  # noqa: F401,F403
+from bot.handlers.admin.admin_user_lists import *  # noqa: F401,F403
 from bot.handlers.admin.admin_panel_shared import notify_owners_lot_changed
 
 # Preserve the historical feature inventory and ordering for compatibility.
@@ -30,6 +32,7 @@ FEATURE_ROUTERS = (
     admin_panel_requests.router,
     admin_panel_schedule.router,
     admin_panel_sections.router,
+    admin_user_lists.router,
     admin_panel_exchange.router,
 )
 router = Router(name=__name__)
@@ -39,7 +42,7 @@ __all__ = [
     "router", "FEATURE_ROUTERS", "notify_owners_lot_changed",
     *admin_panel_system.__all__, *admin_panel_requests.__all__,
     *admin_panel_schedule.__all__, *admin_panel_sections.__all__,
-    *admin_panel_exchange.__all__,
+    *admin_user_lists.__all__, *admin_panel_exchange.__all__,
 ]
 
 # Historical regression anchors; implementations are in admin_panel_schedule.
