@@ -16,6 +16,7 @@ class AuctionFinalizationRepository:
         `FOR UPDATE SKIP LOCKED` allows multiple bot instances without duplicate
         winner announcements. A claimed lot leaves the active queue immediately.
         """
+
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 rows = await conn.fetch(
@@ -24,8 +25,7 @@ class AuctionFinalizationRepository:
                         SELECT auction_id
                         FROM public.auctions
                         WHERE status='active'
-                          AND date_trunc('minute', end_time)
-                              + INTERVAL '1 minute' <= $1
+                          AND date_trunc('minute', end_time) <= $1
                         ORDER BY end_time, auction_id
                         FOR UPDATE SKIP LOCKED
                         LIMIT $2
@@ -52,6 +52,7 @@ class AuctionFinalizationRepository:
         happened immediately before a worker crash, and blind retries would
         create duplicate winner announcements.
         """
+
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 """
