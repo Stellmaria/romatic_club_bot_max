@@ -13,13 +13,14 @@ from aiogram import BaseMiddleware, types
 
 from bot.telegram.boundary import TelegramBoundaryError, validate_callback_payload
 from bot.telegram.callbacks import safe_callback_answer
+from bot.telegram.input_validation import validate_incoming_message
 
 logger = logging.getLogger("auction_bot.telegram_boundary")
 _ACTION_RE = re.compile(r"^[^:|]{1,24}")
 
 
 class TelegramBoundaryMiddleware(BaseMiddleware):
-    """Reject malformed, duplicate and abusive callbacks before handlers run."""
+    """Reject malformed, duplicate and abusive Telegram updates before handlers run."""
 
     def __init__(
         self,
@@ -46,6 +47,14 @@ class TelegramBoundaryMiddleware(BaseMiddleware):
             return event
         if isinstance(event, types.Update):
             return event.callback_query
+        return None
+
+    @staticmethod
+    def _message_from_event(event: Any) -> types.Message | None:
+        if isinstance(event, types.Message):
+            return event
+        if isinstance(event, types.Update):
+            return event.message or event.edited_message
         return None
 
     @staticmethod
@@ -101,6 +110,26 @@ class TelegramBoundaryMiddleware(BaseMiddleware):
         events.append(now)
         return None
 
+    async def _handle_message(
+        self,
+        handler: Callable[[Any, dict[str, Any]], Awaitable[Any]],
+        event: Any,
+        data: dict[str, Any],
+        message: types.Message,
+    ) -> Any:
+        try:
+            validate_incoming_message(message)
+            return await handler(event, data)
+        except TelegramBoundaryError as error:
+            user_id = message.from_user.id if message.from_user is not None else None
+            logger.info(
+                "Telegram message boundary error user_id=%s code=%s",
+                user_id,
+                error.code,
+            )
+            await message.answer(error.user_message)
+            return None
+
     async def __call__(
         self,
         handler: Callable[[Any, dict[str, Any]], Awaitable[Any]],
@@ -109,7 +138,10 @@ class TelegramBoundaryMiddleware(BaseMiddleware):
     ) -> Any:
         callback = self._callback_from_event(event)
         if callback is None:
-            return await handler(event, data)
+            message = self._message_from_event(event)
+            if message is None:
+                return await handler(event, data)
+            return await self._handle_message(handler, event, data, message)
 
         try:
             payload = validate_callback_payload(callback.data)
