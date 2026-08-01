@@ -10,8 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DB_MODULES = (
     "core",
     "users",
+    "user_delivery",
     "auctions",
     "auction_lifecycle_queries",
+    "auction_mutations",
+    "auction_id_stats",
     "admin",
     "cards",
     "schedule_queries",
@@ -20,6 +23,7 @@ DB_MODULES = (
     "exchange",
     "posts",
     "uid",
+    "legacy_logging",
 )
 
 
