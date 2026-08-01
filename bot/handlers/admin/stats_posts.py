@@ -21,6 +21,7 @@ from db.legacy import (
 )
 
 from bot.legacy_fsm import PostStatsFSM, PostStatsEditFSM
+from bot.telegram.callback_parser import split_callback_data
 
 # Опционально: если ты добавила универсальный сеттер
 try:
@@ -366,7 +367,7 @@ async def _noop(call: types.CallbackQuery):
 @admin_only
 async def pick_month(call: types.CallbackQuery):
     await call.answer()
-    ym = call.data.split("|", 1)[1]
+    ym = split_callback_data(call.data, "|", 1)[1]
     days = await get_post_days(ym)
     text = f"📅 Месяц: <b>{html.escape(ym)}</b>\nВыбери день:"
     try:
@@ -379,7 +380,7 @@ async def pick_month(call: types.CallbackQuery):
 @admin_only
 async def pick_day(call: types.CallbackQuery):
     await call.answer()
-    _, ym, day_iso = call.data.split("|", 2)
+    _, ym, day_iso = split_callback_data(call.data, "|", 2)
     await _show_posts_list(call.message, day_iso, 0)
 
 
@@ -387,7 +388,7 @@ async def pick_day(call: types.CallbackQuery):
 @admin_only
 async def posts_page(call: types.CallbackQuery):
     await call.answer()
-    _, day_iso, off_s = call.data.split("|", 2)
+    _, day_iso, off_s = split_callback_data(call.data, "|", 2)
     await _show_posts_list(call.message, day_iso, int(off_s))
 
 
@@ -395,7 +396,7 @@ async def posts_page(call: types.CallbackQuery):
 @admin_only
 async def post_detail(call: types.CallbackQuery):
     await call.answer()
-    _, day_iso, off_s, post_id_s = call.data.split("|", 3)
+    _, day_iso, off_s, post_id_s = split_callback_data(call.data, "|", 3)
     await _show_post_detail(call.message, day_iso, int(off_s), int(post_id_s))
 
 
@@ -418,7 +419,7 @@ async def back_to_months(call: types.CallbackQuery):
 @admin_only
 async def back_to_days(call: types.CallbackQuery):
     await call.answer()
-    ym = call.data.split("|")[-1]
+    ym = split_callback_data(call.data, "|")[-1]
     days = await get_post_days(ym)
     try:
         await call.message.edit_text(
@@ -437,7 +438,7 @@ async def back_to_days(call: types.CallbackQuery):
 @admin_only
 async def toggle_checked(call: types.CallbackQuery):
     await call.answer()
-    _, day_iso, off_s, post_id_s, checked_s = call.data.split("|", 4)
+    _, day_iso, off_s, post_id_s, checked_s = split_callback_data(call.data, "|", 4)
 
     offset = int(off_s)
     post_id = int(post_id_s)
@@ -451,7 +452,7 @@ async def toggle_checked(call: types.CallbackQuery):
 @admin_only
 async def toggle_excluded(call: types.CallbackQuery):
     await call.answer()
-    _, day_iso, off_s, post_id_s, flag_s = call.data.split("|", 4)
+    _, day_iso, off_s, post_id_s, flag_s = split_callback_data(call.data, "|", 4)
 
     offset = int(off_s)
     post_id = int(post_id_s)
@@ -472,7 +473,7 @@ async def toggle_excluded(call: types.CallbackQuery):
 @admin_only
 async def ask_note(call: types.CallbackQuery, state: FSMContext):
     await call.answer()
-    _, day_iso, off_s, post_id_s = call.data.split("|", 3)
+    _, day_iso, off_s, post_id_s = split_callback_data(call.data, "|", 3)
 
     await state.set_state(PostStatsFSM.waiting_for_note)
     await state.update_data(day_iso=day_iso, offset=int(off_s), post_id=int(post_id_s))
@@ -541,7 +542,7 @@ _TIME_FIELDS = {"time"}
 @admin_only
 async def edit_field_prompt(call: types.CallbackQuery, state: FSMContext):
     await call.answer()
-    _, day_iso, off_s, post_id_s, field = call.data.split("|", 4)
+    _, day_iso, off_s, post_id_s, field = split_callback_data(call.data, "|", 4)
 
     if field not in _FIELD_LABELS:
         await call.answer("Неизвестное поле", show_alert=True)
@@ -675,7 +676,7 @@ async def cmd_free_auction_ids(message: types.Message):
 @admin_only
 async def cb_free_auction_ids_refresh(call: types.CallbackQuery):
     await call.answer()
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     limit = int(parts[-1]) if parts and parts[-1].isdigit() else 50
 
     text = await _render_free_auction_ids_text(limit)
@@ -690,7 +691,7 @@ async def cb_free_auction_ids_take(call: types.CallbackQuery):
     await call.answer()
     from db.legacy import reserve_first_missing_auction_id_for_stats  # локально
 
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     limit = int(parts[-1]) if parts and parts[-1].isdigit() else 200
 
     new_id = await reserve_first_missing_auction_id_for_stats(

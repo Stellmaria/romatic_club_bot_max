@@ -9,6 +9,7 @@ from bot.handlers.admin.schedule_card_view import (
     refresh_schedule_card_origin,
     remember_schedule_card_origin,
 )
+from bot.telegram.callback_parser import split_callback_data
 router = Router(name=__name__)
 @router.message(F.text == "📝 Редактировать расписание", F.chat.type == "private")
 @admin_only
@@ -17,7 +18,7 @@ async def edit_schedule_button(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith("edit_schedule_lot|"))
 @admin_only
 async def edit_lot_menu(call: CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await remember_schedule_card_origin(
         state,
         call.message,
@@ -30,7 +31,7 @@ async def edit_lot_menu(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("expend_mode|"))
 @admin_only
 async def exchange_pending_mode_pick(call: CallbackQuery):
-    mode = (call.data or "").split("|", 1)[-1]
+    mode = split_callback_data(call.data or "", "|", 1)[-1]
     await call.answer()
     try:
         await call.message.delete()
@@ -43,7 +44,7 @@ async def exchange_pending_mode_pick(call: CallbackQuery):
 @router.callback_query(EditScheduleFSM.choosing_field, F.data.startswith("edit_field|"))
 @admin_only
 async def edit_field_handler(call: CallbackQuery, state: FSMContext):
-    _, field, auction_id_raw = call.data.split("|")
+    _, field, auction_id_raw = split_callback_data(call.data, "|")
     try:
         auction_id = int(auction_id_raw)
     except Exception:
@@ -116,7 +117,7 @@ async def edit_field_handler(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("set_auk_kind|"))
 @admin_only
 async def set_auction_kind_handler(call: CallbackQuery, state: FSMContext):
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) != 3:
         await call.answer("Кривой callback.", show_alert=True)
         return
@@ -149,7 +150,7 @@ async def set_auction_kind_handler(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("set_craft_uid|"))
 @admin_only
 async def set_craft_uid_handler(call: CallbackQuery, state: FSMContext):
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) != 3:
         await call.answer("Кривой callback.", show_alert=True)
         return
@@ -440,7 +441,7 @@ async def edit_schedule_back_any(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("admin_delete_lot|"))
 @admin_only
 async def delete_lot_confirm(call: CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     lot = await get_lot_by_id(auction_id)
     text = (
         f"❗️ <b>Отменить лот?</b>\n\n"
@@ -458,7 +459,7 @@ async def delete_lot_confirm(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("delete_lot_final|"))
 @admin_only
 async def delete_lot_final(call: CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     lot = await get_lot_by_id(auction_id)
     if not lot:
         await call.message.answer("Лот не найден.")
@@ -499,7 +500,7 @@ async def delete_lot_final(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("edit_time_slot|"))
 @admin_only
 async def edit_time_slot_confirm(call: CallbackQuery, state: FSMContext):
-    _, auction_id, iso_str = call.data.split("|")
+    _, auction_id, iso_str = split_callback_data(call.data, "|")
     auction_id = int(auction_id)
     start_time = to_moscow(datetime.fromisoformat(iso_str))
     end_time = auction_end_at_59(start_time)
@@ -527,7 +528,7 @@ async def save_edited_time(call: CallbackQuery, state: FSMContext):
             show_alert=True,
         )
         return
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     start_time = to_moscow(data["new_start_time"])
     end_time = auction_end_at_59(start_time)
     # Telegram keeps the loading spinner until answerCallbackQuery is called.
@@ -706,7 +707,7 @@ async def save_edited_time(call: CallbackQuery, state: FSMContext):
     await state.clear()
 @router.callback_query(EditScheduleFSM.entering_value, F.data.startswith("set_currency|"))
 async def set_currency_handler(call: CallbackQuery, state: FSMContext):
-    _, currency = call.data.split("|")
+    _, currency = split_callback_data(call.data, "|")
     data = await state.get_data()
     auction_id = data.get("auction_id")
     await state.update_data(new_currency=currency)

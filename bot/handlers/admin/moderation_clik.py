@@ -4,6 +4,7 @@ Handlers retain their relative order from the legacy ``moderation`` module.
 """
 
 from bot.handlers.admin.moderation_shared import *  # noqa: F403
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -76,7 +77,7 @@ async def clik_order(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith(f"{CLIK_CB}:pay:"))
 async def clik_pay(call: types.CallbackQuery, state: FSMContext):
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     if len(parts) < 3:
         await call.answer("Кривая кнопка.", show_alert=True)
         return
@@ -116,7 +117,7 @@ async def clik_pay(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(ClikFSM.order_story, F.data.startswith(f"{CLIK_CB}:s:page:"))
 async def clik_story_page(call: types.CallbackQuery, state: FSMContext):
     try:
-        page = int((call.data or "").split(":")[-1])
+        page = int(split_callback_data(call.data or "", ":")[-1])
     except Exception:
         page = 0
 
@@ -130,7 +131,7 @@ async def clik_story_page(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(ClikFSM.order_story, F.data.startswith(f"{CLIK_CB}:s:pick:"))
 async def clik_story_pick(call: types.CallbackQuery, state: FSMContext):
     try:
-        idx = int((call.data or "").split(":")[-1])
+        idx = int(split_callback_data(call.data or "", ":")[-1])
     except Exception:
         await call.answer("Не понял историю.", show_alert=True)
         return
@@ -171,7 +172,7 @@ async def clik_back_to_stories(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(ClikFSM.order_tasks, F.data.startswith(f"{CLIK_CB}:t:toggle:"))
 async def clik_task_toggle(call: types.CallbackQuery, state: FSMContext):
-    key = (call.data or "").split(":")[-1].strip()
+    key = split_callback_data(call.data or "", ":")[-1].strip()
 
     data = await state.get_data()
     if key == "play":
@@ -211,7 +212,7 @@ async def clik_ach_open(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(ClikFSM.order_ach_mode, F.data.startswith(f"{CLIK_CB}:ach:set:"))
 async def clik_ach_set(call: types.CallbackQuery, state: FSMContext):
-    mode = (call.data or "").split(":")[-1].strip()  # all | story
+    mode = split_callback_data(call.data or "", ":")[-1].strip()  # all | story
     if mode not in {"all", "story"}:
         await call.answer("Кривой режим.", show_alert=True)
         return
@@ -299,7 +300,7 @@ async def clik_love_open(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(ClikFSM.order_love_mode, F.data.startswith(f"{CLIK_CB}:love:set:"))
 async def clik_love_set_generic(call: types.CallbackQuery, state: FSMContext):
-    mode = (call.data or "").split(":")[-1].strip()  # all | 1 | 2 | 3
+    mode = split_callback_data(call.data or "", ":")[-1].strip()  # all | 1 | 2 | 3
     if mode not in {"all", "1", "2", "3"}:
         await call.answer("Кривой режим.", show_alert=True)
         return
@@ -338,7 +339,7 @@ async def clik_love_back_generic(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(ClikFSM.order_love_select, F.data.startswith(f"{CLIK_CB}:lpvt:toggle:"))
 async def clik_love_pvt_toggle(call: types.CallbackQuery, state: FSMContext):
-    key = (call.data or "").split(":")[-1].strip()
+    key = split_callback_data(call.data or "", ":")[-1].strip()
     if key not in CLIK_PVT_LI_MAP:
         await call.answer()
         return
@@ -482,7 +483,7 @@ async def clik_cups_back(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(ClikFSM.order_cups_source, F.data.startswith(f"{CLIK_CB}:cups:"))
 async def clik_cups_set(call: types.CallbackQuery, state: FSMContext):
-    tail = (call.data or "").split(":")[-1].strip()
+    tail = split_callback_data(call.data or "", ":")[-1].strip()
     if tail not in {"account", "daily"}:
         await call.answer()
         return

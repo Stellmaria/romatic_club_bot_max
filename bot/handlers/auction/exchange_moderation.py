@@ -79,6 +79,7 @@ from bot.features.exchange.contracts import (
     h,
     tg_clean,
 )
+from bot.telegram.callback_parser import rsplit_callback_data, split_callback_data
 
 router = Router(name="auction_exchange_moderation")
 
@@ -86,7 +87,7 @@ router = Router(name="auction_exchange_moderation")
 @router.callback_query(F.data.startswith("pending_menu:"))
 @admin_only
 async def pending_menu_pick(call: types.CallbackQuery, state: FSMContext):
-    kind = call.data.split(":", 1)[1].strip()
+    kind = split_callback_data(call.data, ":", 1)[1].strip()
     await call.answer()
 
     if kind == "auction":
@@ -103,7 +104,7 @@ async def pending_menu_pick(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("exchange_proof|"))
 @admin_only
 async def exchange_show_proof(call: types.CallbackQuery):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
 
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
@@ -132,7 +133,7 @@ async def exchange_show_proof(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("exchange_approve|"))
 @admin_only
 async def exchange_approve(call: types.CallbackQuery):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
         await call.answer("Заявка не найдена.", show_alert=True)
@@ -292,7 +293,7 @@ async def exchange_approve(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("exchange_items|"))
 @admin_only
 async def exchange_items(call: types.CallbackQuery):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
 
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
@@ -331,7 +332,7 @@ async def exchange_items(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("exchange_reject|"))
 @admin_only
 async def exchange_reject_start(call: types.CallbackQuery, state: FSMContext):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(exchange_batch_id=batch_id)
     await state.set_state(ModActionFSM.waiting_for_reject_exchange_reason)
     await call.message.answer("Напиши причину отклонения заявки на биржу:")
@@ -485,7 +486,7 @@ async def cb_exchange_proof(call: CallbackQuery):
         await call.answer("Только для админов.", show_alert=True)
         return
 
-    batch_id = int(call.data.rsplit(":", 1)[-1])
+    batch_id = int(rsplit_callback_data(call.data, ":", 1)[-1])
     batch = await get_exchange_batch(batch_id)
     if not batch:
         await call.message.answer(f"Заявка #{batch_id} не найдена.")
@@ -505,7 +506,7 @@ async def cb_exchange_approve(call: CallbackQuery):
         await call.answer("Только для админов.", show_alert=True)
         return
 
-    batch_id = int(call.data.rsplit(":", 1)[-1])
+    batch_id = int(rsplit_callback_data(call.data, ":", 1)[-1])
     batch = await get_exchange_batch(batch_id)
     if not batch:
         await call.message.answer(f"Заявка #{batch_id} не найдена.")
@@ -552,7 +553,7 @@ async def cb_exchange_reject(call: CallbackQuery):
         await call.answer("Только для админов.", show_alert=True)
         return
 
-    batch_id = int(call.data.rsplit(":", 1)[-1])
+    batch_id = int(rsplit_callback_data(call.data, ":", 1)[-1])
     batch = await get_exchange_batch(batch_id)
     if not batch:
         await call.message.answer(f"Заявка #{batch_id} не найдена.")
@@ -920,7 +921,7 @@ async def addlot_craft_uid_help(call: CallbackQuery):
 
 @router.callback_query(StateFilter(UserAddLotFSM.waiting_for_craft_uid), F.data.startswith("craft_uid:"))
 async def addlot_craft_uid_answer(call: CallbackQuery, state: FSMContext):
-    raw = (call.data or "").split(":", 1)[-1].strip().lower()
+    raw = split_callback_data(call.data or "", ":", 1)[-1].strip().lower()
     craft_ok = raw in {"yes", "1", "true", "да"}
 
     await state.update_data(craft_uid_possible=craft_ok)
@@ -1105,7 +1106,7 @@ def _delete_confirm_kb(batch_id: int) -> InlineKeyboardMarkup:
 @router.callback_query(F.data.startswith("exchange_delete|"))
 @admin_only
 async def exchange_delete_ask(call: CallbackQuery):
-    batch_id = int(call.data.split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data, "|", 1)[1])
     await call.message.answer(
         f"Точно удалить заявку биржи <code>{batch_id}</code>?",
         parse_mode="HTML",
@@ -1116,7 +1117,7 @@ async def exchange_delete_ask(call: CallbackQuery):
 
 @router.callback_query(ExchangeFSM.waiting_for_copies, F.data.startswith("ex_copies:"))
 async def ex_copies_selected(call: CallbackQuery, state: FSMContext) -> None:
-    payload = (call.data or "").split(":", 1)[1].strip()
+    payload = split_callback_data(call.data or "", ":", 1)[1].strip()
 
     if payload == "other":
         await call.message.answer("Введи число (например 2). Минимум 1, максимум 50.")
@@ -1193,7 +1194,7 @@ async def exchange_delete_no(call: CallbackQuery):
 @router.callback_query(F.data.startswith("exchange_delete_yes|"))
 @admin_only
 async def exchange_delete_yes(call: CallbackQuery, bot: Bot):
-    batch_id = int(call.data.split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data, "|", 1)[1])
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
         await call.answer("Заявка не найдена.", show_alert=True)
@@ -1244,7 +1245,7 @@ async def exchange_delete_yes(call: CallbackQuery, bot: Bot):
 @router.callback_query(F.data.startswith("exchange_broadcast|"))
 @admin_only
 async def exchange_broadcast(call: CallbackQuery, bot: Bot):
-    batch_id = int(call.data.split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data, "|", 1)[1])
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
         await call.answer("Заявка не найдена.", show_alert=True)

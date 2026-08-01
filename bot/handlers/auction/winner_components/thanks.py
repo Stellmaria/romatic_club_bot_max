@@ -6,6 +6,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from bot.services.auction_winners import AuctionWinnerService
 
 from .common import CB_WIN_THANKS
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name="auction_winner_thanks")
 
@@ -27,7 +28,7 @@ async def build_thanks_kb(any_id: int, moderator_tag: str) -> InlineKeyboardMark
 
 @router.callback_query(F.data.startswith(f"{CB_WIN_THANKS}:"))
 async def cb_win_thanks(call: types.CallbackQuery) -> None:
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     if len(parts) < 4:
         try:
             await call.answer("Кривые данные.", show_alert=True)

@@ -53,15 +53,16 @@ from bot.services.market import (
     market_set_status,
     market_toggle_named_status,
 )
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name="market_flow_edit")
 
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:edit:"))
 async def edit_action(call: CallbackQuery, state: FSMContext):
-    _, _, sub, lid_str = call.data.split(":")
+    _, _, sub, lid_str = split_callback_data(call.data, ":")
     lid = int(lid_str)
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     action = parts[2]
     lid = int(parts[-1])
 
@@ -143,7 +144,7 @@ async def edit_action(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:do:del:"))
 async def do_delete_listing(call: CallbackQuery, state: FSMContext, bot: Bot):
-    _, _, _, verdict, lid_str = call.data.split(":")
+    _, _, _, verdict, lid_str = split_callback_data(call.data, ":")
     lid = int(lid_str)
 
     if verdict == "no":
@@ -189,7 +190,7 @@ async def set_desc_message(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:sold:"))
 async def cb_mark_sold(call: CallbackQuery):
-    _, _, lid_str = call.data.split(":")
+    _, _, lid_str = split_callback_data(call.data, ":")
     lid = int(lid_str)
     await call.message.answer("Подтверди продажу. Уменьшить количество в объявлении на 1?",
                               reply_markup=sold_confirm_kb(lid))
@@ -198,7 +199,7 @@ async def cb_mark_sold(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:sold_yes:"))
 async def cb_mark_sold_yes(call: CallbackQuery):
-    _, _, _, lid_str = call.data.split(":")
+    _, _, _, lid_str = split_callback_data(call.data, ":")
     lid = int(lid_str)
 
     left = await market_decrement_all_items_and_total(lid)
@@ -240,7 +241,7 @@ async def set_qty_message(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:do:soldqty:"))
 async def do_soldqty(call: CallbackQuery, state: FSMContext):
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     lid = int(parts[3])
     which = parts[4]
 

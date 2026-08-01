@@ -26,6 +26,7 @@ from db.legacy import (
 )
 from bot.legacy_fsm import CardSubscribeFSM
 from bot.services.card_subscriptions import CardSubscriptionsService
+from bot.telegram.callback_parser import split_callback_data
 
 
 # ======================
@@ -297,7 +298,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
     # -------- callback handlers --------
 
     async def choose_deck(call: types.CallbackQuery, state: FSMContext):
-        deck_id = int(call.data.split("_")[-1])
+        deck_id = int(split_callback_data(call.data, "_")[-1])
         await state.update_data(deck_id=deck_id)
 
         cards = await get_cards_by_deck(deck_id)
@@ -325,7 +326,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
         await safe_call_answer(call)
 
     async def choose_card(call: types.CallbackQuery, state: FSMContext):
-        card_id = int(call.data.split(":")[-1])
+        card_id = int(split_callback_data(call.data, ":")[-1])
         card = await subscribe_to_card(call.from_user.id, card_id)
         if not card:
             await call.answer("Карта не найдена", show_alert=True)
@@ -351,7 +352,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
 
     @router.callback_query(F.data.startswith("sub:preset:"))
     async def toggle_any_preset(call: types.CallbackQuery, state: FSMContext):
-        key = call.data.split(":", 2)[-1]
+        key = split_callback_data(call.data, ":", 2)[-1]
         _, toast = await _toggle_preset(call.from_user.id, key)
 
         text_now = (call.message.text or "").lower()
@@ -364,7 +365,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
 
     @router.callback_query(F.data.startswith("sub:preset_unsub:"))
     async def handle_preset_unsub(call: types.CallbackQuery, state: FSMContext):
-        key = call.data.split(":", 2)[-1]
+        key = split_callback_data(call.data, ":", 2)[-1]
         await (await CardSubscriptionsService.from_runtime()).unsubscribe_preset(
             call.from_user.id, key
         )
@@ -378,7 +379,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
         await safe_call_answer(call, "Отключено")
 
     async def preset_unsub(call: types.CallbackQuery, state: FSMContext):
-        key = call.data.split(":", 2)[-1]
+        key = split_callback_data(call.data, ":", 2)[-1]
         await (await CardSubscriptionsService.from_runtime()).unsubscribe_preset(
             call.from_user.id, key
         )
@@ -441,7 +442,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
         await _send_my_subs(call)
 
     async def unsubscribe_card_cb(call: types.CallbackQuery):
-        sub_id = int(call.data.split("_")[1])
+        sub_id = int(split_callback_data(call.data, "_")[1])
         await unsubscribe_from_card(sub_id, call.from_user.id)
         await safe_call_answer(call, "Подписка удалена")
 

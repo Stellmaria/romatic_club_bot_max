@@ -35,6 +35,7 @@ from bot.services.uid_verification import (
     reject_uid_verification_request,
 )
 from bot.telegram.states import ModActionFSM
+from bot.telegram.callback_parser import split_callback_data
 
 
 router = Router(name=f"{__name__}.review")
@@ -63,7 +64,7 @@ async def verif_menu_cb(call: types.CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("uidv|list|"))
 @admin_only
 async def verif_list(call: types.CallbackQuery) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) != 4:
         await call.answer("Кривые данные.", show_alert=True)
         return
@@ -121,7 +122,7 @@ async def verif_list(call: types.CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("uidv|view|") | F.data.startswith("uidv|view_one|"))
 @admin_only
 async def verif_view(call: types.CallbackQuery) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await call.answer("Кривые данные.", show_alert=True)
         return
@@ -139,7 +140,7 @@ async def verif_view(call: types.CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("uidv|proof|"))
 @admin_only
 async def verif_send_proof(call: types.CallbackQuery, bot: Bot) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await safe_call_answer(call, "Кривые данные.", show_alert=True)
         return
@@ -230,7 +231,7 @@ async def verif_send_proof(call: types.CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data.startswith("uidv|deals|"))
 @admin_only
 async def verif_send_deals(call: types.CallbackQuery, bot: Bot) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await safe_call_answer(call, "Кривые данные.", show_alert=True)
         return
@@ -309,7 +310,7 @@ async def verif_send_deals(call: types.CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data.startswith("uidv|approve|"))
 @admin_only
 async def verif_approve(call: types.CallbackQuery, bot: Bot):
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await call.answer("Кривые данные.", show_alert=True)
         return
@@ -393,7 +394,7 @@ async def verif_approve(call: types.CallbackQuery, bot: Bot):
 @router.callback_query(F.data.startswith("uidv|reject|"))
 @admin_only
 async def verif_reject(call: types.CallbackQuery, state: FSMContext) -> None:
-    req_id = int((call.data or "").split("|")[2])
+    req_id = int(split_callback_data(call.data or "", "|")[2])
     await state.set_state(ModActionFSM.waiting_for_reject_uid_verification_reason)
     await state.update_data(uidv_reject_req_id=req_id)
     await call.message.answer(f"Напиши причину отклонения заявки #{req_id} текстом:")
@@ -483,7 +484,7 @@ async def verif_reject_reason(message: types.Message, state: FSMContext, bot: Bo
 @late_router.callback_query(F.data.startswith("uidv|approve_blocked|"))
 @admin_only
 async def verif_approve_blocked(call: types.CallbackQuery) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await call.answer("Кривые данные.", show_alert=True)
         return

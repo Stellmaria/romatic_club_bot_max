@@ -30,6 +30,7 @@ from db.legacy import (
 )
 
 from bot.legacy_fsm import UIDVerificationFSM, UIDVerificationFixFSM
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router()
 
@@ -544,7 +545,7 @@ async def _get_revision_flags(req_id: int) -> list[str]:
 
 @router.callback_query(F.data.startswith("uidv_fix|"))
 async def uidv_fix_start(call: types.CallbackQuery, state: FSMContext) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 2:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -593,7 +594,7 @@ async def uidv_fix_start(call: types.CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("uidv_fix_item|"))
 async def uidv_fix_choose_item(call: types.CallbackQuery, state: FSMContext) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -808,7 +809,7 @@ async def uidv_fix_extra_done(call: types.CallbackQuery, state: FSMContext) -> N
     if await state.get_state() != UIDVerificationFixFSM.collecting_extra.state:
         return
 
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     req_id = int(parts[1] or 0)
 
     data = await state.get_data()
@@ -843,7 +844,7 @@ async def uidv_fix_extra_done(call: types.CallbackQuery, state: FSMContext) -> N
 
 @router.callback_query(F.data.startswith("uidv_fix_send|"))
 async def uidv_fix_send(call: types.CallbackQuery, state: FSMContext) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 2:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -882,7 +883,7 @@ async def uidv_fix_send(call: types.CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("uidc|"))
 async def uid_confirm_cb(call: types.CallbackQuery):
-    data = (call.data or "").split("|")
+    data = split_callback_data(call.data or "", "|")
     if len(data) < 3:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -1154,7 +1155,7 @@ async def uidv_start(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 async def uidv_fix_start(call: types.CallbackQuery, state: FSMContext) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 2:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return

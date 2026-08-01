@@ -14,6 +14,7 @@ from bot.core.legacy_config import ADMINS
 from bot.legacy_fsm import PrintExStates
 
 from .common import mention_html
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name="auction_winner_print_exchange")
 
@@ -151,7 +152,7 @@ async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
         await call.answer("Нет доступа.", show_alert=True)
         return
     try:
-        _, action, batch_id_raw = (call.data or "").split("|", 2)
+        _, action, batch_id_raw = split_callback_data(call.data or "", "|", 2)
         batch_id = int(batch_id_raw)
     except (ValueError, AttributeError):
         await call.answer("Неверные данные.", show_alert=True)

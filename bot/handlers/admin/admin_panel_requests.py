@@ -4,6 +4,7 @@ Handlers retain their relative order from the legacy ``admin_panel`` module.
 """
 
 from bot.handlers.admin.admin_panel_shared import *  # noqa: F403
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -57,7 +58,7 @@ async def cmd_ex_owners(message: Message):
 @router.callback_query(F.data.startswith("admreq|"))
 @admin_only
 async def admreq_select(call: CallbackQuery):
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) != 3:
         await call.answer("Некорректная команда.", show_alert=True)
         return
@@ -250,7 +251,7 @@ async def ex_appr_decks(call: types.CallbackQuery):
 @admin_only
 async def ex_appr_whole(call: types.CallbackQuery):
     # ex_appr:whole:<deck_id>:<page>
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     if len(parts) < 3:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -313,7 +314,7 @@ async def ex_appr_whole(call: types.CallbackQuery):
 @admin_only
 async def ex_appr_lotdeck_show(call: types.CallbackQuery):
     # ex_appr:lotdeck:<deck_id>:<page>:<batch_id>
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     if len(parts) < 5:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return

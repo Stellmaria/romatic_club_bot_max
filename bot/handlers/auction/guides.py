@@ -14,6 +14,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.auction.kinds import auction_kind_keyboard
 from bot.services.guides import GuideThanksService
 from bot.telegram.states import UserAddLotFSM
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -183,7 +184,7 @@ async def auk_admin_thanks_open(call: types.CallbackQuery) -> None:
 )
 async def auk_admin_thanks_page(call: types.CallbackQuery) -> None:
     await call.answer()
-    page = int(call.data.split(":")[-1])
+    page = int(split_callback_data(call.data, ":")[-1])
     total, users = await _get_guides_thanks_totals()
     items, total_pages = await _get_admin_thanks_page(page)
 
@@ -1172,7 +1173,7 @@ async def auk_guides_david_open(call: types.CallbackQuery) -> None:
 @router.callback_query(UserAddLotFSM.waiting_for_auction_kind, F.data.startswith("auk_david:page:"))
 async def auk_david_page(call: types.CallbackQuery) -> None:
     await call.answer()
-    page = int(call.data.split(":")[-1])
+    page = int(split_callback_data(call.data, ":")[-1])
     total, users = await _inc_guides_thanks(call.from_user.id, author=GUIDE_AUTHOR_USERNAME)
     text = david_list_text(page)
 
@@ -1195,7 +1196,7 @@ async def auk_david_page(call: types.CallbackQuery) -> None:
 @router.callback_query(UserAddLotFSM.waiting_for_auction_kind, F.data.startswith("auk_david:show:"))
 async def auk_david_show(call: types.CallbackQuery) -> None:
     await call.answer()
-    code = call.data.split(":")[-1].strip().lower()
+    code = split_callback_data(call.data, ":")[-1].strip().lower()
 
     item = DAVID_ANSWERS.get(code)
     if not item:
@@ -1285,7 +1286,7 @@ async def auk_david_noop(call: types.CallbackQuery) -> None:
 )
 async def auk_david_thanks(call: types.CallbackQuery) -> None:
     # auk_david_thanks:list:<page>  или  auk_david_thanks:show:<code>
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     mode = parts[1]
     tail = parts[2] if len(parts) > 2 else ""
 
@@ -1313,7 +1314,7 @@ async def auk_guides_open(call: types.CallbackQuery) -> None:
 @router.callback_query(StateFilter(UserAddLotFSM), F.data.startswith("auk_guide_menu:"))
 async def auk_guides_menu(call: types.CallbackQuery, state: FSMContext) -> None:
     await call.answer()
-    dest = call.data.split(":", 1)[1].strip()
+    dest = split_callback_data(call.data, ":", 1)[1].strip()
 
     if dest == "root":
         page = "menu_root"
@@ -1366,7 +1367,7 @@ async def cb_user_auk_types_from_decks(call: types.CallbackQuery, state: FSMCont
 @router.callback_query(StateFilter(UserAddLotFSM), F.data.startswith("auk_guide:"))
 async def auk_guide_open(call: types.CallbackQuery) -> None:
     await call.answer()
-    page = call.data.split(":", 1)[1].strip()
+    page = split_callback_data(call.data, ":", 1)[1].strip()
     if page == "type_standard":
         await _send_guide_type_standard(call.message)
         return
@@ -1436,7 +1437,7 @@ async def auk_guide_open(call: types.CallbackQuery) -> None:
 
 @router.callback_query(StateFilter(UserAddLotFSM), F.data.startswith("auk_guides_thanks:"))
 async def auk_guides_thanks(call: types.CallbackQuery) -> None:
-    page = call.data.split(":", 1)[1].strip()
+    page = split_callback_data(call.data, ":", 1)[1].strip()
     total, users = await _inc_guides_thanks(call.from_user.id, author=GUIDE_AUTHOR_USERNAME)
 
     try:

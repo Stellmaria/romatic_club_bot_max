@@ -5,6 +5,7 @@ Handlers retain their relative order from the legacy ``moderation`` module.
 
 from bot.handlers.admin.moderation_shared import *  # noqa: F403
 from bot.services.admin_diagnostics import AdminDiagnosticsQueries
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -164,7 +165,7 @@ async def proof_cmd(message: types.Message, command: CommandObject) -> None:
 @router.callback_query(F.data.startswith("pending_menu|"))
 @admin_only
 async def pending_menu_router(call: types.CallbackQuery):
-    kind = call.data.split("|", 1)[1]
+    kind = split_callback_data(call.data, "|", 1)[1]
     if kind == "exchange":
         await show_pending_exchange_requests(call.message)
     else:
@@ -175,7 +176,7 @@ async def pending_menu_router(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("ex_show_proof|"))
 @admin_only
 async def ex_show_proof(call: types.CallbackQuery):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
     batch = await get_exchange_batch(batch_id)
     if not batch:
         await call.answer("Заявка не найдена.", show_alert=True)
@@ -195,7 +196,7 @@ async def ex_show_proof(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("ex_approve|"))
 @admin_only
 async def ex_approve(call: types.CallbackQuery):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
     batch = await get_exchange_batch(batch_id)
     if not batch:
         await call.answer("Заявка не найдена.", show_alert=True)
@@ -225,7 +226,7 @@ async def ex_approve(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("ex_reject|"))
 @admin_only
 async def ex_reject_start(call: types.CallbackQuery, state: FSMContext):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(ex_batch_id=batch_id)
     await call.message.answer(f"Напиши причину отклонения заявки биржи <code>{batch_id}</code>:", parse_mode="HTML")
     await state.set_state(ModActionFSM.waiting_for_reject_exchange_reason)

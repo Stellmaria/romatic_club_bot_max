@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bot.telegram.callback_parser import rsplit_callback_data, split_callback_data
 
 """Exchange flow component extracted during refactoring phase 7."""
 
@@ -41,7 +42,7 @@ from .common import (
 @router.callback_query(F.data.startswith("pending_menu:"))
 @admin_only
 async def pending_menu_pick(call: types.CallbackQuery, state: FSMContext):
-    kind = call.data.split(":", 1)[1].strip()
+    kind = split_callback_data(call.data, ":", 1)[1].strip()
     await call.answer()
 
     if kind == "auction":
@@ -58,7 +59,7 @@ async def pending_menu_pick(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("exchange_proof|"))
 @admin_only
 async def exchange_show_proof(call: types.CallbackQuery):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
 
     moderation = await ExchangeModerationService.create()
     batch = await moderation.batch(batch_id)
@@ -88,7 +89,7 @@ async def exchange_show_proof(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("exchange_approve|"))
 @admin_only
 async def exchange_approve(call: types.CallbackQuery):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
     moderation = await ExchangeModerationService.create()
     batch = await moderation.batch(batch_id)
     if not batch:
@@ -249,7 +250,7 @@ async def exchange_approve(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("exchange_items|"))
 @admin_only
 async def exchange_items(call: types.CallbackQuery):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
 
     moderation = await ExchangeModerationService.create()
     batch = await moderation.batch(batch_id)
@@ -289,7 +290,7 @@ async def exchange_items(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("exchange_reject|"))
 @admin_only
 async def exchange_reject_start(call: types.CallbackQuery, state: FSMContext):
-    batch_id = int(call.data.split("|")[1])
+    batch_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(exchange_batch_id=batch_id)
     await state.set_state(ModActionFSM.waiting_for_reject_exchange_reason)
     await call.message.answer("Напиши причину отклонения заявки на биржу:")
@@ -447,7 +448,7 @@ async def cb_exchange_proof(call: CallbackQuery):
         await call.answer("Только для админов.", show_alert=True)
         return
 
-    batch_id = int(call.data.rsplit(":", 1)[-1])
+    batch_id = int(rsplit_callback_data(call.data, ":", 1)[-1])
     batch = await moderation.batch(batch_id)
     if not batch:
         await call.message.answer(f"Заявка #{batch_id} не найдена.")
@@ -468,7 +469,7 @@ async def cb_exchange_approve(call: CallbackQuery):
         await call.answer("Только для админов.", show_alert=True)
         return
 
-    batch_id = int(call.data.rsplit(":", 1)[-1])
+    batch_id = int(rsplit_callback_data(call.data, ":", 1)[-1])
     batch = await moderation.batch(batch_id)
     if not batch:
         await call.message.answer(f"Заявка #{batch_id} не найдена.")
@@ -516,7 +517,7 @@ async def cb_exchange_reject(call: CallbackQuery):
         await call.answer("Только для админов.", show_alert=True)
         return
 
-    batch_id = int(call.data.rsplit(":", 1)[-1])
+    batch_id = int(rsplit_callback_data(call.data, ":", 1)[-1])
     batch = await moderation.batch(batch_id)
     if not batch:
         await call.message.answer(f"Заявка #{batch_id} не найдена.")
@@ -969,7 +970,7 @@ def _delete_confirm_kb(batch_id: int) -> InlineKeyboardMarkup:
 @router.callback_query(F.data.startswith("exchange_delete|"))
 @admin_only
 async def exchange_delete_ask(call: CallbackQuery):
-    batch_id = int(call.data.split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data, "|", 1)[1])
     await call.message.answer(
         f"Точно удалить заявку биржи <code>{batch_id}</code>?",
         parse_mode="HTML",
@@ -987,7 +988,7 @@ async def exchange_delete_no(call: CallbackQuery):
 @router.callback_query(F.data.startswith("exchange_delete_yes|"))
 @admin_only
 async def exchange_delete_yes(call: CallbackQuery, bot: Bot):
-    batch_id = int(call.data.split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data, "|", 1)[1])
     moderation = await ExchangeModerationService.create()
     batch = await moderation.batch(batch_id)
     if not batch:
@@ -1039,7 +1040,7 @@ async def exchange_delete_yes(call: CallbackQuery, bot: Bot):
 @router.callback_query(F.data.startswith("exchange_broadcast|"))
 @admin_only
 async def exchange_broadcast(call: CallbackQuery, bot: Bot):
-    batch_id = int(call.data.split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data, "|", 1)[1])
     moderation = await ExchangeModerationService.create()
     batch = await moderation.batch(batch_id)
     if not batch:

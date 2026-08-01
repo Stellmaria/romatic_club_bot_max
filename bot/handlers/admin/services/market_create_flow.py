@@ -53,6 +53,7 @@ from bot.services.market import (
     market_set_status,
     market_toggle_named_status,
 )
+from bot.telegram.callback_parser import rsplit_callback_data, split_callback_data
 
 create_router = Router(name="market_flow_create")
 router = create_router
@@ -60,7 +61,7 @@ router = create_router
 
 @router.callback_query(MarketAddFSM.CHOOSE_KIND, F.data.startswith(f"{CB_KIND}:"))
 async def choose_kind(call: CallbackQuery, state: FSMContext):
-    kind = call.data.split(":")[2]
+    kind = split_callback_data(call.data, ":")[2]
     await state.update_data(offer_kind=kind, card_ids=[], page=0, deck_id=None)
     if kind in ("cards", "whole_deck"):
         decks = await get_all_decks()
@@ -104,7 +105,7 @@ async def cover_step(message: Message, state: FSMContext):
 
 @router.callback_query(MarketAddFSM.CURRENCY, F.data.startswith(f"{CB_PREFIX}:cur_toggle:"))
 async def cb_currency_toggle(call: CallbackQuery, state: FSMContext):
-    cur = call.data.split(":")[2]
+    cur = split_callback_data(call.data, ":")[2]
     data = await state.get_data()
 
     chosen: list[str] = list(data.get("cur_multi") or [])
@@ -244,7 +245,7 @@ async def cash_code_entered(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:deckmode:"))
 async def cb_set_deck_mode(call: CallbackQuery, state: FSMContext):
     await call.answer()
-    mode = call.data.rsplit(":", 1)[-1]
+    mode = rsplit_callback_data(call.data, ":", 1)[-1]
     if mode not in ("bulk", "split"):
         mode = "split"
     await state.update_data(deck_mode=mode)
@@ -626,7 +627,7 @@ async def proof_single_text(msg: Message, state: FSMContext):
 
 @router.callback_query(StateFilter(MarketAddFSM.CHOOSE_DECK), F.data.startswith(f"{CB_PREFIX}:deck:"))
 async def cb_choose_deck(call: CallbackQuery, state: FSMContext):
-    _, _, deck_id_str, page_str = call.data.split(":")
+    _, _, deck_id_str, page_str = split_callback_data(call.data, ":")
     deck_id = int(deck_id_str)
     page = int(page_str)
 
@@ -675,7 +676,7 @@ async def cb_choose_deck(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(StateFilter(MarketAddFSM.PICK_CARDS), F.data.startswith(f"{CB_PAGE}:"))
 async def cb_cards_page(call: CallbackQuery, state: FSMContext):
-    _, _, deck_id_str, page_str = call.data.split(":")
+    _, _, deck_id_str, page_str = split_callback_data(call.data, ":")
     deck_id = int(deck_id_str)
     page = int(page_str)
 
@@ -697,7 +698,7 @@ async def cb_cards_page(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(StateFilter(MarketAddFSM.PICK_CARDS), F.data.startswith(f"{CB_PREFIX}:reset:"))
 async def cb_cards_reset(call: CallbackQuery, state: FSMContext):
-    _, _, deck_id_str, page_str = call.data.split(":")
+    _, _, deck_id_str, page_str = split_callback_data(call.data, ":")
     deck_id = int(deck_id_str)
     page = int(page_str)
 
@@ -722,7 +723,7 @@ async def cb_cards_reset(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(StateFilter(MarketAddFSM.PICK_CARDS), F.data.startswith(f"{CB_SEL}:"))
 async def cb_toggle_card(call: CallbackQuery, state: FSMContext):
-    _, _, deck_id_str, card_id_str, page_str = call.data.split(":")
+    _, _, deck_id_str, card_id_str, page_str = split_callback_data(call.data, ":")
     deck_id = int(deck_id_str)
     card_id = int(card_id_str)
     page = int(page_str)
@@ -810,7 +811,7 @@ async def msg_price_bulk(message: Message, state: FSMContext):
 
 @router.callback_query(MarketAddFSM.CURRENCY, F.data.startswith(f"{CB_PREFIX}:cash_toggle:"))
 async def cb_cash_toggle(call: CallbackQuery, state: FSMContext):
-    code = call.data.split(":")[2].upper()
+    code = split_callback_data(call.data, ":")[2].upper()
     data = await state.get_data()
     s = set(data.get("cash_multi") or [])
     if code in s:

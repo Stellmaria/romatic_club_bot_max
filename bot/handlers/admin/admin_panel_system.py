@@ -20,6 +20,7 @@ from bot.core.supervisor_client import SupervisorUnavailable, supervisor_client
 from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -325,7 +326,7 @@ async def _accept_supervisor_operation(call: CallbackQuery, action: str) -> None
 async def run_system_operation(call: CallbackQuery) -> None:
     if not await _require_owner(call):
         return
-    action = str(call.data).split(":")[1]
+    action = split_callback_data(str(call.data), ":")[1]
     await _accept_supervisor_operation(call, action)
 
 

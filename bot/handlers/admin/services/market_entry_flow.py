@@ -55,6 +55,7 @@ from bot.services.market import (
 )
 
 from bot.handlers.admin.services.market_search_flow import market_find
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name="market_flow_entry")
 
@@ -74,7 +75,7 @@ async def my_sales_open(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("mkt:go:"))
 async def market_panel_go(call: CallbackQuery, state: FSMContext, bot: Bot):
-    _, _, action = call.data.split(":")
+    _, _, action = split_callback_data(call.data, ":")
     await call.answer()
 
     if action in ("sell_cards", "sell_deck"):

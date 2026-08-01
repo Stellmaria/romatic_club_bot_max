@@ -29,6 +29,7 @@ from bot.handlers.helper.appeals_service import (
     set_status,
 )
 from bot.legacy_fsm import AppealFSM
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name="appeals")
 logger = logging.getLogger(__name__)
@@ -208,7 +209,7 @@ async def show_first_pending(message: types.Message) -> None:
 @router.callback_query(F.data.startswith("appeal:"), F.message.chat.type == "private")
 @admin_only
 async def appeals_cb(call: CallbackQuery, state: FSMContext) -> None:
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     if len(parts) < 2:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return

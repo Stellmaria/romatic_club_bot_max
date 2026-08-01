@@ -53,6 +53,7 @@ from bot.services.market import (
     market_set_status,
     market_toggle_named_status,
 )
+from bot.telegram.callback_parser import split_callback_data
 
 my_sales_router = Router(name="market_flow_my_sales")
 router = my_sales_router
@@ -127,7 +128,7 @@ async def _show_my_sales(
 
 @router.callback_query(F.data.startswith("market:my:"))
 async def cb_my_sales_tabs(call: CallbackQuery, state: FSMContext):
-    _, _, tab = call.data.split(":")
+    _, _, tab = split_callback_data(call.data, ":")
     await _show_my_sales(call, call.from_user.id, state=state, tab=tab)
 
 
@@ -191,7 +192,7 @@ async def my_sales_actions(call: CallbackQuery, state: FSMContext):
     if not ids:
         return
     lid = int(ids[idx])
-    action = call.data.split(":")[2]
+    action = split_callback_data(call.data, ":")[2]
 
     if action == "proof":
         fid = await market_get_cover_file_id(lid)

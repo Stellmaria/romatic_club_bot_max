@@ -22,6 +22,7 @@ from bot.services.market import (
     market_set_status,
     market_toggle_actual,
 )
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name="market_manage")
 
@@ -30,7 +31,7 @@ _MY = "my_sales"  # ключ в FSM
 
 @router.callback_query(F.data.startswith(f"{CB_BUMP}:"))
 async def cb_bump(call: CallbackQuery):
-    lid = int(call.data.split(":")[2])
+    lid = int(split_callback_data(call.data, ":")[2])
     if not await ensure_owner(call, lid):
         return
     listing = await market_get_listing(lid)
@@ -46,7 +47,7 @@ async def cb_bump(call: CallbackQuery):
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:act:"))
 async def ask_action(call: CallbackQuery, state: FSMContext, bot: Bot):
     try:
-        _, _, action, lid_str = call.data.split(":")
+        _, _, action, lid_str = split_callback_data(call.data, ":")
     except ValueError:
         await call.answer()
         return
@@ -156,7 +157,7 @@ async def set_price_value(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("mkt:del:"))
 async def del_listing(call: CallbackQuery):
-    lid = int(call.data.split(":")[2])
+    lid = int(split_callback_data(call.data, ":")[2])
     await market_set_status(lid, "deleted")
     await call.answer("Удалено")
     await safe_delete(call.message)
@@ -164,7 +165,7 @@ async def del_listing(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:do:"))
 async def do_action(call: CallbackQuery):
-    _, _, action, lid_str, verdict = call.data.split(":")
+    _, _, action, lid_str, verdict = split_callback_data(call.data, ":")
     lid = int(lid_str)
     if verdict == "no":
         await call.answer("Отменено")
@@ -190,7 +191,7 @@ async def do_action(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:proof:show:"))
 async def cb_show_proof(call: CallbackQuery, state: FSMContext, bot: Bot):
-    lid = int(call.data.split(":")[-1])
+    lid = int(split_callback_data(call.data, ":")[-1])
     listing = await market_get_listing_core(lid)
     if not listing:
         await call.answer("Лот не найден", show_alert=True);
@@ -236,7 +237,7 @@ async def cb_show_proof(call: CallbackQuery, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:toggle:"))
 async def cb_toggle_actual(call: CallbackQuery):
-    _, _, lid_str = call.data.split(":")
+    _, _, lid_str = split_callback_data(call.data, ":")
     lid = int(lid_str)
 
     st = await market_toggle_actual(lid)
