@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DEPLOY = ROOT / "deploy/server/deploy.sh"
+
+
+def test_configuration_preflight_runs_before_runtime_replacement() -> None:
+    script = DEPLOY.read_text(encoding="utf-8")
+
+    prepare_position = script.index('echo "Preparing $target_sha..."')
+    preflight_position = script.index(
+        'echo "Validating target configuration before replacing runtime..."'
+    )
+    deploy_position = script.index('echo "Deploying $target_sha..."')
+    runtime_replaced_position = script.index("runtime_replaced=1")
+
+    assert prepare_position < preflight_position < deploy_position
+    assert deploy_position < runtime_replaced_position
+    assert "BotProcessSettings.from_env" in script
+    assert "UserbotProcessSettings.from_env" in script
+    assert "from bot.core.settings import settings" not in script
+
+
+def test_preflight_failure_leaves_running_containers_untouched() -> None:
+    script = DEPLOY.read_text(encoding="utf-8")
+
+    assert "code_switched=0" in script
+    assert "runtime_replaced=0" in script
+    assert 'if [[ "$runtime_replaced" == "1" ]]' in script
+    assert "Running containers were not replaced; runtime left untouched." in script
