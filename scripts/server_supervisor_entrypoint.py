@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import sys
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,18 @@ def _configured_socket_gid() -> int:
 SOCKET_GID = _configured_socket_gid()
 
 
+def _notify_systemd_ready() -> None:
+    notify_socket = os.getenv("NOTIFY_SOCKET", "").strip()
+    if not notify_socket:
+        return
+    address = f"\0{notify_socket[1:]}" if notify_socket.startswith("@") else notify_socket
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as client:
+        client.connect(address)
+        client.sendall(
+            b"READY=1\nSTATUS=Romatic Server Supervisor socket is ready"
+        )
+
+
 class GroupAwareUnixHTTPServer(runtime.UnixHTTPServer):
     """Create the control socket with the group shared by the proxy container."""
 
@@ -35,6 +48,7 @@ class GroupAwareUnixHTTPServer(runtime.UnixHTTPServer):
         super().server_bind()
         os.chown(self.server_address, -1, SOCKET_GID)
         os.chmod(self.server_address, runtime.SOCKET_MODE)
+        _notify_systemd_ready()
 
 
 def _target_blob_sha(target_sha: str, path: str) -> str:
@@ -46,10 +60,7 @@ def _guard_resident_supervisor(target_sha: str) -> None:
         "scripts/server_supervisor.py": runtime.RESIDENT_SOURCE_SHA,
         "scripts/server_supervisor_entrypoint.py": ENTRYPOINT_SOURCE_SHA,
     }
-    actual = {
-        path: _target_blob_sha(target_sha, path)
-        for path in expected
-    }
+    actual = {path: _target_blob_sha(target_sha, path) for path in expected}
     if actual != expected:
         raise RuntimeError(
             "Host Server Supervisor is running stale code; deployment aborted. "
