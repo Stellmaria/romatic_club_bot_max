@@ -4,6 +4,7 @@ import asyncio
 import os
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -11,6 +12,16 @@ import aiohttp
 
 class SupervisorUnavailable(RuntimeError):
     """Raised when the host-side Supervisor cannot be reached."""
+
+
+def _read_token() -> str:
+    token_file = os.getenv("SUPERVISOR_TOKEN_FILE", "").strip()
+    if token_file:
+        try:
+            return Path(token_file).read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    return os.getenv("SUPERVISOR_TOKEN", "").strip()
 
 
 @dataclass(slots=True)
@@ -28,7 +39,7 @@ class SupervisorClient:
         if enabled not in {"1", "true", "yes", "on"}:
             return None
         base_url = os.getenv("SUPERVISOR_BASE_URL", "").strip().rstrip("/")
-        token = os.getenv("SUPERVISOR_TOKEN", "").strip()
+        token = _read_token()
         if not base_url or len(token) < 24:
             return None
         try:
@@ -81,8 +92,7 @@ class SupervisorClient:
             "X-Actor": operation_actor,
         }
 
-        attempts = 2
-        for attempt in range(attempts):
+        for attempt in range(2):
             try:
                 async with session.request(
                     normalized_method,
@@ -104,7 +114,7 @@ class SupervisorClient:
             except SupervisorUnavailable:
                 raise
             except (aiohttp.ClientError, TimeoutError, ValueError) as exc:
-                if attempt + 1 >= attempts:
+                if attempt >= 1:
                     raise SupervisorUnavailable(str(exc)) from exc
                 await asyncio.sleep(0.2)
 
