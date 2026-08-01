@@ -8,7 +8,8 @@ Before=romatic-compose.service
 [Service]
 Type=simple
 User=%SERVICE_USER%
-Group=%SERVICE_USER%
+Group=%SUPERVISOR_GROUP%
+UMask=0007
 WorkingDirectory=%APP_DIR%
 EnvironmentFile=%APP_DIR%/.env
 Environment=ROMATIC_APP_DIR=%APP_DIR%
@@ -25,6 +26,11 @@ KillSignal=SIGTERM
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
 ReadWritePaths=%APP_DIR% %DATA_DIR% /tmp
 
 [Install]
