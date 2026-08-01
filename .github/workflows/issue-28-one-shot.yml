@@ -1,0 +1,105 @@
+name: Issue 28 exact cleanup
+
+on:
+  push:
+    branches:
+      - refactor/issue-28-database-runtime
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/issue-28-database-runtime
+      - name: Apply exact source cleanup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          moderation = Path('bot/handlers/admin/moderation_shared.py')
+          text = moderation.read_text(encoding='utf-8')
+          obsolete_import = '''from db.core import (
+              fetch,
+              fetchrow,
+          )
+          '''
+          if text.count(obsolete_import) != 1:
+              raise SystemExit('unexpected moderation_shared db.core import shape')
+          moderation.write_text(text.replace(obsolete_import, ''), encoding='utf-8')
+
+          migrator = Path('db/migrator.py')
+          text = migrator.read_text(encoding='utf-8')
+          old_migrate = '''async def migrate_database_url(database_url: str) -> list[str]:
+              if not database_url:
+                  raise RuntimeError("DATABASE_URL не задан")
+
+              pool = await asyncpg.create_pool(database_url, min_size=1, max_size=2)
+              try:
+                  return await apply_migrations(pool)
+              finally:
+                  await pool.close()
+          '''
+          new_migrate = '''async def migrate_database_url(database_url: str) -> list[str]:
+              if not database_url:
+                  raise RuntimeError("DATABASE_URL не задан")
+
+              from bot.core.settings import DatabaseSettings
+              from db.pool import DatabaseRuntime
+
+              runtime = DatabaseRuntime(
+                  DatabaseSettings(
+                      database_url,
+                      auto_migrate=False,
+                      pool_min_size=1,
+                      pool_max_size=2,
+                  )
+              )
+              pool = await runtime.start()
+              try:
+                  return await apply_migrations(pool)
+              finally:
+                  await runtime.close()
+          '''
+          if text.count(old_migrate) != 1:
+              raise SystemExit('unexpected migrate_database_url shape')
+          text = text.replace(old_migrate, new_migrate)
+
+          old_main = '''async def _main() -> None:
+              from bot.core.legacy_config import legacy_config
+
+              logging.basicConfig(
+                  level=logging.INFO,
+                  format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+              )
+              await migrate_database_url(legacy_config.DATABASE_URL)
+          '''
+          new_main = '''async def _main() -> None:
+              from bot.core.environment import load_project_environment
+              from bot.core.settings import DatabaseSettings
+
+              load_project_environment()
+              settings = DatabaseSettings.from_env()
+              logging.basicConfig(
+                  level=logging.INFO,
+                  format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+              )
+              await migrate_database_url(settings.url)
+          '''
+          if text.count(old_main) != 1:
+              raise SystemExit('unexpected migrator main shape')
+          migrator.write_text(text.replace(old_main, new_main), encoding='utf-8')
+
+          Path('.github/workflows/issue-28-one-shot.yml').unlink()
+          PY
+      - name: Commit cleanup
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add bot/handlers/admin/moderation_shared.py db/migrator.py .github/workflows/issue-28-one-shot.yml
+          git commit -m "refactor(db): remove final low-level pool dependencies"
+          git push origin HEAD:refactor/issue-28-database-runtime
