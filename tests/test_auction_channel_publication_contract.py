@@ -31,7 +31,6 @@ async def test_publication_keeps_media_at_telegram_caption_limit(monkeypatch) ->
         file_id="telegram-file-id",
         caption=caption,
         parse_mode="HTML",
-        protect_content=True,
         raise_on_failure=True,
     )
     bot.send_message.assert_not_awaited()
@@ -73,7 +72,7 @@ async def test_publication_does_not_replace_failed_media_with_text(monkeypatch) 
 
 
 @pytest.mark.asyncio
-async def test_text_only_publication_is_protected() -> None:
+async def test_text_only_publication_uses_normal_auction_policy() -> None:
     sent = SimpleNamespace(message_id=42)
     bot = SimpleNamespace(send_message=AsyncMock(return_value=sent))
 
@@ -90,7 +89,6 @@ async def test_text_only_publication_is_protected() -> None:
         "lot",
         parse_mode="HTML",
         disable_web_page_preview=True,
-        protect_content=True,
     )
 
 
