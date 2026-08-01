@@ -70,9 +70,9 @@ async def _winner_preview_text(
     auction_id: int,
     amount: int,
     winner_id: int,
+    currency_emoji: str,
 ) -> str:
     auction = await service.auction(auction_id) or {}
-    currency_emoji = emoji_by_currency(auction.get("currency"))
     link = build_channel_link(auction.get("message_id")) or "(ссылка недоступна)"
     lot_line = (auction.get("hero_name") or "-") + (
         f" — {auction.get('card_name')}" if auction.get("card_name") else ""
@@ -203,6 +203,7 @@ async def announce_winner(telegram_bot: Bot, auction: dict[str, Any], bids: list
     if not win_message_id:
         top_bid = await service.top_bid(auction_id, lowest_wins=kind.lowest_bid_wins)
         if top_bid:
+            winner_bid = top_bid
             winner_bidder_id = int(top_bid["bidder_id"])
             amount = int(top_bid["amount"])
             win_message_id = top_bid.get("discussion_message_id")
@@ -284,7 +285,13 @@ async def announce_winner(telegram_bot: Bot, auction: dict[str, Any], bids: list
     lot_title = (auction.get("hero_name") or "-") + (
         f" — {auction.get('card_name')}" if auction.get("card_name") else ""
     )
-    preview = await _winner_preview_text(service, auction_id, final_amount, winner_id)
+    preview = await _winner_preview_text(
+        service,
+        auction_id,
+        final_amount,
+        winner_id,
+        currency_emoji,
+    )
     threshold = 0 if kind is AuctionKind.REVERSE else winner_threshold(currency)
     review_line = (
         f"\n⚠️ <b>Сумма ≥ порога проверки ({threshold} {currency_emoji}). Рекомендуется сверка ставок.</b>\n"
@@ -354,14 +361,14 @@ async def send_notifications(
     owner_mentions = ", ".join(
         mention(int(owner["user_id"]), owner.get("username")) for owner in owners
     ) or "—"
+    kind = AuctionKind.from_raw(auction.get("auction_kind"))
+    top_bid = await service.top_bid(auction_id, lowest_wins=kind.lowest_bid_wins)
+    if top_bid and top_bid.get("currency"):
+        currency_emoji = Currency.from_raw(top_bid["currency"]).emoji
     if override_amount is not None:
         amount = int(override_amount)
     else:
-        kind = AuctionKind.from_raw(auction.get("auction_kind"))
-        top_bid = await service.top_bid(auction_id, lowest_wins=kind.lowest_bid_wins)
         amount = int(top_bid["amount"]) if top_bid and top_bid.get("amount") is not None else 0
-        if top_bid and top_bid.get("currency"):
-            currency_emoji = Currency.from_raw(top_bid["currency"]).emoji
 
     common_text = (
         "Поздравляю!!!! 🥳\n\n"

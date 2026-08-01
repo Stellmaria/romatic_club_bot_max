@@ -218,6 +218,10 @@ async def _fetch_best_bid(auction_id: int, *, lowest_wins: bool) -> int | None:
     )
 
 
+async def _fetch_best_bid_units(auction_id: int) -> int | None:
+    return await (await _repository()).fetch_best_bid_units(int(auction_id))
+
+
 async def _fetch_max_bid(auction_id: int) -> int | None:
     return await _fetch_best_bid(int(auction_id), lowest_wins=False)
 
