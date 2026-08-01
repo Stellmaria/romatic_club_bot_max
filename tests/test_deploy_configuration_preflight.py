@@ -24,6 +24,18 @@ def test_configuration_preflight_runs_before_runtime_replacement() -> None:
     assert "from bot.core.settings import settings" not in script
 
 
+def test_configuration_preflight_imports_public_settings_api() -> None:
+    from bot.core.settings import BotProcessSettings, UserbotProcessSettings
+
+    assert callable(BotProcessSettings.from_env)
+    assert callable(UserbotProcessSettings.from_env)
+
+    script = DEPLOY.read_text(encoding="utf-8")
+    assert "from bot.core.settings import BotProcessSettings" in script
+    assert "from bot.core.settings import UserbotProcessSettings" in script
+    assert "from bot.core.settings import settings" not in script
+
+
 def test_preflight_failure_leaves_running_containers_untouched() -> None:
     script = DEPLOY.read_text(encoding="utf-8")
 

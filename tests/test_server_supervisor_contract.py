@@ -53,6 +53,21 @@ def test_supervisor_guards_resident_source_before_invoking_deploy() -> None:
     )
 
 
+def test_update_builds_and_starts_proxy_with_both_application_services() -> None:
+    runtime = source("scripts/server_supervisor.py")
+    deploy = source("deploy/server/deploy.sh")
+
+    target_guard = runtime.index("_guard_resident_supervisor(target_sha)")
+    deploy_invocation = runtime.index('["bash", "deploy/server/deploy.sh"]', target_guard)
+    target_environment = runtime.index('"ROMATIC_DEPLOY_TARGET_SHA": target_sha', deploy_invocation)
+    assert target_guard < deploy_invocation < target_environment
+    assert "build --pull bot userbot supervisor-proxy" in deploy
+    assert "up -d --remove-orphans postgres supervisor-proxy bot userbot" in deploy
+    assert "wait_service bot" in deploy
+    assert "wait_service userbot" in deploy
+    assert "wait_service supervisor-proxy" in deploy
+
+
 def test_supervisor_rejects_target_with_different_resident_source(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server_supervisor, "RESIDENT_SOURCE_SHA", "resident")
 
