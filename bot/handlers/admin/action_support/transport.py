@@ -358,7 +358,6 @@ __all__ = (
     'require_bot',
     '_call_maybe_await',
     'format_date_time_block',
-    'owner_required',
     'owner_or_secret_required',
     'safe_edit_message',
     'notify_owners',
