@@ -7,7 +7,7 @@ from aiogram import Bot, F, Router, types
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.domain.auctions import AuctionKind
+from bot.domain.auctions import AuctionKind, Currency, comparison_units
 from bot.services.auction_winners import AuctionWinnerService
 from bot.core.legacy_config import ADMIN_LOG_CHATS, DISCUSSION_CHAT_ID
 
@@ -46,10 +46,20 @@ def get_winner(bids: list[Any], auction_kind: str = "standard") -> Any | None:
     if not kind.is_automatic_bidding:
         return None
     direction = 1 if kind.lowest_bid_wins else -1
+
+    def value(bid: Any) -> int:
+        amount = int(bid["amount"] if isinstance(bid, dict) else bid.amount)
+        if not kind.lowest_bid_wins:
+            return amount
+        raw_currency = (
+            bid.get("currency") if isinstance(bid, dict) else getattr(bid, "currency", None)
+        )
+        return comparison_units(amount, Currency.from_raw(raw_currency or "алмазы"))
+
     return sorted(
         bids,
         key=lambda bid: (
-            direction * int(bid["amount"] if isinstance(bid, dict) else bid.amount),
+            direction * value(bid),
             bid["placed_at"] if isinstance(bid, dict) else bid.placed_at,
         ),
     )[0]
@@ -207,6 +217,11 @@ async def announce_winner(telegram_bot: Bot, auction: dict[str, Any], bids: list
     action = await service.autobid_action(int(win_message_id)) if win_message_id else None
     winner_id = int(action["target_user_id"]) if action and action.get("target_user_id") else winner_bidder_id
     final_amount = int(amount or 0)
+    winning_currency = Currency.from_raw(
+        (winner_bid.get("currency") if isinstance(winner_bid, dict) else getattr(winner_bid, "currency", None))
+        or currency
+    )
+    currency_emoji = winning_currency.emoji
 
     winner = await service.user(winner_id) or {}
     winner_name = mention(winner_id, winner.get("username"))
@@ -345,6 +360,8 @@ async def send_notifications(
         kind = AuctionKind.from_raw(auction.get("auction_kind"))
         top_bid = await service.top_bid(auction_id, lowest_wins=kind.lowest_bid_wins)
         amount = int(top_bid["amount"]) if top_bid and top_bid.get("amount") is not None else 0
+        if top_bid and top_bid.get("currency"):
+            currency_emoji = Currency.from_raw(top_bid["currency"]).emoji
 
     common_text = (
         "Поздравляю!!!! 🥳\n\n"

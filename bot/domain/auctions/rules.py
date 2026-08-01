@@ -13,7 +13,11 @@ from bot.domain.auctions.exceptions import (
     InvalidAuctionTransition,
 )
 
-_BID_RE = re.compile(r"^\s*([\d\s_]+)\s*([кk])?\s*$", re.IGNORECASE)
+_BID_RE = re.compile(
+    r"^\s*([\d\s_]+)\s*([кk])?\s*"
+    r"(?:💎|🍵|☕️?|алмаз(?:ы|ов)?|diamond(?:s)?|чай|чая|чаш(?:ка|ки|ек)?|tea|cups?)?\s*$",
+    re.IGNORECASE,
+)
 
 
 def parse_bid_amount(text: str) -> int:
@@ -88,17 +92,9 @@ def validate_bid_for_kind(
     step = currency.bid_step
     amount_i = int(amount)
 
-    # У обратного аукциона нет фиксированной верхней границы. Первая ставка
-    # может быть любой положительной суммой с корректным шагом. После неё
-    # каждая следующая ставка должна быть ниже текущей лучшей минимум на шаг.
-    if current_best is None:
-        if amount_i < step:
-            raise BidTooLow(minimum=step, current_max=None)
-        if step > 1 and amount_i % step != 0:
-            raise BidStepError(amount=amount_i, start_price=0, step=step)
-        return amount_i
-
-    maximum = int(current_best) - step
+    # Стартовая цена обратного аукциона является верхним потолком.
+    # Первая ставка не может быть выше него, последующие снижаются на шаг.
+    maximum = int(start_price) if current_best is None else int(current_best) - step
     if amount_i <= 0 or amount_i > maximum:
         raise BidTooHigh(maximum=max(1, maximum), current_best=current_best)
     if step > 1 and amount_i % step != 0:

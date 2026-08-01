@@ -24,6 +24,8 @@ from bot.domain.auctions import (
     BidderNotEligible,
     Currency,
     UnsupportedCurrency,
+    normalize_currency_choices,
+    parse_bid_offer,
 )
 from bot.domain.auctions.rules import minimum_next_bid
 from bot.services.auction_bids import AuctionBidService
@@ -249,7 +251,7 @@ async def on_new_message(event: events.NewMessage.Event):
             await _send_reply_or_plain(
                 f"✅ {_mention(None, sender_id)}, ставка исправлена: "
                 f"<s>{revision.previous_amount}</s> → <b>{revision.bid.amount}</b> "
-                f"{revision.auction.currency.emoji}.",
+                f"{revision.bid.currency.emoji}.",
                 reply_to=int(revision.auction.discussion_message_id or _get_root_id(msg) or msg.reply_to_msg_id),
             )
         return
@@ -308,7 +310,18 @@ async def on_new_message(event: events.NewMessage.Event):
         return
 
     # Единые правила валюты и ставок используются и bot, и userbot.
+    accepted_currencies = normalize_currency_choices(
+        auction.get("accepted_currencies"), fallback=auction.get("currency")
+    )
     try:
+        offer = parse_bid_offer(
+            text_raw,
+            accepted_currencies=accepted_currencies,
+            fallback=Currency.from_raw(auction.get("currency")),
+        )
+        currency = offer.currency
+    except BidFormatError:
+        offer = None
         currency = Currency.from_raw(auction.get("currency"))
     except UnsupportedCurrency:
         logger.error(
@@ -336,7 +349,11 @@ async def on_new_message(event: events.NewMessage.Event):
         )
         bid_limit_label = "Минимум"
 
-    amount = int(mapped["amount"]) if is_autobid_msg else _try_parse_bid_amount(text_raw)
+    amount = (
+        int(mapped["amount"])
+        if is_autobid_msg
+        else (offer.amount if offer is not None else _try_parse_bid_amount(text_raw))
+    )
     if amount is None:
         if is_admin:
             return
@@ -469,6 +486,7 @@ async def on_new_message(event: events.NewMessage.Event):
         "user_id": int(bidder_id),
         "text": text_raw,
         "auction_id": int(placement.auction.auction_id),
+        "currency": placement.bid.currency.value,
     }
 
     # -------------------------

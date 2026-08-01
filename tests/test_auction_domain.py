@@ -9,7 +9,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from bot.domain.auctions import Auction, BidFormatError, BidStepError, BidTooLow, Currency
+from bot.domain.auctions import (
+    Auction,
+    BidFormatError,
+    BidStepError,
+    BidTooLow,
+    Currency,
+    auction_bidding_closes_at,
+    comparison_units,
+    parse_bid_offer,
+)
 from bot.domain.auctions.rules import minimum_next_bid, parse_bid_amount, validate_bid_amount
 
 
@@ -73,5 +82,19 @@ def test_auction_activity_handles_time_boundaries() -> None:
         end_time=now,
     )
     assert active.is_active_at(now) is True
-    assert ended.is_active_at(now) is False
-    assert ended.has_ended_at(now) is True
+    assert ended.is_active_at(now) is True
+    assert ended.has_ended_at(now) is False
+    closes_at = auction_bidding_closes_at(now)
+    assert ended.is_active_at(closes_at - timedelta(microseconds=1)) is True
+    assert ended.is_active_at(closes_at) is False
+    assert ended.has_ended_at(closes_at) is True
+
+
+def test_mixed_currency_offer_requires_marker_and_uses_project_rate() -> None:
+    accepted = (Currency.CUPS, Currency.DIAMONDS)
+    with pytest.raises(BidFormatError):
+        parse_bid_offer("12", accepted_currencies=accepted, fallback=Currency.CUPS)
+    tea = parse_bid_offer("12 чай", accepted_currencies=accepted, fallback=Currency.CUPS)
+    diamonds = parse_bid_offer("120 алмазов", accepted_currencies=accepted, fallback=Currency.CUPS)
+    assert comparison_units(tea.amount, tea.currency) == 120
+    assert comparison_units(diamonds.amount, diamonds.currency) == 120

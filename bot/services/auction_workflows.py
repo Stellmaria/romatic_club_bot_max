@@ -58,7 +58,10 @@ class AuctionCreationService:
             raise ValueError("this auction type accepts one currency")
 
         price = int(start_price)
-        if kind in {AuctionKind.REVERSE, AuctionKind.FREE}:
+        if kind is AuctionKind.REVERSE:
+            if price <= 0:
+                raise ValueError("reverse start_price must be greater than zero")
+        elif kind is AuctionKind.FREE:
             if price < 0:
                 raise ValueError("start_price must not be negative")
         elif price <= 0:

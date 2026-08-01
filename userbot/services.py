@@ -16,7 +16,7 @@ from telethon.tl.types import ChannelParticipantsAdmins
 
 from bot.core.settings import ADMINS, AUCTION_CHANNEL_ID, DISCUSSION_CHAT_ID
 from bot.core.time import ensure_utc, utc_now
-from bot.domain.auctions import BidFormatError
+from bot.domain.auctions import BidFormatError, auction_bidding_closes_at
 from bot.domain.auctions.rules import parse_bid_amount
 from bot.services.auction_workflows import AuctionLifecycleService
 from db.auctions import get_autobid_action_by_msg_id
@@ -205,7 +205,10 @@ async def _is_auction_active(auction: dict) -> bool:
     end_time = auction.get("end_time")
     if not start_time or not end_time:
         return False
-    return ensure_utc(start_time) <= utc_now() <= ensure_utc(end_time)
+    return (
+        ensure_utc(start_time) <= utc_now()
+        < auction_bidding_closes_at(ensure_utc(end_time))
+    )
 
 
 async def _fetch_best_bid(auction_id: int, *, lowest_wins: bool) -> int | None:
@@ -333,7 +336,7 @@ def _is_auction_closed_row(auction: dict | None) -> bool:
     if not end_time:
         return False
     try:
-        return utc_now() > ensure_utc(end_time)
+        return utc_now() >= auction_bidding_closes_at(ensure_utc(end_time))
     except Exception:  # noqa: BLE001
         return False
 

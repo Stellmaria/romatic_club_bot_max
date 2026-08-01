@@ -615,7 +615,7 @@ async def addlot_currency_or_spins(message: types.Message, state: FSMContext):
         custom_offer_terms=None,
     )
 
-    if is_reverse or is_free:
+    if is_free:
         await state.update_data(start_price=0, min_start=None, max_start=None)
         await message.answer(
             USER_MESSAGES.get(
@@ -625,6 +625,29 @@ async def addlot_currency_or_spins(message: types.Message, state: FSMContext):
             reply_markup=ReplyKeyboardRemove(),
         )
         await state.set_state(UserAddLotFSM.waiting_for_comment)
+        return
+
+    if is_reverse:
+        min_allowed, max_allowed, hint = await compute_start_price_limits(state, currency)
+        max_allowed = max(min_allowed, max_allowed)
+        emoji = _cur_emoji(currency)
+        step = _cur_step(currency)
+        mixed_note = (
+            "\nДля смешанного лота это потолок в чае; "
+            "ставки сравниваются по курсу 1 🍵 = 10 💎."
+            if len(accepted_currencies) > 1
+            else ""
+        )
+        await message.answer(
+            f"Стартовый потолок обратного аукциона: "
+            f"<b>{min_allowed}–{max_allowed} {emoji}</b>\n"
+            f"({hint})\nШаг: {step}.{mixed_note}\n\n"
+            "Введите стартовый потолок целым числом:",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        await state.update_data(min_start=min_allowed, max_start=max_allowed)
+        await state.set_state(UserAddLotFSM.waiting_for_start_price)
         return
 
     min_allowed, max_allowed, hint = await compute_start_price_limits(state, currency)
@@ -1151,6 +1174,7 @@ async def addlot_comment(message: types.Message, state: FSMContext):
         if kind_key == AuctionKind.REVERSE.value:
             price_line = (
                 f"Валюта ставок: {accepted_label}\n"
+                f"Стартовый потолок: {d.get('start_price')} {emoji}\n"
                 "Побеждает минимальная ставка.\n"
             )
         elif kind_key == AuctionKind.FREE.value:
@@ -1316,6 +1340,7 @@ async def _send_user_pending_lot_preview(
     if kind_key == AuctionKind.REVERSE.value:
         price_preview = (
             f"Валюта ставок: <b>{html.escape(currencies_preview)}</b>\n"
+            f"Стартовый потолок: <b>{int(start_price)}</b> {_emoji_by_currency(currency)}\n"
             "Ставки идут на понижение"
         )
     elif kind_key == AuctionKind.FREE.value:
@@ -1605,6 +1630,7 @@ async def _final_addlot_create(
         if kind_key == AuctionKind.REVERSE.value:
             price_log_line = (
                 f"💱 Валюта ставок: <b>{accepted_label}</b>\n"
+                f"💰 Стартовый потолок: <b>{int(start_price)} {cur_emoji}</b>\n"
                 "📉 Побеждает минимальная ставка.\n"
             )
         elif kind_key == AuctionKind.FREE.value:

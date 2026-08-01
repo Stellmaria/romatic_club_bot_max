@@ -5,7 +5,13 @@ from datetime import datetime
 from typing import Mapping, Any
 from zoneinfo import ZoneInfo
 
-from bot.domain.auctions.enums import AuctionKind, AuctionStatus, Currency
+from bot.domain.auctions.bidding import auction_bidding_closes_at
+from bot.domain.auctions.enums import (
+    AuctionKind,
+    AuctionStatus,
+    Currency,
+    normalize_currency_choices,
+)
 
 
 _LEGACY_TZ = ZoneInfo("Europe/Moscow")
@@ -30,6 +36,7 @@ class Auction:
     start_time: datetime | None
     end_time: datetime | None
     auction_kind: AuctionKind = AuctionKind.STANDARD
+    accepted_currencies: tuple[Currency, ...] = ()
     message_id: int | None = None
     discussion_message_id: int | None = None
 
@@ -43,6 +50,10 @@ class Auction:
             start_time=row.get("start_time"),
             end_time=row.get("end_time"),
             auction_kind=AuctionKind.from_raw(row.get("auction_kind")),
+            accepted_currencies=normalize_currency_choices(
+                row.get("accepted_currencies"),
+                fallback=row.get("currency"),
+            ),
             message_id=int(row["message_id"]) if row.get("message_id") is not None else None,
             discussion_message_id=(
                 int(row["discussion_message_id"])
@@ -64,14 +75,17 @@ class Auction:
                 return False
         if self.end_time is not None:
             comparable_now = _compatible_now(now, self.end_time)
-            if comparable_now >= self.end_time:
+            if comparable_now >= auction_bidding_closes_at(self.end_time):
                 return False
         return True
 
     def has_ended_at(self, now: datetime) -> bool:
         if self.end_time is None:
             return False
-        return _compatible_now(now, self.end_time) >= self.end_time
+        return (
+            _compatible_now(now, self.end_time)
+            >= auction_bidding_closes_at(self.end_time)
+        )
 
     @property
     def lowest_bid_wins(self) -> bool:
@@ -87,6 +101,7 @@ class Bid:
     discussion_message_id: int | None
     placed_at: datetime | None
     created_at: datetime | None
+    currency: Currency = Currency.DIAMONDS
 
     @classmethod
     def from_record(cls, row: Mapping[str, Any]) -> "Bid":
@@ -102,6 +117,7 @@ class Bid:
             ),
             placed_at=row.get("placed_at"),
             created_at=row.get("created_at"),
+            currency=Currency.from_raw(row.get("currency") or "алмазы"),
         )
 
 

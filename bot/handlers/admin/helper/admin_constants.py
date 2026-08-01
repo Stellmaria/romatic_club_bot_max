@@ -384,9 +384,12 @@ def render_auction_caption(
     if kind_key == "reverse":
         price_line = (
             f"Валюта ставок: {accepted_label}\n"
+            f"Стартовый потолок: {start_price} {emoji}\n"
             "Ставки идут на понижение. Побеждает минимальная ставка.\n\n"
         )
-        rules_line = "Ставки только цифрами в комментариях к этому посту!"
+        rules_line = (
+            "Ставки указывайте суммой и валютой, если доступны и чай, и алмазы!"
+        )
     elif kind_key == "free":
         price_line = f"Принимаются предложения: {accepted_label}\n\n"
         rules_line = "Оставляйте предложение и выбранную валюту в комментариях к этому посту!"

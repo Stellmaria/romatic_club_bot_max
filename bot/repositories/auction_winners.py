@@ -192,10 +192,17 @@ class AuctionWinnerRepository:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 f"""
-                SELECT bidder_id, amount, discussion_message_id, placed_at
+                SELECT bidder_id, amount, currency, discussion_message_id, placed_at
                 FROM public.bids
                 WHERE auction_id = $1
-                ORDER BY amount {direction}, placed_at ASC, bid_id ASC
+                ORDER BY
+                    CASE WHEN {str(lowest_wins).upper()} THEN
+                        CASE lower(COALESCE(currency, 'алмазы'))
+                            WHEN 'чашки' THEN amount * 10
+                            ELSE amount
+                        END
+                    END {direction},
+                    amount {direction}, placed_at ASC, bid_id ASC
                 LIMIT 1
                 """,
                 int(auction_id),
@@ -216,7 +223,10 @@ class AuctionWinnerRepository:
                 WHERE b.auction_id = $1
                 ORDER BY
                     CASE WHEN lower(COALESCE(a.auction_kind, 'standard')) = 'reverse'
-                        THEN b.amount END ASC,
+                        THEN CASE lower(COALESCE(b.currency, a.currency))
+                            WHEN 'чашки' THEN b.amount * 10
+                            ELSE b.amount
+                        END END ASC,
                     CASE WHEN lower(COALESCE(a.auction_kind, 'standard')) <> 'reverse'
                         THEN b.amount END DESC,
                     b.placed_at ASC,

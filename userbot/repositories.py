@@ -29,6 +29,7 @@ class UserbotRepository:
                 SELECT auction_id,
                        start_price,
                        currency,
+                       accepted_currencies,
                        start_time,
                        end_time,
                        status,

@@ -1144,7 +1144,7 @@ async def _legacy_filter_auction_bids(message: types.Message):
             except Exception:
                 end_time = None
     now = datetime.now()
-    if end_time and now >= end_time:
+    if end_time and now >= end_time.replace(second=0, microsecond=0) + timedelta(minutes=1):
         await message.answer(
             "⏰ Аукцион завершён, ставки больше не принимаются.",
             reply_to_message_id=message.message_id

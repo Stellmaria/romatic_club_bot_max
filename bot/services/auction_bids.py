@@ -14,7 +14,11 @@ from bot.domain.auctions import (
     BidderBanned,
     BidderNotEligible,
 )
-from bot.domain.auctions.rules import parse_bid_amount, validate_bid_for_kind
+from bot.domain.auctions.bidding import (
+    parse_bid_offer,
+    validate_reverse_offer,
+)
+from bot.domain.auctions.rules import validate_bid_for_kind
 from bot.core.time import ensure_utc, utc_now
 from bot.repositories.auction_bids import AuctionBidRepository, AuctionBidTransaction
 from db.core import get_db_pool
@@ -120,22 +124,44 @@ class AuctionBidService:
         if auction.auction_kind.requires_luxury_bidder and not await tx.is_user_luxury(bidder_id):
             raise BidderNotEligible("black auctions accept bids only from Luxury users")
 
-        amount = int(explicit_amount) if explicit_amount is not None else parse_bid_amount(bid_text)
-        previous_max = await tx.get_best_bid(
-            auction.auction_id,
-            lowest_wins=auction.lowest_bid_wins,
-        )
-        minimum = validate_bid_for_kind(
-            amount=amount,
-            currency=auction.currency,
-            start_price=auction.start_price,
-            current_best=previous_max,
-            auction_kind=auction.auction_kind,
-        )
+        if explicit_amount is not None:
+            amount = int(explicit_amount)
+            bid_currency = auction.currency
+        else:
+            offer = parse_bid_offer(
+                bid_text,
+                accepted_currencies=auction.accepted_currencies,
+                fallback=auction.currency,
+            )
+            amount = offer.amount
+            bid_currency = offer.currency
+
+        if auction.lowest_bid_wins:
+            previous_max = await tx.get_best_bid_units(auction.auction_id)
+            minimum = validate_reverse_offer(
+                amount=amount,
+                currency=bid_currency,
+                start_price=auction.start_price,
+                base_currency=auction.currency,
+                current_best_units=previous_max,
+            )
+        else:
+            previous_max = await tx.get_best_bid(
+                auction.auction_id,
+                lowest_wins=False,
+            )
+            minimum = validate_bid_for_kind(
+                amount=amount,
+                currency=bid_currency,
+                start_price=auction.start_price,
+                current_best=previous_max,
+                auction_kind=auction.auction_kind,
+            )
         bid = await tx.insert_bid(
             auction_id=auction.auction_id,
             bidder_id=bidder_id,
             amount=amount,
+            currency=bid_currency.value,
             discussion_message_id=bid_message_id,
         )
         return BidPlacement(
@@ -178,20 +204,39 @@ class AuctionBidService:
                     cancelled=True,
                 )
 
-            amount = parse_bid_amount(new_bid_text or "")
-            other_max = await tx.get_best_bid(
-                auction.auction_id,
-                lowest_wins=auction.lowest_bid_wins,
-                excluding_bid_id=bid.bid_id,
+            offer = parse_bid_offer(
+                new_bid_text or "",
+                accepted_currencies=auction.accepted_currencies,
+                fallback=bid.currency,
             )
-            minimum = validate_bid_for_kind(
-                amount=amount,
-                currency=auction.currency,
-                start_price=auction.start_price,
-                current_best=other_max,
-                auction_kind=auction.auction_kind,
+            amount = offer.amount
+            if auction.lowest_bid_wins:
+                other_max = await tx.get_best_bid_units(
+                    auction.auction_id, excluding_bid_id=bid.bid_id
+                )
+                minimum = validate_reverse_offer(
+                    amount=amount,
+                    currency=offer.currency,
+                    start_price=auction.start_price,
+                    base_currency=auction.currency,
+                    current_best_units=other_max,
+                )
+            else:
+                other_max = await tx.get_best_bid(
+                    auction.auction_id,
+                    lowest_wins=False,
+                    excluding_bid_id=bid.bid_id,
+                )
+                minimum = validate_bid_for_kind(
+                    amount=amount,
+                    currency=offer.currency,
+                    start_price=auction.start_price,
+                    current_best=other_max,
+                    auction_kind=auction.auction_kind,
+                )
+            updated = await tx.update_bid_amount(
+                bid.bid_id, amount, currency=offer.currency.value
             )
-            updated = await tx.update_bid_amount(bid.bid_id, amount)
             return BidRevision(
                 auction=auction,
                 bid=updated,

@@ -34,6 +34,14 @@ from bot.domain.auctions.exceptions import (
     InvalidExchangeTransition,
     UnsupportedCurrency,
 )
+from bot.domain.auctions.bidding import (
+    BidOffer,
+    TEA_TO_DIAMONDS,
+    auction_bidding_closes_at,
+    comparison_units,
+    parse_bid_offer,
+    validate_reverse_offer,
+)
 from bot.domain.auctions.models import Auction, Autobid, Bid, BidPlacement, BidRevision
 
 __all__ = [
@@ -57,6 +65,7 @@ __all__ = [
     "BidFormatError",
     "BidNotFound",
     "BidOwnershipError",
+    "BidOffer",
     "BidPlacement",
     "BidRevision",
     "BidRevisionWindowExpired",
@@ -66,6 +75,11 @@ __all__ = [
     "BidderBanned",
     "BidderNotEligible",
     "Currency",
+    "TEA_TO_DIAMONDS",
+    "auction_bidding_closes_at",
+    "comparison_units",
+    "parse_bid_offer",
+    "validate_reverse_offer",
     "normalize_currency_choices",
     "currency_choices_label",
     "ExchangeBatchNotFound",
