@@ -1,6 +1,6 @@
 """Application-owned PostgreSQL connection-pool lifecycle.
 
-The runtime object is the only owner of an asyncpg pool.  This module keeps a
+The runtime object is the only owner of an asyncpg pool. This module keeps a
 few deprecated function wrappers so old maintenance scripts continue to import,
 but those wrappers delegate to the runtime installed by the composition root
 and never hold a second pool reference.
@@ -29,9 +29,9 @@ class DatabaseConfigurationError(RuntimeError):
 class DatabaseRuntime:
     """Own exactly one PostgreSQL pool for one application lifecycle.
 
-    The object is intentionally independent from module globals.  Bot and
+    The object is intentionally independent from module globals. Bot and
     userbot construct their own runtime, start it during application startup
-    and close the same object during shutdown.  Tests may create any number of
+    and close the same object during shutdown. Tests may create any number of
     independent runtimes in one interpreter.
     """
 
@@ -39,7 +39,7 @@ class DatabaseRuntime:
         self,
         settings: DatabaseSettings | None,
         *,
-        pool_factory: PoolFactory = asyncpg.create_pool,
+        pool_factory: PoolFactory | None = None,
     ) -> None:
         self._settings = settings
         self._pool_factory = pool_factory
@@ -87,11 +87,14 @@ class DatabaseRuntime:
 
         async with self._lock():
             if self._pool is None:
-                self._pool = await self._pool_factory(
-                    settings.url,
-                    min_size=settings.pool_min_size,
-                    max_size=settings.pool_max_size,
-                )
+                kwargs = {
+                    "min_size": settings.pool_min_size,
+                    "max_size": settings.pool_max_size,
+                }
+                if self._pool_factory is None:
+                    self._pool = await asyncpg.create_pool(settings.url, **kwargs)
+                else:
+                    self._pool = await self._pool_factory(settings.url, **kwargs)
                 logger.info("Database pool initialized")
         return self._pool
 
@@ -117,7 +120,7 @@ class DatabaseRuntime:
             logger.info("Database pool closed")
 
 
-# Deprecated import-compatible wrappers.  They deliberately keep no state.
+# Deprecated import-compatible wrappers. They deliberately keep no state.
 def configure_database(settings: DatabaseSettings) -> None:
     from db.core import configure_database as configure
 
