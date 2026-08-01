@@ -59,8 +59,8 @@ class _ConnectionProxy:
             return await method(*args, **kwargs)
         except asyncpg.IntegrityConstraintViolationError as exc:
             # Repositories intentionally map several constraints to domain
-            # errors. Record the technical failure for legacy boundaries, but
-            # keep the original exception available to those mappings.
+            # errors. Record the failure for legacy boundaries, but preserve
+            # the asyncpg type for those explicit mappings.
             record_database_failure(
                 translate_database_error(exc, f"database.{method_name}")
             )
@@ -176,8 +176,8 @@ class PoolProxy:
 
 
 db_pool = PoolProxy()
-# Historical repository modules use this spelling. Keep both names pointed at
-# the same stable proxy instead of creating a second pool reference.
+# Historical query modules import this spelling. Keep both names pointed at
+# the same instrumented reference instead of creating a second pool owner.
 pool_proxy = db_pool
 
 
@@ -188,22 +188,24 @@ async def fetchall(query: str, *args: Any) -> list[dict[str, Any]]:
         return [dict(row) for row in rows]
 
 
-async def get_db_pool() -> PoolProxy:
+async def get_db_pool() -> Any:
+    """Return the real managed pool while binding strict legacy instrumentation."""
+
     pool = db_pool.pool
     if pool is None:
         pool = await _runtime_get_db_pool()
         db_pool.bind(pool)
         logger.info("Database pool initialized")
 
-    # Legacy compatibility functions must use the instrumented proxy. Their
-    # broad catches can no longer turn a recorded DB failure into false data.
+    # Legacy compatibility functions must use the instrumented proxy. Modern
+    # repositories receive the real pool and already propagate exceptions.
     try:
         from db import legacy_impl
 
         legacy_impl.db_pool = db_pool
     except ImportError:
         pass
-    return db_pool
+    return pool
 
 
 def require_db_pool(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -219,30 +221,30 @@ def require_db_pool(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 async def fetch(query: str, *args: Any) -> list[asyncpg.Record]:
-    pool = await get_db_pool()
+    await get_db_pool()
     async with persistence_boundary("db.fetch"):
-        async with pool.acquire() as conn:
+        async with db_pool.acquire() as conn:
             return await conn.fetch(query, *args)
 
 
 async def fetchrow(query: str, *args: Any) -> Optional[asyncpg.Record]:
-    pool = await get_db_pool()
+    await get_db_pool()
     async with persistence_boundary("db.fetchrow"):
-        async with pool.acquire() as conn:
+        async with db_pool.acquire() as conn:
             return await conn.fetchrow(query, *args)
 
 
 async def fetchval(query: str, *args: Any) -> Any:
-    pool = await get_db_pool()
+    await get_db_pool()
     async with persistence_boundary("db.fetchval"):
-        async with pool.acquire() as conn:
+        async with db_pool.acquire() as conn:
             return await conn.fetchval(query, *args)
 
 
 async def execute(query: str, *args: Any) -> str:
-    pool = await get_db_pool()
+    await get_db_pool()
     async with persistence_boundary("db.execute"):
-        async with pool.acquire() as conn:
+        async with db_pool.acquire() as conn:
             return await conn.execute(query, *args)
 
 
