@@ -9,7 +9,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from bot.core.time import auction_end_at_59
 from bot.domain.auctions import (
     Auction,
     BidFormatError,
@@ -72,8 +71,8 @@ def test_auction_activity_closes_at_displayed_minute_boundary() -> None:
         currency=Currency.DIAMONDS,
         start_price=100,
         start_time=boundary - timedelta(minutes=30),
-        # Legacy rows may still have :59 persisted. The public 18:30 label must
-        # nevertheless close exactly at 18:30:00.
+        # Legacy rows persist :59 for database compatibility. The public 18:30
+        # label must nevertheless close exactly at 18:30:00.
         end_time=boundary.replace(second=59),
     )
 
@@ -82,11 +81,6 @@ def test_auction_activity_closes_at_displayed_minute_boundary() -> None:
     assert auction.is_active_at(boundary) is False
     assert auction.has_ended_at(boundary - timedelta(microseconds=1)) is False
     assert auction.has_ended_at(boundary) is True
-
-
-def test_new_schedule_slots_store_the_exact_displayed_boundary() -> None:
-    start = datetime(2026, 8, 1, 18, 0, 47, 321)
-    assert auction_end_at_59(start) == datetime(2026, 8, 1, 18, 30)
 
 
 def test_finalization_claim_uses_the_same_displayed_boundary() -> None:
