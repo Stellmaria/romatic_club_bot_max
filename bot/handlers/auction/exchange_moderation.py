@@ -790,7 +790,7 @@ async def show_pending_exchange_requests_all(message: types.Message, limit: int 
     limit = max(1, min(int(limit or 50), 200))
 
     queries = await ExchangeModerationQueries.create()
-    total = await queries.pending_count()
+    total = await queries.pending_total()
     if total <= 0:
         await message.answer("Нет заявок на биржу на модерацию.")
         return
