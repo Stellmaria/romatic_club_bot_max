@@ -178,6 +178,24 @@ Installer:
 
 После установки Supervisor общий Hermes gateway устанавливается из checkout Velvet.
 
+## Обновление после изменения Supervisor
+
+Host-side Supervisor — долгоживущий Python-процесс. Он вычисляет Git blob-хеш
+собственного `scripts/server_supervisor.py` при старте и перед запуском deploy
+сравнивает его с файлом в целевом commit. Поэтому уже запущенный старый
+Supervisor не может сам себя обновить: он отклонит update до вызова
+`deploy/server/deploy.sh`.
+
+После merge этой защиты требуется ровно один доверенный restart на host:
+
+```bash
+sudo systemctl restart romatic-server-supervisor.service
+```
+
+Затем update можно повторить обычным разрешённым способом. Этот restart не
+выполняется кодом приложения или API и не является частью production-изменений
+данной ветки; его должен выполнить оператор с доступом к host/systemd.
+
 ## Ротация токена
 
 1. Остановить основной bot и host Supervisor:

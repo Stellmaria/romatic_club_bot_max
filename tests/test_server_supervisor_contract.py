@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import importlib.util
+import sys
 from pathlib import Path
 
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+_SUPERVISOR_SPEC = importlib.util.spec_from_file_location(
+    "server_supervisor_under_test", ROOT / "scripts/server_supervisor.py"
+)
+assert _SUPERVISOR_SPEC and _SUPERVISOR_SPEC.loader
+server_supervisor = importlib.util.module_from_spec(_SUPERVISOR_SPEC)
+sys.modules[_SUPERVISOR_SPEC.name] = server_supervisor
+_SUPERVISOR_SPEC.loader.exec_module(server_supervisor)
 
 
 def source(path: str) -> str:
@@ -27,6 +37,33 @@ def test_server_runtime_exposes_only_fixed_actions() -> None:
     assert '["bash", "deploy/server/deploy.sh"]' in runtime
     assert "shell=True" not in runtime
     assert "docker.sock" not in runtime
+
+
+def test_supervisor_guards_resident_source_before_invoking_deploy() -> None:
+    runtime = source("scripts/server_supervisor.py")
+
+    assert "RESIDENT_SOURCE_SHA = _git_blob_sha(Path(__file__).resolve())" in runtime
+    guard = runtime.index("_guard_resident_supervisor(target_sha)")
+    invoke = runtime.index('["bash", "deploy/server/deploy.sh"]', guard)
+    assert guard < invoke
+    assert "Host Server Supervisor is running stale code" in runtime
+    assert "Restart romatic-server-supervisor.service once" in runtime
+    assert runtime.index("_guard_resident_supervisor(rollback_sha)") < runtime.index(
+        '["bash", "deploy/server/deploy.sh"]', runtime.index("_guard_resident_supervisor(rollback_sha)")
+    )
+
+
+def test_supervisor_rejects_target_with_different_resident_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(server_supervisor, "RESIDENT_SOURCE_SHA", "resident")
+
+    def fake_git(*args: str, **kwargs: object) -> server_supervisor.CommandResult:
+        assert args == ("rev-parse", "target:scripts/server_supervisor.py")
+        return server_supervisor.CommandResult("target", "", 0)
+
+    monkeypatch.setattr(server_supervisor, "_git", fake_git)
+
+    with pytest.raises(RuntimeError, match="running stale code"):
+        server_supervisor._guard_resident_supervisor("target")
 
 
 def test_proxy_is_isolated_from_docker_and_checkout() -> None:
