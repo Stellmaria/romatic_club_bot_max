@@ -18,10 +18,11 @@ jobs:
           from pathlib import Path
           import zipfile
 
+          output = Path('issue-29-source.zip')
           excluded = {'.git', '.pytest_cache', '__pycache__', 'dist', 'build'}
-          with zipfile.ZipFile('issue-29-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+          with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
               for path in sorted(Path('.').rglob('*')):
-                  if not path.is_file():
+                  if not path.is_file() or path == output:
                       continue
                   if any(part in excluded for part in path.parts):
                       continue
