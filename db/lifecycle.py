@@ -4,38 +4,59 @@ from __future__ import annotations
 
 from bot.core.settings import DatabaseSettings
 from db.migrator import apply_migrations
-from db.pool import close_db_pool, configure_database
+from db.pool import DatabaseRuntime
 
 
-async def init_db(settings: DatabaseSettings) -> None:
-    """Initialize the pool and apply migrations before serving work."""
+async def init_db(
+    runtime_or_settings: DatabaseRuntime | DatabaseSettings,
+) -> DatabaseRuntime:
+    """Start one explicit runtime and apply migrations before serving work."""
 
-    from db.core import get_db_pool, logger
+    from db.core import (
+        current_database_runtime,
+        install_database_runtime,
+        logger,
+    )
 
-    configure_database(settings)
-    pool = await get_db_pool(settings)
+    if isinstance(runtime_or_settings, DatabaseRuntime):
+        runtime = runtime_or_settings
+    else:
+        runtime = current_database_runtime() or DatabaseRuntime(runtime_or_settings)
+        runtime.configure(runtime_or_settings)
+
+    install_database_runtime(runtime)
+    pool = await runtime.start()
+    settings = runtime.settings
+    if settings is None:
+        raise RuntimeError("database runtime has no settings")
     if not settings.auto_migrate:
         logger.warning("Automatic migrations are disabled: DB_AUTO_MIGRATE=false")
-        return
+        return runtime
+
     try:
         await apply_migrations(pool)
     except Exception:
         logger.exception("Database migration failed")
-        await close_db()
+        await close_db(runtime)
         raise
+    return runtime
 
 
-async def close_db() -> None:
-    from db.core import db_pool, logger
+async def close_db(runtime: DatabaseRuntime | None = None) -> None:
+    """Close exactly the runtime owned by this application lifecycle."""
 
-    if db_pool.pool is None:
+    from db.core import (
+        current_database_runtime,
+        logger,
+        uninstall_database_runtime,
+    )
+
+    target = runtime or current_database_runtime()
+    if target is None:
         return
-    await close_db_pool()
-    db_pool.clear()
-    try:
-        from db import legacy_impl
+    await target.close()
+    uninstall_database_runtime(target)
+    logger.info("Database runtime closed")
 
-        legacy_impl.db_pool = None
-    except ImportError:
-        pass
-    logger.info("Database pool closed")
+
+__all__ = ["close_db", "init_db"]
