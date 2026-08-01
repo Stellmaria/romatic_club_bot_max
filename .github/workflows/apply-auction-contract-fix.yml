@@ -7,6 +7,12 @@ on:
     paths:
       - scripts/apply_auction_contract_fix.py
       - .github/workflows/apply-auction-contract-fix.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/apply_auction_contract_fix.py
+      - .github/workflows/apply-auction-contract-fix.yml
 
 permissions:
   contents: write
