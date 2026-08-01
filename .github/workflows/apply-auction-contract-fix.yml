@@ -5,13 +5,11 @@ on:
     branches:
       - fix/auction-deadline-multicurrency-reverse
     paths:
-      - scripts/apply_auction_contract_fix.py
       - .github/workflows/apply-auction-contract-fix.yml
   pull_request:
     branches:
       - main
     paths:
-      - scripts/apply_auction_contract_fix.py
       - .github/workflows/apply-auction-contract-fix.yml
 
 permissions:
@@ -28,6 +26,32 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Prepare patch for protected workflow policy
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("scripts/apply_auction_contract_fix.py")
+          text = path.read_text(encoding="utf-8")
+          text, removed = re.subn(
+              r'\nreplace\(\n    "\.github/workflows/ci\.yml",\n.*?\n\)\n',
+              "\n",
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if removed != 1:
+              raise RuntimeError("CI workflow patch block was not found")
+          workflow_delete = (
+              '(ROOT / ".github/workflows/apply-auction-contract-fix.yml")'
+              '.unlink(missing_ok=True)\n'
+          )
+          if workflow_delete not in text:
+              raise RuntimeError("temporary workflow cleanup line was not found")
+          text = text.replace(workflow_delete, "", 1)
+          path.write_text(text, encoding="utf-8")
+          PY
       - name: Apply deterministic patch
         run: python scripts/apply_auction_contract_fix.py
       - name: Compile patched modules
