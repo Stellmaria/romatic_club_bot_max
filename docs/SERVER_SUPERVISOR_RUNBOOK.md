@@ -68,30 +68,47 @@ rollback
 
 Кодер `@romatic_max_coder_bot` по-прежнему работает только со своим Git workspace и GitHub repository. Он не должен запускать или перезапускать production-сервисы.
 
-## Установка
+## Hermes incident orchestration
 
-Рекомендуемый checkout:
+После установки связанного orchestration-слоя Velvet отдельный read-only monitor Max отслеживает:
 
-```bash
-sudo mkdir -p /srv/romatic-club-max
-sudo chown velvet:velvet /srv/romatic-club-max
+- остановку `bot` или `userbot`;
+- рост Docker `RestartCount`;
+- подтверждённое состояние `unhealthy`;
+- последние очищенные логи затронутого сервиса.
+
+Monitor передаёт bounded incident главному `@VelvetHermesBot` через Runs API на VPS loopback. Главный Hermes может создать задачу только для `@romatic_max_coder_bot`, дождаться ветки/PR/CI и отправить владельцу итог. Monitor и coder не получают право merge, deployment, restart, update или rollback.
+
+Monitor выполняет только read-only команды:
+
+```text
+docker compose ps
+docker compose logs
+docker inspect
 ```
 
-После клонирования репозитория и заполнения `/srv/romatic-club-max/.env`:
+Секреты, database URLs, bearer tokens и Telegram tokens маскируются перед отправкой в модель и Telegram-отчёт.
 
-```bash
-cd /srv/romatic-club-max
-sudo bash deploy/server/install-server-supervisor.sh
+## Установка Supervisor
+
+Фактический production checkout на текущем VPS:
+
+```text
+/srv/romatic-club
 ```
 
-Для другого каталога или пользователя:
+После клонирования репозитория и заполнения `.env`:
 
 ```bash
+cd /srv/romatic-club
 sudo env \
-  ROMATIC_APP_DIR=/srv/your-path \
-  ROMATIC_SERVICE_USER=your-user \
+  ROMATIC_APP_DIR=/srv/romatic-club \
+  ROMATIC_ENV_FILE=/srv/romatic-club/.env \
+  ROMATIC_COMPOSE_FILE=/srv/romatic-club/compose.yaml \
   bash deploy/server/install-server-supervisor.sh
 ```
+
+Для другого каталога или пользователя переопределите `ROMATIC_APP_DIR`, `ROMATIC_ENV_FILE`, `ROMATIC_COMPOSE_FILE` и `ROMATIC_SERVICE_USER`.
 
 После установки Max Supervisor общий gateway главного Hermes устанавливается из checkout Velvet:
 
@@ -99,6 +116,27 @@ sudo env \
 cd /srv/velvet
 sudo bash deploy/hermes-operator/install.sh
 ```
+
+## Установка incident monitor
+
+Сначала должны быть установлены и проверены:
+
+1. Velvet orchestration из связанного PR;
+2. `/srv/hermes-operator-control/incident.env` с loopback URL и внутренним Hermes API key;
+3. `romatic-server-supervisor.service`.
+
+Затем:
+
+```bash
+cd /srv/romatic-club
+sudo env \
+  ROMATIC_APP_DIR=/srv/romatic-club \
+  ROMATIC_ENV_FILE=/srv/romatic-club/.env \
+  ROMATIC_COMPOSE_FILE=/srv/romatic-club/compose.yaml \
+  bash deploy/server/install-hermes-incident-monitor.sh
+```
+
+Installer не печатает API key и не меняет production data. Он устанавливает и включает только `romatic-hermes-incident-monitor.service`.
 
 ## Telegram
 
@@ -124,11 +162,16 @@ sudo bash deploy/hermes-operator/install.sh
 /restart_userbot
 ```
 
+Incident monitor дополнительно отправляет владельцу два сообщения:
+
+- начало разбора с service/reason/run_id;
+- terminal report с status, PR/tests или blocker.
+
 ## Ручной deploy
 
 ```bash
-cd /srv/romatic-club-max
-ROMATIC_APP_DIR=/srv/romatic-club-max \
+cd /srv/romatic-club
+ROMATIC_APP_DIR=/srv/romatic-club \
 ROMATIC_ENV_FILE=.env \
 ROMATIC_COMPOSE_FILE=compose.yaml \
 bash deploy/server/deploy.sh
@@ -138,9 +181,10 @@ bash deploy/server/deploy.sh
 
 ```bash
 sudo systemctl is-active romatic-server-supervisor.service
-sudo systemctl status romatic-server-supervisor.service --no-pager
+sudo systemctl is-active romatic-hermes-incident-monitor.service
+sudo systemctl status romatic-hermes-incident-monitor.service --no-pager
 
-cd /srv/romatic-club-max
+cd /srv/romatic-club
 docker compose --env-file .env -f compose.yaml ps
 
 docker network inspect hermes-supervisor-control \
@@ -152,3 +196,10 @@ Control network должна быть internal. В списке её конте�
 При restart основного bot должен измениться только `StartedAt` контейнера `bot`.
 При restart userbot должен измениться только `StartedAt` контейнера `userbot`.
 PostgreSQL и второй процесс в каждом случае должны сохранить прежнее время запуска.
+
+Monitor state и очищенный operational log находятся в:
+
+```text
+/srv/romatic-club/server-data/runtime/supervisor/hermes-incident-monitor.json
+/srv/romatic-club/server-data/runtime/supervisor/hermes-incident-monitor.log
+```
