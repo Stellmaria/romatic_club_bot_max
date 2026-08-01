@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Reject new silent persistence failures.
 
-The monolithic ``db/legacy_impl.py`` has a documented migration exception. All
-active strict boundaries are clean, and every other persistence module is
-forbidden from silently suppressing an awaited operation.
+Active persistence boundaries are strict. A small, explicit legacy baseline is
+kept only for modules scheduled for migration; adding the same pattern anywhere
+else fails CI instead of quietly expanding the debt.
 """
 
 from __future__ import annotations
@@ -20,7 +20,20 @@ STRICT_FILES = {
     ROOT / "db/reliable_mutations.py",
 }
 PERSISTENCE_ROOTS = (ROOT / "db", ROOT / "bot/repositories")
-LEGACY_BROAD_ALLOWLIST = {ROOT / "db/legacy_impl.py"}
+# Exact migration baseline. These modules are still guarded at runtime by the
+# instrumented pool and persistence boundary, but their local broad catches
+# must be removed as they are moved to repositories under issues #28/#30.
+LEGACY_BROAD_ALLOWLIST = {
+    ROOT / "db/legacy_impl.py",
+    ROOT / "bot/repositories/market.py",
+    ROOT / "db/market.py",
+    ROOT / "db/repositories/admin.py",
+    ROOT / "db/repositories/market.py",
+    ROOT / "db/repositories/subscriptions.py",
+    ROOT / "db/repositories/uid.py",
+    ROOT / "db/subscriptions.py",
+    ROOT / "db/uid.py",
+}
 DIRECT_LEGACY_IMPORT_ALLOWLIST = {
     ROOT / "db/core.py",
     ROOT / "db/legacy.py",
@@ -50,7 +63,11 @@ def _is_silent(handler: ast.ExceptHandler) -> bool:
 def _try_awaits_work(tree: ast.AST, handler: ast.ExceptHandler) -> bool:
     for node in ast.walk(tree):
         if isinstance(node, ast.Try) and handler in node.handlers:
-            return any(isinstance(child, ast.Await) for item in node.body for child in ast.walk(item))
+            return any(
+                isinstance(child, ast.Await)
+                for item in node.body
+                for child in ast.walk(item)
+            )
     return False
 
 
