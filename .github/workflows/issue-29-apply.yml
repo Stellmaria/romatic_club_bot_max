@@ -1,9 +1,9 @@
 name: Apply issue 29 refactor
 
 on:
-  push:
+  pull_request:
     branches:
-      - refactor/issue-29-admin-boundaries
+      - main
 
 permissions:
   contents: write
