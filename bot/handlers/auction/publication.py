@@ -23,7 +23,7 @@ from bot.handlers.admin.helper.user_helpers import get_owner_refs
 from bot.handlers.auction.winner import _post_rules_under_lot
 from bot.services.auction_workflows import AuctionPublicationService
 from bot.telegram.media import bot_send_media_any
-from bot.core.legacy_config import AUCTION_CHANNEL_ID, AUCTION_CHANNEL_USERNAME
+from bot.core.legacy_config import legacy_config
 from db.legacy import count_sold_by_card_id, count_sold_same_card, list_auctions
 
 logger = logging.getLogger("auction_bot.publication")
@@ -42,7 +42,7 @@ def _username_target(value: str | None) -> str | None:
 
 def _publication_targets(
     configured: int | str | None,
-    configured_username: str | None = AUCTION_CHANNEL_USERNAME,
+    configured_username: str | None = None,
 ) -> tuple[int | str, ...]:
     """Return unique channel targets in preferred delivery order.
 
@@ -50,6 +50,9 @@ def _publication_targets(
     as an explicit fallback because Telegram migrations and stale environment
     values can leave a valid public channel reachable only by its username.
     """
+
+    if configured_username is None:
+        configured_username = legacy_config.AUCTION_CHANNEL_USERNAME
 
     targets: list[int | str] = []
     if isinstance(configured, int) and configured:
@@ -163,12 +166,16 @@ async def _send_publication(
 async def publish_auction_lot(
     bot: Bot,
     auction: dict[str, Any],
-    channel_id: int | str | None = AUCTION_CHANNEL_ID,
+    channel_id: int | str | None = None,
     lot_number: int | None = None,
     publication_service: AuctionPublicationService | None = None,
-    channel_username: str | None = AUCTION_CHANNEL_USERNAME,
+    channel_username: str | None = None,
 ) -> int | None:
     """Deliver one claimed auction and atomically record its Telegram message."""
+    if channel_id is None:
+        channel_id = legacy_config.AUCTION_CHANNEL_ID
+    if channel_username is None:
+        channel_username = legacy_config.AUCTION_CHANNEL_USERNAME
     del lot_number  # retained for compatibility with existing admin calls
     auction_id = int(auction["auction_id"])
     if auction.get("message_id"):
@@ -270,9 +277,13 @@ async def get_lot_number_for_day(auction: dict[str, Any]) -> int:
 async def auction_publisher_loop(
     bot: Bot,
     *,
-    channel_id: int | str | None = AUCTION_CHANNEL_ID,
-    channel_username: str | None = AUCTION_CHANNEL_USERNAME,
+    channel_id: int | str | None = None,
+    channel_username: str | None = None,
 ) -> None:
+    if channel_id is None:
+        channel_id = legacy_config.AUCTION_CHANNEL_ID
+    if channel_username is None:
+        channel_username = legacy_config.AUCTION_CHANNEL_USERNAME
     service = await AuctionPublicationService.create()
     while True:
         try:

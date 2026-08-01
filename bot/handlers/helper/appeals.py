@@ -603,9 +603,9 @@ async def appeal_submit(message: types.Message, state: FSMContext) -> None:
 
         # докидываем медиа в админ-логи (копиями)
         if media_ids:
-            from bot.core.legacy_config import ADMIN_LOG_CHATS  # локальный импорт чтобы не ловить циклы
+            from bot.core.legacy_config import legacy_config  # локальный импорт чтобы не ловить циклы
 
-            for chat_id in ADMIN_LOG_CHATS:
+            for chat_id in legacy_config.ADMIN_LOG_CHATS:
                 await message.bot.send_message(chat_id, "📎 Вложения к обращению:")
                 for mid in media_ids:
                     try:

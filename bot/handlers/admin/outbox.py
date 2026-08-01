@@ -9,13 +9,13 @@ from aiogram.types import Message
 
 from bot.core.time import to_moscow
 from bot.services.outbox import TelegramOutboxService
-from bot.core.legacy_config import ADMINS
+from bot.core.legacy_config import legacy_config
 
 router = Router(name="outbox_admin")
 
 
 async def _require_admin(message: Message) -> bool:
-    if message.from_user and message.from_user.id in ADMINS:
+    if message.from_user and message.from_user.id in legacy_config.ADMINS:
         return True
     await message.answer("Нет доступа.")
     return False

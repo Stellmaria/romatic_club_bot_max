@@ -11,12 +11,7 @@ from aiogram import Bot, types
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.core.settings import (
-    ADMIN_LOG_CHATS,
-    AUCTION_CHANNEL_ID,
-    AUCTION_CHANNEL_USERNAME,
-    LOG_CHAT_ID,
-)
+from bot.core.legacy_config import legacy_config
 from bot.core.time import to_moscow, utc_now
 from bot.domain.auctions import AuctionKind
 from bot.repositories import winner as winner_repository
@@ -267,10 +262,10 @@ def _user_links_html(user_id: int, username: str | None) -> str:
 def _build_channel_link(message_id: int | None) -> str | None:
     if not message_id:
         return None
-    if AUCTION_CHANNEL_USERNAME:
-        return f"https://t.me/{AUCTION_CHANNEL_USERNAME.lstrip('@')}/{message_id}"
-    if AUCTION_CHANNEL_ID and str(AUCTION_CHANNEL_ID).startswith("-100"):
-        return f"https://t.me/c/{str(AUCTION_CHANNEL_ID)[4:]}/{message_id}"
+    if legacy_config.AUCTION_CHANNEL_USERNAME:
+        return f"https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}/{message_id}"
+    if legacy_config.AUCTION_CHANNEL_ID and str(legacy_config.AUCTION_CHANNEL_ID).startswith("-100"):
+        return f"https://t.me/c/{str(legacy_config.AUCTION_CHANNEL_ID)[4:]}/{message_id}"
     return None
 
 
@@ -403,14 +398,14 @@ async def _log_admin(bot: Bot, text: str) -> None:
 def _iter_admin_log_chats() -> list[int]:
     out = []
     try:
-        for x in ADMIN_LOG_CHATS:
+        for x in legacy_config.ADMIN_LOG_CHATS:
             if isinstance(x, int):
                 out.append(x)
     except Exception:
         pass
     try:
-        if isinstance(LOG_CHAT_ID, int):
-            out.append(LOG_CHAT_ID)
+        if isinstance(legacy_config.LOG_CHAT_ID, int):
+            out.append(legacy_config.LOG_CHAT_ID)
     except Exception:
         pass
     # уникализируем

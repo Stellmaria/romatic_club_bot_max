@@ -6,17 +6,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from bot.core.environment import load_project_environment, resolve_project_root
+from bot.core.settings import UserbotProcessSettings
+from bot.core.legacy_config import configure_legacy_config
+
 from telethon import TelegramClient, functions
 from telethon.errors import FloodWaitError, MsgIdInvalidError, SessionPasswordNeededError
 
-from bot.core.legacy_config import (
-    AUCTION_CHANNEL_ID,
-    AUCTION_CHANNEL_USERNAME,
-    TG_API_ID,
-    TG_API_HASH,
-    TG_SESSION,
-    BACKFILL_LIMIT_POSTS,
-)
+from bot.core.legacy_config import legacy_config
 
 # ---------- настройки ----------
 TZ_MSK = ZoneInfo("Europe/Moscow")
@@ -73,9 +70,9 @@ def parse_amount(text: str) -> int | None:
 
 
 def get_channel_ref() -> str | int:
-    if AUCTION_CHANNEL_USERNAME:
-        return f"@{AUCTION_CHANNEL_USERNAME.lstrip('@')}"
-    return AUCTION_CHANNEL_ID
+    if legacy_config.AUCTION_CHANNEL_USERNAME:
+        return f"@{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}"
+    return legacy_config.AUCTION_CHANNEL_ID
 
 
 def make_post_link(channel_id: int, channel_username: str | None, post_id: int) -> str:
@@ -158,7 +155,7 @@ class PostRow:
 
 # ---------- main ----------
 async def main():
-    if not TG_API_ID or not TG_API_HASH:
+    if not legacy_config.TG_API_ID or not legacy_config.TG_API_HASH:
         raise SystemExit("Нет TG_API_ID/TG_API_HASH в .env (или они пустые).")
 
     channel_ref = get_channel_ref()
@@ -192,7 +189,7 @@ async def main():
         posts_writer = csv.DictWriter(f_posts, fieldnames=[f.name for f in PostRow.__dataclass_fields__.values()])
         posts_writer.writeheader()
 
-        client = TelegramClient(TG_SESSION, TG_API_ID, TG_API_HASH)
+        client = TelegramClient(legacy_config.TG_SESSION, legacy_config.TG_API_ID, legacy_config.TG_API_HASH)
         await client.connect()
         try:
             await ensure_login(client)
@@ -207,13 +204,13 @@ async def main():
 
             discussion = next(c for c in full.chats if c.id == linked_id)
 
-            channel_id_for_links = AUCTION_CHANNEL_ID or getattr(channel, "id", 0)
-            channel_username = AUCTION_CHANNEL_USERNAME if AUCTION_CHANNEL_USERNAME else None
+            channel_id_for_links = legacy_config.AUCTION_CHANNEL_ID or getattr(channel, "id", 0)
+            channel_username = legacy_config.AUCTION_CHANNEL_USERNAME if legacy_config.AUCTION_CHANNEL_USERNAME else None
 
             post_idx = 0
-            async for post in client.iter_messages(channel, limit=BACKFILL_LIMIT_POSTS):
+            async for post in client.iter_messages(channel, limit=legacy_config.BACKFILL_LIMIT_POSTS):
                 post_idx += 1
-                print(f"[{post_idx}/{BACKFILL_LIMIT_POSTS}] scanning post_id={post.id} ...", flush=True)
+                print(f"[{post_idx}/{legacy_config.BACKFILL_LIMIT_POSTS}] scanning post_id={post.id} ...", flush=True)
 
                 post_link = make_post_link(channel_id_for_links, channel_username, post.id)
 
@@ -496,5 +493,13 @@ async def main():
     print(f"\nDONE\nBIDS:  {BIDS_CSV}\nPOSTS: {POSTS_CSV}", flush=True)
 
 
-if __name__ == "__main__":
+def run() -> None:
+    project_root = resolve_project_root()
+    load_project_environment(project_root)
+    config = UserbotProcessSettings.from_env(project_root=project_root)
+    configure_legacy_config(config)
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    run()

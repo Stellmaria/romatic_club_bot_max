@@ -1,8 +1,8 @@
 """Explicit process-environment bootstrap helpers.
 
-Configuration modules must remain safe to import in tests, migrations and
-library consumers.  Executable entrypoints call :func:`load_project_environment`
-before importing modules that construct the process-wide settings singleton.
+Configuration modules remain safe to import in tests, migrations and library
+consumers. Executable composition roots call :func:`load_project_environment`
+and then construct the required process settings explicitly.
 """
 
 from __future__ import annotations
@@ -52,9 +52,8 @@ def load_project_environment(
     global PROJECT_ROOT
 
     selected_root = resolve_project_root(project_root)
-    # Entrypoints invoke this function before importing ``bot.core.settings``.
-    # Updating the shared root first ensures its module constants and runtime
-    # defaults are built from the selected deployment directory.
+    # ``PROJECT_ROOT`` remains only as a path compatibility export. Strict
+    # settings loaders receive the selected root explicitly from the caller.
     PROJECT_ROOT = selected_root
 
     from dotenv import load_dotenv

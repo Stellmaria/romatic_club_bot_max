@@ -1,7 +1,6 @@
 import asyncio
 import html
 import logging
-import os
 import random
 import re
 import shlex
@@ -26,11 +25,9 @@ from bot.telegram.callback_parser import rsplit_callback_data, split_callback_da
 MSK = tz.gettz("Europe/Moscow")
 from aiogram import Bot
 from aiogram import Router, F, types
-from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command, CommandObject
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from dateutil import parser
-from flask import Flask, request
 
 from bot.domain.auctions import AuctionKind, Currency
 from bot.handlers.admin.helper.admin_constants import WARN_TEXTS
@@ -41,17 +38,11 @@ from bot.services.auction_admin import AuctionAdminService
 from bot.services.auction_comments import AuctionCommentService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.services.warnings import WarningService
-from bot.core.legacy_config import DISCUSSION_CHAT_ID, ADMINS, BOT_TOKEN, LOG_CHAT_ID, AUCTION_CHANNEL_USERNAME, AUCTION_CHANNEL_ID, \
-    ADMIN_LOG_CHATS
+from bot.core.legacy_config import legacy_config
 from db import db
 from db.legacy import add_bid, update_lot_field, add_warning, get_auction_by_discussion_id, \
     get_warnings_count, ban_user, is_user_banned, get_current_auction, add_user, execute, fetchrow, get_lot_owners, \
     get_user, get_lots_by_owner, get_user_by_username, log_audit_action, update_auction_status, get_lot_by_id, fetch
-
-try:
-    from bot.core.legacy_config import WINNER_NOTIFY_DEADLINE_MINUTES
-except Exception:
-    WINNER_NOTIFY_DEADLINE_MINUTES = 5
 
 logger = logging.getLogger("auction")
 
@@ -60,16 +51,8 @@ if not logger.hasHandlers():
     handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
     logger.addHandler(handler)
 router = Router()
-_PG_DSN = os.getenv("DATABASE_URL")
 user_warnings = defaultdict(list)
 admin_pending_warns = {}
-
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
-app = Flask(__name__)
-
-USERBOT_BID_MODERATION = True
-
-BID_VALIDATION_MODE = os.getenv("BID_VALIDATION_MODE", "userbot").lower()  # "bot" | "userbot"
 
 TG_MAX = 3900
 
@@ -222,56 +205,9 @@ async def answer_html_chunks(message, lines: list[str], max_len: int = TG_MAX) -
         await message.answer("\n".join(buf), parse_mode="HTML")
 
 
-@app.route('/notify_bid_deleted', methods=['POST'])
-def notify_bid_deleted():
-    data = request.json
-    print(f"[FLASK] Получен POST: {data}")
-    chat_id = data["chat_id"]
-    reply_to_message_id = data["reply_to_message_id"]
-    username = data.get("username")
-    amount = data.get("amount")
-    user_id = data.get("user_id")
-    msg1 = (
-        f"❗️ <b>Ставка удалена</b>\n"
-        f"@{username}, ваша ставка удалена. (сумма: {amount})"
-    )
-
-    async def process_and_send():
-        warnings = 1
-        if user_id:
-            warnings = await (await WarningService.create()).count_warnings(int(user_id))
-        from bot.handlers.admin.helper.admin_constants import WARN_TEXTS
-        import random
-        msg2 = random.choice(WARN_TEXTS).format(username=username, warnings=warnings)
-        m1 = await bot.send_message(
-            chat_id=chat_id,
-            text=msg1,
-            reply_to_message_id=reply_to_message_id
-        )
-        await bot.send_message(
-            chat_id=chat_id,
-            text=msg2,
-            reply_to_message_id=m1.message_id
-        )
-        print("[FLASK] Сообщения об удалении ставки и преды отправлены!")
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        import threading
-        loop = asyncio.new_event_loop()
-        threading.Thread(target=loop.run_forever, daemon=True).start()
-    asyncio.run_coroutine_threadsafe(process_and_send(), loop)
-    return "ok"
-
-
-def run_flask():
-    app.run("127.0.0.1", 8002)
-
-
 async def _legacy_show_lot_owners(message: types.Message):
     # Только для админов
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     # Получить номер лота
@@ -299,7 +235,7 @@ async def _legacy_show_lot_owners(message: types.Message):
 
 
 async def _legacy_activate_lot_cmd(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -352,7 +288,7 @@ async def _legacy_activate_lot_cmd(message: types.Message):
 
 
 async def _legacy_show_user_lots(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -394,7 +330,7 @@ async def _legacy_show_user_lots(message: types.Message):
 
 async def _legacy_admin_delete_bid(message: types.Message):
     # доступ
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -439,7 +375,7 @@ async def _legacy_admin_start_auction(message: types.Message):
     Ставит статус "active" и новый end_time на 30 минут вперёд.
     Уведомляет чат и владельца.
     """
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     if not message.reply_to_message:
@@ -495,7 +431,7 @@ async def _legacy_admin_stop_auction(message: types.Message):
     Ставит статус "finished" и фиксирует end_time.
     Уведомляет чат и владельца.
     """
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     if not message.reply_to_message:
@@ -545,7 +481,7 @@ async def _legacy_admin_stop_auction(message: types.Message):
 
 
 async def _legacy_admin_unmute(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = message.text.strip().split()
@@ -664,10 +600,10 @@ def _user_links_html(user_id: int, username: str | None) -> str:
 def _build_channel_link(message_id: int | None) -> str | None:
     if not message_id:
         return None
-    if AUCTION_CHANNEL_USERNAME:
-        return f"https://t.me/{AUCTION_CHANNEL_USERNAME.lstrip('@')}/{message_id}"
-    if AUCTION_CHANNEL_ID and str(AUCTION_CHANNEL_ID).startswith("-100"):
-        return f"https://t.me/c/{str(AUCTION_CHANNEL_ID)[4:]}/{message_id}"
+    if legacy_config.AUCTION_CHANNEL_USERNAME:
+        return f"https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}/{message_id}"
+    if legacy_config.AUCTION_CHANNEL_ID and str(legacy_config.AUCTION_CHANNEL_ID).startswith("-100"):
+        return f"https://t.me/c/{str(legacy_config.AUCTION_CHANNEL_ID)[4:]}/{message_id}"
     return None
 
 
@@ -721,7 +657,7 @@ async def my_warns_handler(message: types.Message):
 
 @router.message(F.text.lower().startswith('макс фас'))
 async def admin_warn_step1(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("У вас нет прав на выдачу предупреждений.")
         return
     parts = message.text.strip().split()
@@ -758,7 +694,7 @@ async def admin_warn_step2(message: types.Message):
 
 @router.message(F.text.lower().startswith('макс преды'))
 async def admin_check_warns(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = message.text.split()
@@ -787,7 +723,7 @@ async def admin_unban_and_reset(message: types.Message):
 
     Только для админов.
     """
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -837,7 +773,7 @@ async def admin_full_unrestrict(message: types.Message):
     Формат: макс рабан @username или reply к сообщению пользователя.
     Только для админов.
     """
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     if message.reply_to_message:
@@ -876,7 +812,7 @@ async def admin_full_unrestrict(message: types.Message):
 
 @router.message(F.text.lower().startswith('макс обнулить'))
 async def admin_reset_warns(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = message.text.strip().split()
@@ -899,7 +835,7 @@ async def admin_reset_warns(message: types.Message):
 
 @router.message(F.text.lower().startswith('макс все преды'))
 async def admin_all_warns(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     rows = await (await WarningService.create()).list_users_with_warnings()
@@ -916,7 +852,7 @@ async def admin_all_warns(message: types.Message):
 
 @router.message(F.text.lower().startswith('макс удалённые ставки'))
 async def show_deleted_bids(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     rows = await (await WarningService.create()).list_deleted_bid_warnings(limit=50)
@@ -951,7 +887,7 @@ def _legacy_parse_bid(text: str) -> int | None:
 
 
 async def _legacy_admin_ban_user(message: types.Message):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -1105,9 +1041,9 @@ async def bind_lot_to_discussion(message: types.Message):
 
 
 async def _legacy_filter_auction_bids(message: types.Message):
-    if USERBOT_BID_MODERATION:
+    if legacy_config.USERBOT_BID_MODERATION:
         return
-    if BID_VALIDATION_MODE != "bot":
+    if legacy_config.BID_VALIDATION_MODE != "bot":
         return
     print(
         f"[AUCTION DEBUG] New msg: {message.text} | chat={message.chat.id} | reply_to={getattr(message.reply_to_message, 'message_id', None)} | user={message.from_user.id} @{message.from_user.username}"
@@ -1263,7 +1199,7 @@ async def _legacy_filter_auction_bids(message: types.Message):
             for o in owners
         )
         await message.bot.send_message(
-            LOG_CHAT_ID,
+            legacy_config.LOG_CHAT_ID,
             f"💬 Новая ставка:\n"
             f"Аукцион: {lot['auction_id']}\n"
             f"Пользователь: @{username} ({message.from_user.id})\n"
@@ -1326,9 +1262,9 @@ async def handle_current_auction(message: types.Message):
 
 
 async def _legacy_edited_bid_handler(message: types.Message):
-    if USERBOT_BID_MODERATION:
+    if legacy_config.USERBOT_BID_MODERATION:
         return
-    if BID_VALIDATION_MODE != "bot":
+    if legacy_config.BID_VALIDATION_MODE != "bot":
         return
 
     if message.from_user and message.from_user.is_bot:
@@ -1491,10 +1427,10 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
     if not winner_bid:
         txt = "⏰ <b>Аукцион завершён!</b>\n❌ <i>Победителей нет, ставок не было.</i>"
         try:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, txt, parse_mode="HTML", reply_to_message_id=reply_to_id)
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, txt, parse_mode="HTML", reply_to_message_id=reply_to_id)
         except Exception:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, txt, parse_mode="HTML")
-        for chat_id in ADMIN_LOG_CHATS:
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, txt, parse_mode="HTML")
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await telegram_bot.send_message(chat_id, f"🏁 Лот {auction_id}: ставок не было.", parse_mode="HTML")
             except Exception:
@@ -1590,15 +1526,15 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
         )
 
         if dmsg_id:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, end_text, parse_mode="HTML", reply_to_message_id=dmsg_id)
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, end_text, parse_mode="HTML", reply_to_message_id=dmsg_id)
         else:
-            await telegram_bot.send_message(DISCUSSION_CHAT_ID, end_text, parse_mode="HTML")
+            await telegram_bot.send_message(legacy_config.DISCUSSION_CHAT_ID, end_text, parse_mode="HTML")
     except Exception:
         pass
 
     link = _build_channel_link(auction.get("message_id"))
     now_msk = _msk_now()
-    deadline_msk = now_msk + timedelta(minutes=int(WINNER_NOTIFY_DEADLINE_MINUTES or 10))
+    deadline_msk = now_msk + timedelta(minutes=int(legacy_config.WINNER_NOTIFY_DEADLINE_MINUTES or 10))
     rel_minutes = int((deadline_msk - now_msk).total_seconds() // 60)
 
     lot_title = f"{(auction.get('hero_name') or '-')}" + (f" — {auction.get('card_name')}" if auction.get("card_name") else "")
@@ -1633,7 +1569,7 @@ async def announce_winner(telegram_bot, auction, bids, send_admin_log=None):
         [InlineKeyboardButton(text="⛔ Не отправлять", callback_data=f"{CB_WIN_SKIP}:{auction_id}:{wid}")]
     ])
 
-    for chat_id in ADMIN_LOG_CHATS:
+    for chat_id in legacy_config.ADMIN_LOG_CHATS:
         try:
             await telegram_bot.send_message(chat_id, admin_text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
         except Exception:
@@ -2033,7 +1969,7 @@ async def _post_taken_comment_and_pin_after_print_win(bot: Bot, *, auction_id: i
 
     try:
         msg = await bot.send_message(
-            DISCUSSION_CHAT_ID,
+            legacy_config.DISCUSSION_CHAT_ID,
             text,
             parse_mode="HTML",
             reply_to_message_id=int(dmsg_id),
@@ -2044,7 +1980,7 @@ async def _post_taken_comment_and_pin_after_print_win(bot: Bot, *, auction_id: i
 
     try:
         await bot.pin_chat_message(
-            chat_id=DISCUSSION_CHAT_ID,
+            chat_id=legacy_config.DISCUSSION_CHAT_ID,
             message_id=msg.message_id,
             disable_notification=True,
         )
@@ -2555,7 +2491,7 @@ async def cmd_print_win_missed(message: types.Message) -> None:
 
 @router.message(Command("ex_owners"))
 async def cmd_ex_owners(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -2650,7 +2586,7 @@ async def _render_print_ex_text(batch: dict, cards: list[dict], st: dict | None)
 
 @router.message(Command("print_ex"))
 async def cmd_print_ex(message: Message, state: FSMContext) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -2679,7 +2615,7 @@ async def cmd_print_ex(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("pex|"))
 async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    if call.from_user.id not in ADMINS:
+    if call.from_user.id not in legacy_config.ADMINS:
         await call.answer("Нет доступа.", show_alert=True)
         return
 
@@ -2786,7 +2722,7 @@ async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
 
 @router.message(PrintExStates.waiting_manual)
 async def ex_manual_input(message: Message, state: FSMContext) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await state.clear()
         return
 
@@ -2846,7 +2782,7 @@ async def ex_manual_input(message: Message, state: FSMContext) -> None:
 
 @router.message(F.text.startswith("/print_win"))
 async def cmd_print_win(message: Message, bot: Bot):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -3007,7 +2943,7 @@ async def _post_rules_under_lot(bot: Bot, auction_id: int, retries: int = 5, del
     Пытается найти discussion_message_id и отправить «Правила» реплаем.
     Делаем несколько попыток, пока Telethon-юзербот не привяжет обсуждение.
     """
-    if USERBOT_BID_MODERATION:
+    if legacy_config.USERBOT_BID_MODERATION:
         return
 
     dmsg_id = await _get_discussion_msg_id(auction_id)
@@ -3019,7 +2955,7 @@ async def _post_rules_under_lot(bot: Bot, auction_id: int, retries: int = 5, del
 
     if not dmsg_id:
         # не нашли — логируем и сдаёмся, без истерик
-        for chat_id in ADMIN_LOG_CHATS:
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await bot.send_message(chat_id,
                                        f"⚠️ Не удалось разместить правила под лотом <code>{auction_id}</code>: нет discussion_message_id.",
@@ -3029,16 +2965,16 @@ async def _post_rules_under_lot(bot: Bot, auction_id: int, retries: int = 5, del
         return
 
     try:
-        await bot.send_message(DISCUSSION_CHAT_ID, RULES_COMMENT, parse_mode="HTML", reply_to_message_id=dmsg_id)
+        await bot.send_message(legacy_config.DISCUSSION_CHAT_ID, RULES_COMMENT, parse_mode="HTML", reply_to_message_id=dmsg_id)
         # опционально: короткий лог
-        for chat_id in ADMIN_LOG_CHATS:
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await bot.send_message(chat_id, f"📌 Правила размещены под лотом <code>{auction_id}</code>.",
                                        parse_mode="HTML")
             except Exception:
                 pass
     except Exception as e:
-        for chat_id in ADMIN_LOG_CHATS:
+        for chat_id in legacy_config.ADMIN_LOG_CHATS:
             try:
                 await bot.send_message(chat_id,
                                        f"⚠️ Ошибка при размещении правил по лоту <code>{auction_id}</code>: {re.escape(str(e))}",
@@ -3090,7 +3026,7 @@ async def cb_winner_send(call: types.CallbackQuery, bot: Bot):
         await call.message.edit_text(report_text, parse_mode="HTML")
     except Exception:
         pass
-    for chat_id in ADMIN_LOG_CHATS:
+    for chat_id in legacy_config.ADMIN_LOG_CHATS:
         try:
             await call.bot.send_message(chat_id, report_text, parse_mode="HTML", disable_web_page_preview=True)
         except Exception:
@@ -3366,14 +3302,14 @@ async def _log_admin(bot: Bot, text: str) -> None:
 def _iter_admin_log_chats() -> list[int]:
     out = []
     try:
-        for x in ADMIN_LOG_CHATS:
+        for x in legacy_config.ADMIN_LOG_CHATS:
             if isinstance(x, int):
                 out.append(x)
     except Exception:
         pass
     try:
-        if isinstance(LOG_CHAT_ID, int):
-            out.append(LOG_CHAT_ID)
+        if isinstance(legacy_config.LOG_CHAT_ID, int):
+            out.append(legacy_config.LOG_CHAT_ID)
     except Exception:
         pass
     # уникализируем
@@ -3388,14 +3324,14 @@ def _iter_admin_log_chats() -> list[int]:
 def _iter_admin_log_chats() -> list[int]:
     out = []
     try:
-        for x in ADMIN_LOG_CHATS:
+        for x in legacy_config.ADMIN_LOG_CHATS:
             if isinstance(x, int):
                 out.append(x)
     except Exception:
         pass
     try:
-        if isinstance(LOG_CHAT_ID, int):
-            out.append(LOG_CHAT_ID)
+        if isinstance(legacy_config.LOG_CHAT_ID, int):
+            out.append(legacy_config.LOG_CHAT_ID)
     except Exception:
         pass
     # уникализируем
@@ -3449,7 +3385,7 @@ async def _legacy_cmd_prune_warns_compat(message: Message, bot: Bot, command: Co
     /prune_warns @user --dry    — dry-run для пользователя
     (можно реплаем на сообщение пользователя без аргументов)
     """
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 

@@ -1,4 +1,9 @@
-"""Bot application lifecycle and composition root."""
+"""Bot process lifecycle.
+
+The module is safe to import. Runtime dependencies that still use the temporary
+legacy adapter are imported only after the validated process configuration has
+been installed by :func:`run_bot`.
+"""
 
 from __future__ import annotations
 
@@ -8,36 +13,16 @@ from collections.abc import Awaitable, Callable
 
 from aiogram import Bot, Dispatcher
 
-from bot.bootstrap import build_background_task_specs, register_all_routers
-from bot.core.settings import Settings, settings as default_settings
-from bot.core.supervisor_client import supervisor_client
+from bot.core.logging import configure_logging
+from bot.core.settings import BotProcessSettings
+from bot.core.supervisor_client import SupervisorClient
 from bot.core.tasks import BackgroundTaskManager
-from bot.telegram.protection import patch_bot_protect_content
-from db.admin import is_admin
-from db.core import close_db, init_db
 
 logger = logging.getLogger("auction_bot")
 
 
 class ApplicationConfigurationError(RuntimeError):
-    """Raised before external resources are opened for invalid settings."""
-
-
-def setup_logging(settings: Settings) -> None:
-    level = logging.getLevelNamesMapping().get(settings.log_level, logging.INFO)
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
-    logging.getLogger("aiogram").setLevel(
-        logging.DEBUG if settings.aiogram_debug else logging.WARNING
-    )
-
-
-def validate_settings(settings: Settings) -> None:
-    errors = settings.bot_configuration_errors()
-    if errors:
-        raise ApplicationConfigurationError("; ".join(errors))
+    """Deprecated compatibility name for bot startup failures."""
 
 
 async def _run_polling_with_worker_monitor(
@@ -55,12 +40,10 @@ async def _run_polling_with_worker_monitor(
             {polling, worker_monitor},
             return_when=asyncio.FIRST_COMPLETED,
         )
-
         if worker_monitor in done:
             polling.cancel()
             await asyncio.gather(polling, return_exceptions=True)
             await worker_monitor
-
         worker_monitor.cancel()
         await asyncio.gather(worker_monitor, return_exceptions=True)
         await polling
@@ -71,47 +54,69 @@ async def _run_polling_with_worker_monitor(
         await asyncio.gather(polling, worker_monitor, return_exceptions=True)
 
 
-async def run_bot(settings: Settings | None = None) -> None:
-    app_settings = settings or default_settings
-    setup_logging(app_settings)
-    validate_settings(app_settings)
+async def run_bot(config: BotProcessSettings) -> None:
+    """Run the bot from one explicitly constructed process configuration."""
 
-    bot: Bot | None = None
+    bot_settings = config.bot
+    configure_logging(
+        bot_settings.log_level,
+        aiogram_debug=bot_settings.aiogram_debug,
+    )
+
+    from bot.core.legacy_config import configure_legacy_config
+    from bot.uid_crypto import configure_uid_crypto
+
+    configure_legacy_config(config)
+    configure_uid_crypto(bot_settings.uid_hash_key, bot_settings.uid_enc_key)
+
+    # Delayed imports keep importing this module independent from runtime
+    # configuration while the legacy migration remains in progress.
+    from bot.bootstrap import build_background_task_specs, register_all_routers
+    from bot.telegram.protection import patch_bot_protect_content
+    from db.admin import is_admin
+    from db.core import close_db, init_db
+
+    supervisor_client = SupervisorClient.from_settings(config.supervisor)
+    telegram_bot: Bot | None = None
     task_manager: BackgroundTaskManager | None = None
     primary_error: BaseException | None = None
     try:
-        await init_db()
+        await init_db(config.database)
         logger.info("Database startup complete")
 
         if supervisor_client is not None:
             await supervisor_client.start()
             logger.info("Supervisor client session initialized")
 
-        bot = Bot(token=app_settings.bot_token)
-        patch_bot_protect_content(bot, is_admin=is_admin)
-        dispatcher = Dispatcher()
+        telegram_bot = Bot(token=bot_settings.bot_token)
+        patch_bot_protect_content(telegram_bot, is_admin=is_admin)
+        dispatcher = Dispatcher(supervisor_client=supervisor_client)
         register_all_routers(
             dispatcher,
-            debug_messages=app_settings.debug_middleware,
+            debug_messages=bot_settings.debug_middleware,
         )
 
-        await bot.delete_webhook(
-            drop_pending_updates=app_settings.drop_pending_updates,
+        await telegram_bot.delete_webhook(
+            drop_pending_updates=bot_settings.drop_pending_updates,
         )
-        if app_settings.drop_pending_updates:
+        if bot_settings.drop_pending_updates:
             logger.info("Pending Telegram updates dropped before polling")
 
         task_manager = BackgroundTaskManager()
         task_manager.start(
             build_background_task_specs(
-                bot,
-                auction_channel_id=app_settings.auction_channel_id,
-                auction_channel_username=app_settings.auction_channel_username,
+                telegram_bot,
+                auction_channel_id=bot_settings.auction_channel_id,
+                auction_channel_username=bot_settings.auction_channel_username,
             )
         )
 
         logger.info("Starting bot polling")
-        await _run_polling_with_worker_monitor(dispatcher, bot, task_manager)
+        await _run_polling_with_worker_monitor(
+            dispatcher,
+            telegram_bot,
+            task_manager,
+        )
     except BaseException as error:
         primary_error = error
         raise
@@ -119,8 +124,8 @@ async def run_bot(settings: Settings | None = None) -> None:
         cleanup_steps: list[tuple[str, Callable[[], Awaitable[None]]]] = []
         if task_manager is not None:
             cleanup_steps.append(("background tasks", task_manager.stop))
-        if bot is not None:
-            cleanup_steps.append(("Telegram bot session", bot.session.close))
+        if telegram_bot is not None:
+            cleanup_steps.append(("Telegram bot session", telegram_bot.session.close))
         if supervisor_client is not None:
             cleanup_steps.append(("Supervisor client session", supervisor_client.close))
         cleanup_steps.append(("database pool", close_db))
@@ -137,3 +142,6 @@ async def run_bot(settings: Settings | None = None) -> None:
         logger.info("Application shutdown complete")
         if primary_error is None and cleanup_error is not None:
             raise cleanup_error
+
+
+__all__ = ["ApplicationConfigurationError", "run_bot"]

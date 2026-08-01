@@ -6,10 +6,7 @@ from aiogram import Bot, types
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import Message
 
-from bot.core.settings import (
-    ADMIN_LOG_CHATS,
-    ADMINS,
-)
+from bot.core.legacy_config import legacy_config
 from bot.repositories import winner as winner_repository
 from db.pool import get_db_pool
 
@@ -44,7 +41,7 @@ from .resolution import _winner_preview_text
 
 
 async def cmd_print_win(message: Message, bot: Bot):
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -244,7 +241,7 @@ async def cb_winner_send(call: types.CallbackQuery, bot: Bot):
         await call.message.edit_text(report_text, parse_mode="HTML")
     except Exception:
         pass
-    for chat_id in ADMIN_LOG_CHATS:
+    for chat_id in legacy_config.ADMIN_LOG_CHATS:
         try:
             await call.bot.send_message(
                 chat_id, report_text, parse_mode="HTML", disable_web_page_preview=True

@@ -14,7 +14,7 @@ from typing import Any
 
 from telethon.tl.types import ChannelParticipantsAdmins
 
-from bot.core.settings import ADMINS, AUCTION_CHANNEL_ID, DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from bot.core.time import ensure_utc, utc_now
 from bot.domain.auctions import BidFormatError, auction_bidding_closes_at
 from bot.domain.auctions.rules import parse_bid_amount
@@ -85,7 +85,7 @@ async def _delete_later(message_id: int, delay_sec: int = 25) -> None:
     await asyncio.sleep(int(delay_sec))
     BOT_DELETED[int(message_id)] = _now_ts() + BOT_DELETED_TTL
     try:
-        await require_client().delete_messages(DISCUSSION_CHAT_ID, [int(message_id)])
+        await require_client().delete_messages(legacy_config.DISCUSSION_CHAT_ID, [int(message_id)])
     except Exception:  # noqa: BLE001
         pass
 
@@ -100,7 +100,7 @@ async def _send_reply_or_plain(
 
     try:
         message = await require_client().send_message(
-            DISCUSSION_CHAT_ID,
+            legacy_config.DISCUSSION_CHAT_ID,
             text,
             reply_to=reply_to,
             parse_mode="html",
@@ -108,7 +108,7 @@ async def _send_reply_or_plain(
         )
     except Exception:  # noqa: BLE001
         message = await require_client().send_message(
-            DISCUSSION_CHAT_ID,
+            legacy_config.DISCUSSION_CHAT_ID,
             text,
             parse_mode="html",
             link_preview=False,
@@ -142,7 +142,7 @@ async def _get_chat_admin_ids(chat_id: int) -> set[int]:
     if cached and cached[1] > now:
         return cached[0]
 
-    admin_ids = set(ADMINS)
+    admin_ids = set(legacy_config.ADMINS)
     try:
         admins = await require_client().get_participants(
             chat_id,
@@ -260,7 +260,7 @@ async def _ban_user(user_id: int, reason: str) -> None:
     )
     try:
         await require_client().edit_permissions(
-            DISCUSSION_CHAT_ID,
+            legacy_config.DISCUSSION_CHAT_ID,
             int(user_id),
             send_messages=False,
             until_date=_utcnow() + timedelta(days=3650),
@@ -291,7 +291,7 @@ async def _maybe_punish(
     if warnings == 3:
         try:
             await require_client().edit_permissions(
-                DISCUSSION_CHAT_ID,
+                legacy_config.DISCUSSION_CHAT_ID,
                 int(user_id),
                 send_messages=False,
                 until_date=_utcnow() + timedelta(minutes=10),
@@ -308,7 +308,7 @@ async def _maybe_punish(
 async def _post_rules_under_lot(root_id: int) -> None:
     try:
         await require_client().send_message(
-            entity=DISCUSSION_CHAT_ID,
+            entity=legacy_config.DISCUSSION_CHAT_ID,
             message=RULES_TEXT,
             reply_to=int(root_id),
             parse_mode="html",
@@ -317,7 +317,7 @@ async def _post_rules_under_lot(root_id: int) -> None:
     except Exception:  # noqa: BLE001
         try:
             await require_client().send_message(
-                entity=DISCUSSION_CHAT_ID,
+                entity=legacy_config.DISCUSSION_CHAT_ID,
                 message=RULES_TEXT,
                 parse_mode="html",
                 link_preview=False,
@@ -395,8 +395,8 @@ async def _try_bind_root_message(message: Any) -> int | None:
 
     if channel_post:
         source_id = getattr(getattr(forwarded, "from_id", None), "channel_id", None)
-        if AUCTION_CHANNEL_ID and source_id:
-            if _norm_channel_id(source_id) != _norm_channel_id(AUCTION_CHANNEL_ID):
+        if legacy_config.AUCTION_CHANNEL_ID and source_id:
+            if _norm_channel_id(source_id) != _norm_channel_id(legacy_config.AUCTION_CHANNEL_ID):
                 channel_post = None
 
     if channel_post:
@@ -463,7 +463,7 @@ async def _prune_missing_bid_messages(auction_id: int) -> int:
             continue
         try:
             message = await require_client().get_messages(
-                DISCUSSION_CHAT_ID,
+                legacy_config.DISCUSSION_CHAT_ID,
                 ids=int(message_id),
             )
         except Exception:  # noqa: BLE001

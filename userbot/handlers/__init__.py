@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from telethon import events
 
-from bot.core.settings import DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from userbot.handlers.bid_changes import on_deleted, on_edited
 from userbot.handlers.new_messages import on_new_message
 from userbot.handlers.schedule_admin import (
@@ -29,15 +29,15 @@ def register_handlers(telegram_client: TelegramClient) -> None:
     bind_client(telegram_client)
     telegram_client.add_event_handler(
         on_new_message,
-        events.NewMessage(chats=DISCUSSION_CHAT_ID),
+        events.NewMessage(chats=legacy_config.DISCUSSION_CHAT_ID),
     )
     telegram_client.add_event_handler(
         on_edited,
-        events.MessageEdited(chats=DISCUSSION_CHAT_ID),
+        events.MessageEdited(chats=legacy_config.DISCUSSION_CHAT_ID),
     )
     telegram_client.add_event_handler(
         on_deleted,
-        events.MessageDeleted(chats=DISCUSSION_CHAT_ID),
+        events.MessageDeleted(chats=legacy_config.DISCUSSION_CHAT_ID),
     )
 
 

@@ -13,13 +13,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.core.time import to_moscow, utc_now
 from bot.services.auction_winners import AuctionWinnerService
-from bot.core.legacy_config import (
-    ADMIN_LOG_CHATS,
-    AUCTION_CHANNEL_ID,
-    AUCTION_CHANNEL_USERNAME,
-    DISCUSSION_CHAT_ID,
-    LOG_CHAT_ID,
-)
+from bot.core.legacy_config import legacy_config
 
 logger = logging.getLogger("auction.winner")
 
@@ -168,10 +162,10 @@ def user_links_html(user_id: int, username: str | None) -> str:
 def build_channel_link(message_id: int | None) -> str | None:
     if not message_id:
         return None
-    if AUCTION_CHANNEL_USERNAME:
-        return f"https://t.me/{AUCTION_CHANNEL_USERNAME.lstrip('@')}/{int(message_id)}"
-    if AUCTION_CHANNEL_ID and str(AUCTION_CHANNEL_ID).startswith("-100"):
-        return f"https://t.me/c/{str(AUCTION_CHANNEL_ID)[4:]}/{int(message_id)}"
+    if legacy_config.AUCTION_CHANNEL_USERNAME:
+        return f"https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}/{int(message_id)}"
+    if legacy_config.AUCTION_CHANNEL_ID and str(legacy_config.AUCTION_CHANNEL_ID).startswith("-100"):
+        return f"https://t.me/c/{str(legacy_config.AUCTION_CHANNEL_ID)[4:]}/{int(message_id)}"
     return None
 
 
@@ -225,7 +219,7 @@ def fmt_msk(value: datetime) -> str:
 
 def iter_admin_log_chats() -> list[int]:
     values: list[int] = []
-    for source in (ADMIN_LOG_CHATS, LOG_CHAT_ID):
+    for source in (legacy_config.ADMIN_LOG_CHATS, legacy_config.LOG_CHAT_ID):
         if isinstance(source, int):
             values.append(source)
             continue
@@ -286,7 +280,7 @@ async def post_rules_under_lot(
 
     try:
         await bot.send_message(
-            DISCUSSION_CHAT_ID,
+            legacy_config.DISCUSSION_CHAT_ID,
             RULES_COMMENT,
             parse_mode="HTML",
             reply_to_message_id=discussion_message_id,

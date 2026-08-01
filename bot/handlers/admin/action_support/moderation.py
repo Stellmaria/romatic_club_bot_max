@@ -12,7 +12,7 @@ from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, User
 
-from bot.core.settings import ADMINS, AUCTION_CHANNEL_ID, AUCTION_CHANNEL_USERNAME, DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from bot.core.time import to_moscow
 from bot.handlers.admin.action_support.exchange import (
     _send_exchange_batch_card_admin,
@@ -54,7 +54,7 @@ async def show_pendinglots(message: Message, kind: str | None = None) -> None:
 
     # В callback message.from_user = BOT, поэтому проверяем chat.id
     actor_id = message.chat.id if message.chat else None
-    if actor_id not in ADMINS:
+    if actor_id not in legacy_config.ADMINS:
         return
 
     kind = (kind or "").strip().lower() or None
@@ -192,17 +192,17 @@ def _clip_caption(text: str, limit: int = 950) -> str:
 def _build_channel_link(message_id: int | None) -> str | None:
     if not message_id:
         return None
-    if AUCTION_CHANNEL_USERNAME:
-        return f"https://t.me/{AUCTION_CHANNEL_USERNAME.lstrip('@')}/{message_id}"
-    if AUCTION_CHANNEL_ID and str(AUCTION_CHANNEL_ID).startswith("-100"):
-        return f"https://t.me/c/{str(AUCTION_CHANNEL_ID)[4:]}/{message_id}"
+    if legacy_config.AUCTION_CHANNEL_USERNAME:
+        return f"https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}/{message_id}"
+    if legacy_config.AUCTION_CHANNEL_ID and str(legacy_config.AUCTION_CHANNEL_ID).startswith("-100"):
+        return f"https://t.me/c/{str(legacy_config.AUCTION_CHANNEL_ID)[4:]}/{message_id}"
     return None
 
 
 def _build_discussion_link(message_id: int | None) -> str | None:
-    if not message_id or not DISCUSSION_CHAT_ID:
+    if not message_id or not legacy_config.DISCUSSION_CHAT_ID:
         return None
-    cid = str(DISCUSSION_CHAT_ID)
+    cid = str(legacy_config.DISCUSSION_CHAT_ID)
     if cid.startswith("-100"):
         cid = cid[4:]
     elif cid.startswith("-"):

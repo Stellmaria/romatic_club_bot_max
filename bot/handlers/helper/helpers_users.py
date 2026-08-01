@@ -8,7 +8,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, Teleg
 
 from bot.core.time import ensure_utc, to_moscow, utc_now
 from bot.handlers.admin.helper.new.utils import is_luxury_member
-from bot.core.legacy_config import LUXURY_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from db.legacy import (
     add_user, set_luxury_status, log_admin_action, get_user_by_username, get_user
 )
@@ -37,7 +37,7 @@ def parse_username_userid(text: str) -> tuple[Optional[str], Optional[int]]:
 async def register_user(user, bot):
     full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
     await add_user(user.id, user.username, full_name)
-    is_lux = await is_luxury_member(bot, user.id, LUXURY_CHAT_ID)
+    is_lux = await is_luxury_member(bot, user.id, legacy_config.LUXURY_CHAT_ID)
     await set_luxury_status(user.id, is_lux)
     await log_admin_action(
         user.id,
@@ -49,7 +49,7 @@ async def register_user(user, bot):
 
 
 async def check_luxury(user_id, bot):
-    is_lux = await is_luxury_member(bot, user_id, LUXURY_CHAT_ID)
+    is_lux = await is_luxury_member(bot, user_id, legacy_config.LUXURY_CHAT_ID)
     await set_luxury_status(user_id, is_lux)
     await log_admin_action(
         user_id,

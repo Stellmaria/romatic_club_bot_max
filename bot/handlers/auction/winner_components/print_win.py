@@ -13,7 +13,7 @@ from bot.core.time import to_moscow
 from bot.domain.auctions import AuctionKind
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.auction_winners import AuctionWinnerService
-from bot.core.legacy_config import ADMINS, DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 
 from .common import (
     AUCTION_PROBLEMS_CONTACT,
@@ -387,7 +387,7 @@ async def _post_taken_comment_and_pin_after_print_win(bot: Bot, *, auction_id: i
     )
     try:
         sent = await bot.send_message(
-            DISCUSSION_CHAT_ID,
+            legacy_config.DISCUSSION_CHAT_ID,
             text,
             parse_mode="HTML",
             reply_to_message_id=int(discussion_message_id),
@@ -397,7 +397,7 @@ async def _post_taken_comment_and_pin_after_print_win(bot: Bot, *, auction_id: i
         return False, f"send_failed: {error}"
     try:
         await bot.pin_chat_message(
-            chat_id=DISCUSSION_CHAT_ID,
+            chat_id=legacy_config.DISCUSSION_CHAT_ID,
             message_id=sent.message_id,
             disable_notification=True,
         )
@@ -502,7 +502,7 @@ def _delivery_report(title: str, auction_id: int, amount: int | None, currency_e
 
 @router.message(Command("print_win"))
 async def cmd_print_win(message: Message, bot: Bot) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = (message.text or "").strip().split()

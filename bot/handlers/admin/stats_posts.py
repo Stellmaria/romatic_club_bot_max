@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
-from bot.core.legacy_config import DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from db.legacy import (
     get_post_months,
     get_post_days,
@@ -53,7 +53,7 @@ def _discussion_link(discussion_id: int | None, root_id: int | None) -> str | No
         return None
     if discussion_id:
         return f"https://t.me/c/{int(discussion_id)}/{int(root_id)}"
-    internal = _internal_chat_id(DISCUSSION_CHAT_ID)
+    internal = _internal_chat_id(legacy_config.DISCUSSION_CHAT_ID)
     return f"https://t.me/c/{internal}/{int(root_id)}"
 
 

@@ -1,9 +1,4 @@
-"""Userbot composition and process lifecycle.
-
-This module owns runtime configuration validation and ``TelegramClient``
-construction.  Importing the legacy-compatible entrypoint therefore has no
-network, session or credential-validation side effects.
-"""
+"""Userbot process lifecycle and dependency composition."""
 
 from __future__ import annotations
 
@@ -19,69 +14,58 @@ from typing import Any, Callable
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
-from bot.core.settings import PROJECT_ROOT, Settings, settings
-from db.core import close_db, init_db
-from userbot.handlers import register_handlers, register_schedule_handlers
-from userbot.workers import autobid_watchdog, schedule_announcement_watchdog
+from bot.core.settings import UserbotProcessSettings, UserbotSettings
 
 ClientFactory = Callable[[str, int, str], Any]
 logger = logging.getLogger("userbot")
 
 
 class UserbotConfigurationError(RuntimeError):
-    """Raised by the application bootstrap when required settings are absent."""
+    """Raised when a manually constructed userbot model is incomplete."""
 
 
-def userbot_configuration_errors(config: Settings = settings) -> tuple[str, ...]:
-    """Return actionable configuration errors without exposing credentials."""
-
+def userbot_configuration_errors(config: UserbotSettings) -> tuple[str, ...]:
     errors: list[str] = []
-    if config.userbot_api_id <= 0:
+    if config.api_id <= 0:
         errors.append("USERBOT_API_ID is not configured")
-    if not config.userbot_api_hash.strip():
+    if not config.api_hash.strip():
         errors.append("USERBOT_API_HASH is not configured")
     if not config.discussion_chat_id:
         errors.append("DISCUSSION_CHAT_ID is not configured")
-    if not config.userbot_session.strip():
+    if not config.session.strip():
         errors.append("USERBOT_SESSION is empty")
     return tuple(errors)
 
 
 def resolve_userbot_session(
-    config: Settings = settings,
+    config: UserbotSettings,
     *,
     environ: Mapping[str, str] | None = None,
-    project_root: Path = PROJECT_ROOT,
+    project_root: Path,
 ) -> str:
-    """Resolve a session base while preserving the historical root session.
-
-    ``Settings`` now defaults to ``var/userbot_session``. Existing deployments
-    may still have the live ``userbot_session.session`` beside the entrypoint.
-    Unless ``USERBOT_SESSION`` was explicitly configured, keep using that file
-    so a refactor cannot silently start a second Telegram authorization session.
-    """
+    """Preserve an existing root session unless a session was configured."""
 
     environment = os.environ if environ is None else environ
-    configured_session = config.userbot_session.strip()
+    configured_session = config.session.strip()
     if (environment.get("USERBOT_SESSION") or "").strip():
         return configured_session
 
     configured_path = Path(configured_session)
-    default_path = Path(config.runtime_dir) / "userbot_session"
-    legacy_path = Path(project_root) / "userbot_session"
+    default_path = config.runtime_dir / "userbot_session"
+    legacy_path = project_root / "userbot_session"
     if configured_path == default_path and legacy_path.with_suffix(".session").is_file():
         return str(legacy_path)
     return configured_session
 
 
 def create_userbot_client(
-    config: Settings = settings,
+    config: UserbotSettings,
     *,
+    project_root: Path,
     client_factory: ClientFactory = TelegramClient,
     environ: Mapping[str, str] | None = None,
-    project_root: Path = PROJECT_ROOT,
 ) -> TelegramClient:
-    """Validate settings and construct, but do not connect, a Telegram client."""
+    """Construct, but do not connect, a Telegram client."""
 
     errors = userbot_configuration_errors(config)
     if errors:
@@ -95,24 +79,35 @@ def create_userbot_client(
     session_path = Path(session)
     if session_path.parent != Path("."):
         session_path.parent.mkdir(parents=True, exist_ok=True)
-    return client_factory(
-        session,
-        config.userbot_api_id,
-        config.userbot_api_hash,
-    )
+    return client_factory(session, config.api_id, config.api_hash)
 
 
-async def run_userbot_application() -> None:
+async def run_userbot_application(config: UserbotProcessSettings) -> None:
     """Run authorization, handlers and workers with deterministic cleanup."""
 
     logging.basicConfig(level=logging.INFO)
-    telegram_client = create_userbot_client()
+
+    from bot.core.legacy_config import configure_legacy_config
+    from bot.uid_crypto import configure_uid_crypto
+
+    configure_legacy_config(config)
+    userbot_settings = config.userbot
+    configure_uid_crypto(userbot_settings.uid_hash_key, userbot_settings.uid_enc_key)
+
+    from db.core import close_db, init_db
+    from userbot.handlers import register_handlers, register_schedule_handlers
+    from userbot.workers import autobid_watchdog, schedule_announcement_watchdog
+
+    telegram_client = create_userbot_client(
+        userbot_settings,
+        project_root=config.project_root,
+    )
     register_handlers(telegram_client)
     register_schedule_handlers(telegram_client)
     worker_tasks: list[asyncio.Task[None]] = []
 
     try:
-        await init_db()
+        await init_db(config.database)
         await telegram_client.connect()
         if not await telegram_client.is_user_authorized():
             phone = input("Введите телефон (+7...): ").strip()
@@ -131,7 +126,10 @@ async def run_userbot_application() -> None:
                     name="userbot-autobid-watchdog",
                 ),
                 asyncio.create_task(
-                    schedule_announcement_watchdog(telegram_client),
+                    schedule_announcement_watchdog(
+                        telegram_client,
+                        config=userbot_settings,
+                    ),
                     name="userbot-schedule-announcement-watchdog",
                 ),
             )

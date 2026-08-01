@@ -4,7 +4,7 @@ from bot.handlers.admin.helper.admin_constants import ADMIN_ERRORS
 from bot.handlers.admin.action_support.compat import send_admin_log, remove_admin_role
 from bot.handlers.admin.helper.user_helpers import resolve_user_from_message, format_user_ref, \
     build_grouped_schedule_lines_with_prefixes, find_free_slots, filter_slots_by_user_type
-from bot.core.legacy_config import ADMINS_OWNERS
+from bot.core.legacy_config import legacy_config
 from db.legacy import get_lot_by_id, get_lot_owners, is_luxury_user, get_auctions_by_date_with_owners
 from db.legacy import log_audit_action
 
@@ -15,7 +15,7 @@ async def process_remove_admin(message, user=None, state=None, bot=None, passwor
     if not user:
         await message.answer(ADMIN_ERRORS["user_not_found"])
         return
-    if user["user_id"] in ADMINS_OWNERS:
+    if user["user_id"] in legacy_config.ADMINS_OWNERS:
         await send_admin_log(
             bot or message.bot,
             f"🚫 Попытка удалить владельца! <a href='tg://user?id={message.from_user.id}'>id:{message.from_user.id}</a>"

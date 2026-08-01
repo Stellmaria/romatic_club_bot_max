@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional
 import asyncpg
 
 from bot.core.errors import PersistenceError
+from bot.core.settings import DatabaseSettings
 from db.errors import (
     persistence_boundary,
     record_database_failure,
@@ -188,12 +189,12 @@ async def fetchall(query: str, *args: Any) -> list[dict[str, Any]]:
         return [dict(row) for row in rows]
 
 
-async def get_db_pool() -> Any:
+async def get_db_pool(settings: DatabaseSettings | None = None) -> Any:
     """Return the real managed pool while binding strict legacy instrumentation."""
 
     pool = db_pool.pool
     if pool is None:
-        pool = await _runtime_get_db_pool()
+        pool = await _runtime_get_db_pool(settings)
         db_pool.bind(pool)
         logger.info("Database pool initialized")
 

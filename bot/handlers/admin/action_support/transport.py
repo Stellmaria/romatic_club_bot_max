@@ -15,7 +15,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User
 from telethon.tl.functions.messages import SendMessageRequest
 
-from bot.core.settings import ADMIN_LOG_CHATS, ADMINS_OWNERS, LOG_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from bot.core.time import to_moscow
 from bot.handlers.admin.action_support.exchange import safe_answer_photo, tg_clean
 from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES, CANCEL_MSG, CANCEL_TEXTS
@@ -221,7 +221,7 @@ async def safe_edit_message(call: CallbackQuery, new_text: str, reply_markup=Non
 
 
 async def notify_owners(bot: Bot, text: str, silent: bool = False) -> None:
-    for owner_id in ADMINS_OWNERS:
+    for owner_id in legacy_config.ADMINS_OWNERS:
         try:
             await bot.send_message(owner_id, tg_clean(text), parse_mode="HTML")
         except TelegramAPIError as e:
@@ -230,7 +230,7 @@ async def notify_owners(bot: Bot, text: str, silent: bool = False) -> None:
 
 
 async def send_log_to_chats(client_api, text: str) -> None:
-    for chat_id in ADMIN_LOG_CHATS:
+    for chat_id in legacy_config.ADMIN_LOG_CHATS:
         try:
             entity = await client_api.get_entity(chat_id)
             await client_api(SendMessageRequest(peer=entity, message=text))
@@ -240,7 +240,7 @@ async def send_log_to_chats(client_api, text: str) -> None:
 
 
 async def verify_log_chats(bot: Bot) -> None:
-    for name, raw in {"LOG_CHAT_ID": LOG_CHAT_ID}.items():
+    for name, raw in {"LOG_CHAT_ID": legacy_config.LOG_CHAT_ID}.items():
         cid = normalize_chat_id(raw)
         if cid is None:
             print(f"[BOOT] {name} пуст/некорректен: {raw!r}")

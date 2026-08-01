@@ -8,7 +8,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.core.settings import ADMINS_OWNERS
+from bot.core.legacy_config import legacy_config
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from db.admin import list_admins
 from db.users import get_all_trusted_users, get_all_users
@@ -73,7 +73,7 @@ async def _load_admins() -> list[dict[str, Any]]:
             "is_owner": False,
         }
 
-    for raw_owner_id in ADMINS_OWNERS:
+    for raw_owner_id in legacy_config.ADMINS_OWNERS:
         owner_id = _safe_int(raw_owner_id)
         if owner_id is None:
             continue

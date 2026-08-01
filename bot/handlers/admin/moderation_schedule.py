@@ -159,7 +159,7 @@ async def force_publish_handler(message: types.Message):
         handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
         logger.addHandler(handler)
     logger.setLevel(logging.INFO)
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         logger.warning(f"[FORCE_PUBLISH] Нет доступа для user_id={message.from_user.id}")
         await message.answer("Нет доступа.")
         return

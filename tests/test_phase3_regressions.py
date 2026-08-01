@@ -66,11 +66,12 @@ def test_oops_workflow_is_implemented() -> None:
 
 
 def test_autobid_password_is_retired_from_telegram_contract() -> None:
-    config_source = (ROOT / "config.py").read_text(encoding="utf-8")
+    config_source = (ROOT / "bot/core/legacy_config.py").read_text(encoding="utf-8")
     handler_source = (ROOT / "bot/handlers/auction/autobid.py").read_text(encoding="utf-8")
     env_source = (ROOT / ".env.example").read_text(encoding="utf-8")
 
-    assert 'AUTOBID_SET_PASSWORD = ""' in config_source
+    assert 'AUTOBID_SET_PASSWORD' in config_source
+    assert 'return ""' in config_source
     assert "AUTOBID_SET_PASSWORD" not in handler_source
     assert "_password_is_valid" not in handler_source
     assert "AUTOBID_SET_PASSWORD=" not in env_source

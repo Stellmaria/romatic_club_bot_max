@@ -317,13 +317,13 @@ async def migrate_database_url(database_url: str) -> list[str]:
 
 
 async def _main() -> None:
-    from bot.core.legacy_config import DATABASE_URL
+    from bot.core.legacy_config import legacy_config
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-    await migrate_database_url(DATABASE_URL)
+    await migrate_database_url(legacy_config.DATABASE_URL)
 
 
 if __name__ == "__main__":

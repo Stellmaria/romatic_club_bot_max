@@ -12,9 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.core.settings import (
-    ADMINS,
-)
+from bot.core.legacy_config import legacy_config
 from bot.core.time import to_moscow
 from bot.telegram.states import PrintExStates
 
@@ -106,7 +104,7 @@ async def cmd_print_win_missed(message: types.Message) -> None:
 
 
 async def cmd_ex_owners(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -194,7 +192,7 @@ async def _render_print_ex_text(batch: dict, cards: list[dict], st: dict | None)
 
 
 async def cmd_print_ex(message: Message, state: FSMContext) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 
@@ -222,7 +220,7 @@ async def cmd_print_ex(message: Message, state: FSMContext) -> None:
 
 
 async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    if call.from_user.id not in ADMINS:
+    if call.from_user.id not in legacy_config.ADMINS:
         await call.answer("Нет доступа.", show_alert=True)
         return
 
@@ -338,7 +336,7 @@ async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
 
 
 async def ex_manual_input(message: Message, state: FSMContext) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await state.clear()
         return
 

@@ -5,7 +5,7 @@ import logging
 
 from telethon import events
 
-from bot.core.settings import DISCUSSION_CHAT_ID
+from bot.core.legacy_config import legacy_config
 from bot.domain.auctions import (
     AuctionEnded,
     AuctionKind,
@@ -237,7 +237,7 @@ async def on_new_message(event: events.NewMessage.Event):
             _BOT_DELETED[int(msg.reply_to_msg_id)] = _now_ts() + _BOT_DELETED_TTL
             try:
                 await _require_client().delete_messages(
-                    DISCUSSION_CHAT_ID,
+                    legacy_config.DISCUSSION_CHAT_ID,
                     [int(msg.reply_to_msg_id)],
                 )
             except Exception:
@@ -299,7 +299,7 @@ async def on_new_message(event: events.NewMessage.Event):
             return
 
         try:
-            await _require_client().delete_messages(DISCUSSION_CHAT_ID, [msg.id])
+            await _require_client().delete_messages(legacy_config.DISCUSSION_CHAT_ID, [msg.id])
             _BOT_DELETED[msg.id] = _now_ts() + _BOT_DELETED_TTL
         except Exception:  # noqa: BLE001
             pass
@@ -309,7 +309,7 @@ async def on_new_message(event: events.NewMessage.Event):
             f"В комментариях лота разрешены только <b>ставки</b> и только <b>ответом на пост лота</b>.",
             reply_to=thread_root_id,
         )
-        await _mute_1m(int(DISCUSSION_CHAT_ID), int(sender_id))
+        await _mute_1m(int(legacy_config.DISCUSSION_CHAT_ID), int(sender_id))
         return
 
     # Единые правила валюты и ставок используются и bot, и userbot.
@@ -372,7 +372,7 @@ async def on_new_message(event: events.NewMessage.Event):
         if is_admin:
             return
         try:
-            await _require_client().delete_messages(DISCUSSION_CHAT_ID, [msg.id])
+            await _require_client().delete_messages(legacy_config.DISCUSSION_CHAT_ID, [msg.id])
             _BOT_DELETED[msg.id] = _now_ts() + _BOT_DELETED_TTL
         except Exception:
             pass
@@ -383,7 +383,7 @@ async def on_new_message(event: events.NewMessage.Event):
             f"(валюта: <b>{currency.value}</b>)",
             reply_to=thread_root_id,
         )
-        await _mute_1m(int(DISCUSSION_CHAT_ID), int(sender_id))
+        await _mute_1m(int(legacy_config.DISCUSSION_CHAT_ID), int(sender_id))
         return
 
     sender_obj = await event.get_sender()
@@ -412,7 +412,7 @@ async def on_new_message(event: events.NewMessage.Event):
     except BidderBanned:
         if not is_autobid_msg:
             try:
-                await _require_client().delete_messages(DISCUSSION_CHAT_ID, [msg.id])
+                await _require_client().delete_messages(legacy_config.DISCUSSION_CHAT_ID, [msg.id])
                 _BOT_DELETED[msg.id] = _now_ts() + _BOT_DELETED_TTL
             except Exception:
                 pass
@@ -424,7 +424,7 @@ async def on_new_message(event: events.NewMessage.Event):
     except BidderNotEligible:
         if not is_autobid_msg:
             try:
-                await _require_client().delete_messages(DISCUSSION_CHAT_ID, [msg.id])
+                await _require_client().delete_messages(legacy_config.DISCUSSION_CHAT_ID, [msg.id])
                 _BOT_DELETED[msg.id] = _now_ts() + _BOT_DELETED_TTL
             except Exception:
                 pass
@@ -462,17 +462,17 @@ async def on_new_message(event: events.NewMessage.Event):
         )
         if not is_admin and not is_autobid_msg:
             try:
-                await _require_client().delete_messages(DISCUSSION_CHAT_ID, [msg.id])
+                await _require_client().delete_messages(legacy_config.DISCUSSION_CHAT_ID, [msg.id])
                 _BOT_DELETED[msg.id] = _now_ts() + _BOT_DELETED_TTL
             except Exception:
                 pass
-            await _mute_1m(int(DISCUSSION_CHAT_ID), int(sender_id))
+            await _mute_1m(int(legacy_config.DISCUSSION_CHAT_ID), int(sender_id))
         return
     except BidFormatError as exc:
         if is_admin:
             return
         try:
-            await _require_client().delete_messages(DISCUSSION_CHAT_ID, [msg.id])
+            await _require_client().delete_messages(legacy_config.DISCUSSION_CHAT_ID, [msg.id])
             _BOT_DELETED[msg.id] = _now_ts() + _BOT_DELETED_TTL
         except Exception:
             pass
@@ -480,7 +480,7 @@ async def on_new_message(event: events.NewMessage.Event):
             f"❌ {_mention(None, sender_id)}, {html.escape(exc.user_message)}",
             reply_to=thread_root_id,
         )
-        await _mute_1m(int(DISCUSSION_CHAT_ID), int(sender_id))
+        await _mute_1m(int(legacy_config.DISCUSSION_CHAT_ID), int(sender_id))
         return
     except (AuctionNotFound, AuctionEnded, AuctionNotActive):
         return
@@ -510,7 +510,7 @@ async def on_new_message(event: events.NewMessage.Event):
         try:
             await maybe_place_autobid(
                 _require_client(),
-                discussion_chat_id=int(DISCUSSION_CHAT_ID),
+                discussion_chat_id=int(legacy_config.DISCUSSION_CHAT_ID),
                 auction_id=int(auction["auction_id"]),
             )
         except Exception:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Collection
 
-from bot.core.settings import ADMINS_OWNERS
+from bot.core.legacy_config import legacy_config
 
 
 def admin_secret_matches(
@@ -37,5 +37,5 @@ def is_owner_or_valid_secret(
     """
 
     del candidate, configured_secret
-    owners = ADMINS_OWNERS if owner_ids is None else owner_ids
+    owners = legacy_config.ADMINS_OWNERS if owner_ids is None else owner_ids
     return user_id is not None and int(user_id) in {int(value) for value in owners}

@@ -14,7 +14,7 @@ from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.services.auction_admin import AuctionAdminService
 from bot.services.auction_workflows import AuctionLifecycleService
-from bot.core.legacy_config import ADMINS
+from bot.core.legacy_config import legacy_config
 from db.legacy import (
     get_bid_auction_by_discussion_id,
     get_auction_by_discussion_id,
@@ -78,7 +78,7 @@ async def _answer_html_chunks(
 
 @router.message(F.text.startswith("/lot_owner"), F.chat.type == "private")
 async def show_lot_owners(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = (message.text or "").strip().split()
@@ -106,7 +106,7 @@ async def show_lot_owners(message: Message) -> None:
 
 @router.message(F.text.startswith("/activate_lot"), F.chat.type == "private")
 async def activate_lot_cmd(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = (message.text or "").strip().split()
@@ -163,7 +163,7 @@ async def activate_lot_cmd(message: Message) -> None:
 
 @router.message(F.text.startswith("/user_lots"), F.chat.type == "private")
 async def show_user_lots(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     parts = (message.text or "").strip().split()
@@ -195,7 +195,7 @@ async def show_user_lots(message: Message) -> None:
 
 @router.message(F.text.lower().startswith("макс удалить"))
 async def admin_delete_bid(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     if not message.reply_to_message:
@@ -225,7 +225,7 @@ async def admin_delete_bid(message: Message) -> None:
 
 @router.message(F.text.lower().startswith("макс старт"))
 async def admin_start_auction(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     if not message.reply_to_message:
@@ -279,7 +279,7 @@ async def admin_start_auction(message: Message) -> None:
 
 @router.message(F.text.lower().startswith("макс стоп"))
 async def admin_stop_auction(message: Message) -> None:
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
     if not message.reply_to_message:

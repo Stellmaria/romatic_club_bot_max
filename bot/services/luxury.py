@@ -4,7 +4,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 
 from bot.repositories.users import UserRepository
-from bot.core.legacy_config import LUXURY_CHAT_ID, LUXURY_CHAT_ID_LVL2
+from bot.core.legacy_config import legacy_config
 from db.pool import get_db_pool
 
 
@@ -19,16 +19,16 @@ async def is_luxury_member(bot: Bot, user_id: int, chat_id: int) -> bool:
 
 async def get_user_luxury_level(bot: Bot, user_id: int) -> int:
     """Resolve the highest effective Luxury level from chats and legacy DB."""
-    if LUXURY_CHAT_ID_LVL2 and await is_luxury_member(
+    if legacy_config.LUXURY_CHAT_ID_LVL2 and await is_luxury_member(
         bot,
         int(user_id),
-        int(LUXURY_CHAT_ID_LVL2),
+        int(legacy_config.LUXURY_CHAT_ID_LVL2),
     ):
         return 2
-    if LUXURY_CHAT_ID and await is_luxury_member(
+    if legacy_config.LUXURY_CHAT_ID and await is_luxury_member(
         bot,
         int(user_id),
-        int(LUXURY_CHAT_ID),
+        int(legacy_config.LUXURY_CHAT_ID),
     ):
         return 1
     repository = UserRepository(await get_db_pool())

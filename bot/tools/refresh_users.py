@@ -1,25 +1,19 @@
 import asyncio
 import logging
 import sys
-from pathlib import Path
 from time import perf_counter
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
-ROOT = Path(__file__).resolve().parents[2]  # E:\python\main\1
-sys.path.insert(0, str(ROOT))
-
-from dotenv import load_dotenv
-
-load_dotenv(ROOT / ".env")
-
-from bot.core.legacy_config import BOT_TOKEN, DISCUSSION_CHAT_ID, LUXURY_CHAT_ID
+from bot.core.environment import load_project_environment, resolve_project_root
+from bot.core.legacy_config import configure_legacy_config, legacy_config
+from bot.core.settings import BotProcessSettings, ConfigurationError
+from bot.uid_crypto import configure_uid_crypto
+from db.core import close_db, init_db
 from db.legacy import (
-    init_db,
     fetch,
     execute,
-    close_db,
     add_user,
     set_subscription,
     set_luxury_status,
@@ -199,7 +193,7 @@ async def probe_chat_member(bot: Bot, chat_id: int, user_id: int) -> tuple[bool 
         return None, None
 
 
-async def main():
+async def main(config: BotProcessSettings) -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -207,8 +201,11 @@ async def main():
         force=True,
     )
 
-    await init_db()
-    bot = Bot(BOT_TOKEN)
+    configure_legacy_config(config)
+    configure_uid_crypto(config.bot.uid_hash_key, config.bot.uid_enc_key)
+
+    await init_db(config.database)
+    bot = Bot(config.bot.bot_token)
 
     try:
         log.info("Starting refresh pass...")
@@ -261,7 +258,7 @@ async def main():
                 row["pm_opened"] = True
 
             # 2) Проверка подписки (discussion)
-            is_sub, user_payload = await probe_chat_member(bot, DISCUSSION_CHAT_ID, uid)
+            is_sub, user_payload = await probe_chat_member(bot, legacy_config.DISCUSSION_CHAT_ID, uid)
             if user_payload is not None:
                 await add_user(uid, user_payload["username"], user_payload["full_name"])
                 names_updated += 1
@@ -272,7 +269,7 @@ async def main():
                 row["is_subscribed"] = is_sub
 
             # 3) Проверка лакшери (luxury)
-            is_lux, user_payload2 = await probe_chat_member(bot, LUXURY_CHAT_ID, uid)
+            is_lux, user_payload2 = await probe_chat_member(bot, legacy_config.LUXURY_CHAT_ID, uid)
             if user_payload2 is not None:
                 await add_user(uid, user_payload2["username"], user_payload2["full_name"])
                 names_updated += 1

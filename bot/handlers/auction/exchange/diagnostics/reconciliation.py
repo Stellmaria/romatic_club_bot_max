@@ -11,7 +11,7 @@ from aiogram.types import Message
 from bot.handlers.admin.action_support.compat import _safe_user_mention
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.exchange_diagnostics import ExchangeDiagnosticsService
-from bot.core.legacy_config import ADMINS
+from bot.core.legacy_config import legacy_config
 from .common import (
     _chunk,
     _chunk_lines,
@@ -220,7 +220,7 @@ async def cmd_ex_not_sent(message: Message):
 @router.message(Command("ex_unsent"))
 async def cmd_ex_unsent(message: Message) -> None:
     diagnostics = await ExchangeDiagnosticsService.create()
-    if message.from_user.id not in ADMINS:
+    if message.from_user.id not in legacy_config.ADMINS:
         await message.answer("Нет доступа.")
         return
 

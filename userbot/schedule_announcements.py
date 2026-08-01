@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 from telethon import Button, TelegramClient
 from telethon.tl.types import MessageEntityCustomEmoji
 
-from bot.core.settings import Settings, settings
+from bot.core.settings import UserbotSettings
 from bot.core.time import MOSCOW, to_moscow
 from db.schedule_setup import (
     get_emoji_assets,
@@ -441,7 +441,7 @@ def schedule_configuration_issues(
 async def store_emoji_assignments(
     assignments: Mapping[str, int],
     *,
-    config: Settings = settings,
+    config: UserbotSettings,
 ) -> tuple[str, ...]:
     """Retain the original JSON import command for existing deployments."""
 
@@ -463,7 +463,7 @@ async def store_emoji_assignments(
 async def preview_schedule_announcement(
     target_date: date,
     *,
-    config: Settings = settings,
+    config: UserbotSettings,
 ) -> RenderedScheduleAnnouncement | None:
     del config
     lots = await get_schedule_lots_for_day(target_date)
@@ -543,7 +543,7 @@ async def publish_schedule_announcement(
     telegram_client: TelegramClient,
     target_date: date,
     *,
-    config: Settings = settings,
+    config: UserbotSettings,
 ) -> int | None:
     review = await get_publication_review(target_date)
     if review and review.get("status") == "published" and review.get("channel_message_id"):
@@ -615,7 +615,7 @@ async def _send_blocked_preview_notice(
 async def schedule_announcement_watchdog(
     telegram_client: TelegramClient,
     *,
-    config: Settings = settings,
+    config: UserbotSettings,
 ) -> None:
     warned: dict[date, str] = {}
     while True:

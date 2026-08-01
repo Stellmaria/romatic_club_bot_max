@@ -34,12 +34,7 @@ from bot.services.exchange_moderation import ExchangeModerationQueries
 from bot.services.exchanges import ExchangeService
 from bot.services.luxury import get_user_luxury_level, is_luxury_member
 from bot.telegram.media import answer_media_any as _answer_media_any, safe_send_media
-from bot.core.settings import (
-    AUCTION_CHANNEL_ID,
-    AUCTION_CHANNEL_USERNAME,
-    LUXURY_CHAT_ID,
-    LUXURY_CHAT_ID_LVL2,
-)
+from bot.core.legacy_config import legacy_config
 from db.auctions import (
     count_sold_by_card_id,
     count_sold_same_card,
@@ -1271,13 +1266,13 @@ async def exchange_broadcast(call: CallbackQuery, bot: Bot):
     try:
         if proof and proof.upper() != "NO_PROOF":
             msg = await bot.send_photo(
-                AUCTION_CHANNEL_ID,
+                legacy_config.AUCTION_CHANNEL_ID,
                 photo=proof,
                 caption=text[:1024],
                 parse_mode="HTML",
             )
         else:
-            msg = await bot.send_message(AUCTION_CHANNEL_ID, text, parse_mode="HTML")
+            msg = await bot.send_message(legacy_config.AUCTION_CHANNEL_ID, text, parse_mode="HTML")
     except Exception:
         try:
             await service.release_post_claim(batch_id)
@@ -1291,7 +1286,7 @@ async def exchange_broadcast(call: CallbackQuery, bot: Bot):
     try:
         await service.mark_posted(
             batch_id,
-            chat_id=int(AUCTION_CHANNEL_ID),
+            chat_id=int(legacy_config.AUCTION_CHANNEL_ID),
             message_id=int(msg.message_id),
         )
     except Exception:
@@ -1307,8 +1302,8 @@ async def exchange_broadcast(call: CallbackQuery, bot: Bot):
         return
 
     link = ""
-    if AUCTION_CHANNEL_USERNAME:
-        link = f"\n🔗 https://t.me/{AUCTION_CHANNEL_USERNAME}/{msg.message_id}"
+    if legacy_config.AUCTION_CHANNEL_USERNAME:
+        link = f"\n🔗 https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME}/{msg.message_id}"
 
     await send_admin_log(
         bot,
@@ -1360,9 +1355,9 @@ async def _format_user_status(bot: Bot, user_id: int) -> str:
 
     # 2) лакшери по чатам (самый надёжный источник)
     try:
-        if LUXURY_CHAT_ID_LVL2 and await is_luxury_member(bot, user_id, LUXURY_CHAT_ID_LVL2):
+        if legacy_config.LUXURY_CHAT_ID_LVL2 and await is_luxury_member(bot, user_id, legacy_config.LUXURY_CHAT_ID_LVL2):
             return "👑 Лакшери 2"
-        if LUXURY_CHAT_ID and await is_luxury_member(bot, user_id, LUXURY_CHAT_ID):
+        if legacy_config.LUXURY_CHAT_ID and await is_luxury_member(bot, user_id, legacy_config.LUXURY_CHAT_ID):
             return "👑 Лакшери"
     except Exception:
         pass

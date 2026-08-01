@@ -8,7 +8,7 @@ from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, User
 
-from bot.core.settings import ADMINS_OWNERS
+from bot.core.legacy_config import legacy_config
 from bot.handlers.admin.action_support.transport import (
     _ensure_sender,
     _resolve_bot_from_message,
@@ -177,7 +177,7 @@ async def do_admin_add_remove(
     if bot is None:
         return
 
-    if is_remove and who_id in ADMINS_OWNERS:
+    if is_remove and who_id in legacy_config.ADMINS_OWNERS:
         admin_link = _admin_link_text(by_admin_id, by_admin_username)
         await log_admin_action(
             user_id=by_admin_id,
@@ -231,7 +231,7 @@ async def admin_add_remove(
         await message.answer("Не могу определить отправителя команды.")
         return
 
-    is_owner = fu.id in ADMINS_OWNERS
+    is_owner = fu.id in legacy_config.ADMINS_OWNERS
     who, password = _parse_admin_command_args(message, is_owner)
     if not who:
         await message.answer(
