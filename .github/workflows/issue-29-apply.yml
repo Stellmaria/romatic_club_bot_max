@@ -41,25 +41,23 @@ jobs:
           EOF
           sha256sum --check /tmp/part-checksums
           cat .github/issue29-patch/part* > /tmp/issue29.patch.gz.b64
-          wc -c /tmp/issue29.patch.gz.b64
           echo 'a23a705c5b32b4827397650b064213e8a4b0e9093732ce8c9710c1c2f3a56d2b  /tmp/issue29.patch.gz.b64' | sha256sum --check
           base64 --decode /tmp/issue29.patch.gz.b64 > /tmp/issue29.patch.gz
-          wc -c /tmp/issue29.patch.gz
           echo '2a2d6ef43401eecc8d69ee4e8d1104d24d9bb13450c6f89c7cdd56ce5c21fdc9  /tmp/issue29.patch.gz' | sha256sum --check
           gzip --test /tmp/issue29.patch.gz
           gzip --decompress --stdout /tmp/issue29.patch.gz > /tmp/issue29.patch
-          wc -c /tmp/issue29.patch
           echo '73267629b13229a7441fbdddca9d3cb932eee0b50dd4976fa420d80a4286dfb4  /tmp/issue29.patch' | sha256sum --check
-          git apply --check --verbose /tmp/issue29.patch
-          git apply --index --verbose /tmp/issue29.patch
+          git apply --check /tmp/issue29.patch
+          git apply --index /tmp/issue29.patch
       - name: Validate source boundaries
         run: |
           python -m compileall -q bot database db userbot main.py config.py fsm_states.py tests scripts
           python scripts/check_handler_import_boundaries.py
-      - name: Commit refactor and remove transport
+      - name: Commit code refactor
         run: |
           set -euo pipefail
-          git rm -r .github/issue29-patch .github/workflows/issue-29-apply.yml
+          git restore --source=HEAD --staged --worktree .github/workflows/ci.yml .github/workflows/issue-29-snapshot.yml
+          git rm -r .github/issue29-patch
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
