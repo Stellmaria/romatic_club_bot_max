@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Reject new silent persistence failures.
-
-Active persistence boundaries are strict. A small, explicit legacy baseline is
-kept only for modules scheduled for migration; adding the same pattern anywhere
-else fails CI instead of quietly expanding the debt.
-"""
+"""Reject new silent persistence failures and legacy pool implementations."""
 
 from __future__ import annotations
 
@@ -15,16 +10,16 @@ ROOT = Path(__file__).resolve().parents[1]
 STRICT_FILES = {
     ROOT / "db/core.py",
     ROOT / "db/errors.py",
+    ROOT / "db/pool.py",
     ROOT / "db/users.py",
     ROOT / "db/admin.py",
     ROOT / "db/reliable_mutations.py",
 }
 PERSISTENCE_ROOTS = (ROOT / "db", ROOT / "bot/repositories")
 # Exact migration baseline. These modules are still guarded at runtime by the
-# instrumented pool and persistence boundary, but their local broad catches
-# must be removed as they are moved to repositories under issues #28/#30.
+# instrumented runtime adapter, but their local broad catches must be removed
+# as they are moved to constructor-injected repositories under issues #30/#31.
 LEGACY_BROAD_ALLOWLIST = {
-    ROOT / "db/legacy_impl.py",
     ROOT / "bot/repositories/market.py",
     ROOT / "db/market.py",
     ROOT / "db/repositories/admin.py",
@@ -33,11 +28,6 @@ LEGACY_BROAD_ALLOWLIST = {
     ROOT / "db/repositories/uid.py",
     ROOT / "db/subscriptions.py",
     ROOT / "db/uid.py",
-}
-DIRECT_LEGACY_IMPORT_ALLOWLIST = {
-    ROOT / "db/core.py",
-    ROOT / "db/legacy.py",
-    ROOT / "db/lifecycle.py",
 }
 
 
@@ -88,6 +78,10 @@ def _imports_legacy_impl(tree: ast.AST) -> bool:
 
 def main() -> int:
     violations: list[str] = []
+    retired_implementation = ROOT / "db/legacy_impl.py"
+    if retired_implementation.exists():
+        violations.append("db/legacy_impl.py: retired runtime implementation was restored")
+
     files = sorted(
         path
         for root in PERSISTENCE_ROOTS
@@ -114,7 +108,7 @@ def main() -> int:
                     f"{relative}:{node.lineno}: silent awaited persistence exception"
                 )
 
-        if path not in DIRECT_LEGACY_IMPORT_ALLOWLIST and _imports_legacy_impl(tree):
+        if _imports_legacy_impl(tree):
             violations.append(
                 f"{path.relative_to(ROOT)}: direct db.legacy_impl import is forbidden"
             )
