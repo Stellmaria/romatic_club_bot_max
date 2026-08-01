@@ -1,6 +1,19 @@
 """Thin compatibility facade for modular database query implementations."""
 
-from db import admin, auctions, cards, core, exchange, market, posts, schedule_queries, subscriptions, uid, users
+from db import (
+    admin,
+    auction_lifecycle_queries,
+    auctions,
+    cards,
+    core,
+    exchange,
+    market,
+    posts,
+    schedule_queries,
+    subscriptions,
+    uid,
+    users,
+)
 from db import reliable_mutations
 
 # Keep one public owner for every compatibility symbol. The historical auctions
@@ -13,6 +26,7 @@ _MODULES = (
     core,
     users,
     auctions,
+    auction_lifecycle_queries,
     admin,
     cards,
     schedule_queries,
