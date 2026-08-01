@@ -65,6 +65,13 @@ def test_exchange_queue_uses_supported_pending_total_query() -> None:
     assert "await queries.pending_count()" not in exchange_queue
 
 
+def test_exchange_moderation_uses_supported_pending_total_query() -> None:
+    exchange_moderation = _source("bot/handlers/auction/exchange_moderation.py")
+
+    assert "await queries.pending_total()" in exchange_moderation
+    assert "await queries.pending_count()" not in exchange_moderation
+
+
 def test_schedule_navigation_acks_and_chunks_grouped_preview() -> None:
     navigation = _source("bot/handlers/admin/admin_navigation.py")
 
