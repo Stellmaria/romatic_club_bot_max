@@ -106,17 +106,15 @@ def _parse_master_reason(text: str) -> tuple[str, int | None]:
     return s, None
 
 
-__all__ = [
-    "MASTER_REASON_RE",
-    "REQUIRED_CONFIRMS",
-    "UID_HEX_RE",
-    "USERNAME_RE",
-    "_days_ago",
-    "_fmt_dt",
-    "_mask_uid",
-    "_parse_ban_reason_and_until",
-    "_parse_master_reason",
-    "_parse_user_ban_reason_and_until",
-    "_uidv_counts",
-    "_uidv_user_line",
-]
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+days_ago = _days_ago
+fmt_dt = _fmt_dt
+mask_uid = _mask_uid
+parse_ban_reason_and_until = _parse_ban_reason_and_until
+parse_master_reason = _parse_master_reason
+parse_user_ban_reason_and_until = _parse_user_ban_reason_and_until
+uidv_counts = _uidv_counts
+uidv_user_line = _uidv_user_line
+
+__all__ = ['MASTER_REASON_RE', 'REQUIRED_CONFIRMS', 'UID_HEX_RE', 'USERNAME_RE', '_days_ago', '_fmt_dt', '_mask_uid', '_parse_ban_reason_and_until', '_parse_master_reason', '_parse_user_ban_reason_and_until', '_uidv_counts', '_uidv_user_line', 'days_ago', 'fmt_dt', 'mask_uid', 'parse_ban_reason_and_until', 'parse_master_reason', 'parse_user_ban_reason_and_until', 'uidv_counts', 'uidv_user_line']

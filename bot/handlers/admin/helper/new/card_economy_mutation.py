@@ -23,7 +23,7 @@ from aiogram.types import (
 from bot.auction_notify import _kb_equal
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log as _send_admin_log
-from bot.handlers.card_subscribe import _decks_keyboard, _presets_manage_keyboard
+from bot.handlers.card_subscribe import decks_keyboard, presets_manage_keyboard
 from bot.services.card_economy import CardEconomyService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.telegram.callbacks import safe_callback_answer
@@ -57,10 +57,10 @@ from bot.telegram.states import CardSubscribeFSM, EconomyFSM
 from bot.handlers.admin.helper.new.card_economy_shared import (
     CANCEL_TEXT,
     SEND_HTML_KW,
-    _card_name,
-    _cancel_kb,
-    _deck_name,
-    _log_with_ctx,
+    card_name,
+    cancel_kb,
+    deck_name,
+    log_with_ctx,
 )
 
 router = Router(name="admin_card_economy_mutation")
@@ -126,13 +126,13 @@ async def economy_cb(call: types.CallbackQuery, state: FSMContext) -> None:
     if action == "decktype":
         await state.set_state(EconomyFSM.deck_id)
         await call.message.answer(
-            "Введите ID колоды:", reply_markup=_cancel_kb()
+            "Введите ID колоды:", reply_markup=cancel_kb()
         )
     elif action == "obtain":
         await state.set_state(EconomyFSM.obtain_card_id)
         await call.message.answer(
             "Введите card_id карты для настройки «Получения»:",
-            reply_markup=_cancel_kb(),
+            reply_markup=cancel_kb(),
         )
     await call.answer()
 
@@ -167,17 +167,17 @@ async def cmd_decktype(message: types.Message) -> None:
         await message.answer(f"Ошибка: {e}")
         return
 
-    deck_name = _deck_name(deck, deck_id)
+    deck_title = deck_name(deck, deck_id)
     await message.answer(
-        f"✅ Тип колоды обновлён: <b>{deck_name}</b>\n"
+        f"✅ Тип колоды обновлён: <b>{deck_title}</b>\n"
         f"{before or '-'} → <b>{after}</b>",
         **SEND_HTML_KW,
     )
 
-    await _log_with_ctx(
+    await log_with_ctx(
         message,
         "<b>⚙️ Тип колоды</b>\n"
-        f"ID: {deck_id} {deck_name}\n"
+        f"ID: {deck_id} {deck_title}\n"
         f"{before or '-'} → <b>{after}</b>",
     )
 
@@ -228,19 +228,19 @@ async def fsm_deck_type(message: types.Message, state: FSMContext) -> None:
         return
 
     deck = await get_deck(deck_id)
-    deck_name = _deck_name(deck, deck_id)
+    deck_title = deck_name(deck, deck_id)
 
     await message.answer(
-        f"✅ Тип колоды обновлён: <b>{deck_name}</b>\n"
+        f"✅ Тип колоды обновлён: <b>{deck_title}</b>\n"
         f"{before or '-'} → <b>{after}</b>",
         reply_markup=ReplyKeyboardRemove(),
         **SEND_HTML_KW,
     )
 
-    await _log_with_ctx(
+    await log_with_ctx(
         message,
         "<b>⚙️ Тип колоды</b>\n"
-        f"ID: {deck_id} {deck_name}\n"
+        f"ID: {deck_id} {deck_title}\n"
         f"{before or '-'} → <b>{after}</b>",
     )
     await state.clear()
@@ -314,7 +314,7 @@ async def fsm_obtain_type(message: types.Message, state: FSMContext) -> None:
 
     await state.update_data(obtain_type=obtain)
     await message.answer(
-        "Введите количество (целое):", reply_markup=_cancel_kb()
+        "Введите количество (целое):", reply_markup=cancel_kb()
     )
     await state.set_state(EconomyFSM.obtain_amount)
 
@@ -366,7 +366,7 @@ async def _apply_obtain(
         await message.answer(f"Ошибка: {e}")
         return
 
-    name = _card_name(card, card_id)
+    name = card_name(card, card_id)
     await message.answer(
         "✅ Получение карты обновлено: "
         f"<b>{name}</b>\n"
@@ -375,7 +375,7 @@ async def _apply_obtain(
         **SEND_HTML_KW,
     )
 
-    await _log_with_ctx(
+    await log_with_ctx(
         message,
         "<b>🛒 Получение карты</b>\n"
         f"Card #{card_id} {name}\n"
@@ -387,4 +387,3 @@ async def _apply_obtain(
 # ---------------------------------------------------------------------------
 # Топ подписок (просмотр, пагинация)
 # ---------------------------------------------------------------------------
-

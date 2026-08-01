@@ -3,8 +3,172 @@
 Handlers retain their relative order from the legacy ``admin_panel`` module.
 """
 
-from bot.handlers.admin.admin_panel_shared import *  # noqa: F403
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    Message,
+)
+from aiogram import (
+    F,
+    Router,
+    types,
+)
+from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from bot.telegram.states import ModActionFSM
+from aiogram.exceptions import (
+    TelegramAPIError,
+    TelegramBadRequest,
+)
+from bot.handlers.admin.action_support.roles import (
+    do_trusted_action,
+    admin_add_remove,
+)
+from bot.handlers.auction.exchange_catalog import (
+    format_exchange_approved_lot_caption,
+    kb_exchange_approved_decks,
+    kb_exchange_approved_lot_actions,
+    kb_exchange_approved_root,
+    q_exchange_approved_decks,
+    q_exchange_whole_deck_batches,
+    safe_edit_text_or_caption,
+)
+from bot.services.exchange_media import get_exchange_cover_media as _get_exchange_cover_media
+from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.handlers.admin.helper.new.keyboards import (
+    back_keyboard,
+    inline_back_keyboard,
+    menu_keyboard,
+)
+from db.auctions import (
+    count_pending_delete_requests_by_kind,
+    get_pending_auctions,
+)
+from db.exchange import (
+    count_pending_exchange_batches,
+    get_exchange_deck_overview,
+    get_exchange_owners_for_cards,
+)
+from bot.handlers.admin.action_support.transport import owner_or_secret_required
+from bot.handlers.admin.action_support.moderation import (
+    show_delete_requests_for_moderation,
+    show_pendinglots,
+)
+from bot.handlers.admin.action_support.forms import start_preview_schedule
+
+
 from bot.telegram.callback_parser import split_callback_data
+from bot.handlers.admin.admin_menu import send_admin_main_menu
+
+ADMIN_AUK_KIND_LABELS: dict[str, str] = {
+    "standard": "⭐ Стандартный",
+    "reverse": "✨ Обратный",
+    "fast": "⚡ Быстрый",
+    "free": "🪶 Свободный",
+    "black": "👑 Чёрный",
+    "exchange": "🛍 Биржа",
+}
+
+ADMIN_AUK_KIND_ORDER = ["standard", "reverse", "fast", "free", "black", "exchange"]
+
+def _norm_auk_kind(v: object) -> str:
+    s = (str(v) if v is not None else "").strip().lower()
+    return s or "standard"
+
+def _admin_auk_kind_keyboard(req_type: str, counts: dict[str, int] | None = None) -> types.InlineKeyboardMarkup:
+    counts = counts or {}
+    kb = InlineKeyboardBuilder()
+    for k in ADMIN_AUK_KIND_ORDER:
+        label = ADMIN_AUK_KIND_LABELS.get(k, k)
+        cnt = int(counts.get(k) or 0)
+        text = f"{label} ({cnt})" if cnt else label
+        kb.button(text=text, callback_data=f"admreq|{req_type}|{k}")
+    kb.button(text="⬅️ Назад", callback_data="admreq_back")
+    kb.adjust(2)
+    return kb.as_markup()
+
+def _kb_exchange_pending_mode() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📋 Вывалить все лоты", callback_data="expend_mode|all")
+    kb.button(text="🧾 По одному", callback_data="expend_mode|one")
+    kb.button(text="⬅️ Назад", callback_data="admreq_back")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def _count_pending_by_kind(lots: list[dict]) -> dict[str, int]:
+    out: dict[str, int] = {k: 0 for k in ADMIN_AUK_KIND_ORDER}
+    for lot in lots:
+        k = _norm_auk_kind(lot.get("auction_kind"))
+        out[k] = out.get(k, 0) + 1
+    return out
+
+def _count_delete_by_kind(counts_db: dict[str, int]) -> dict[str, int]:
+    out: dict[str, int] = {k: 0 for k in ADMIN_AUK_KIND_ORDER}
+    for k, v in (counts_db or {}).items():
+        kk = _norm_auk_kind(k)
+        out[kk] = out.get(kk, 0) + int(v)
+    return out
+
+def _requests_title(req_type: str) -> str:
+    return "📝 Заявки на модерацию" if req_type == "pending" else "🗂️ Заявки на удаление"
+
+async def show_requests_kind_menu(message: Message, req_type: str) -> None:
+    req_type = (req_type or "").strip().lower()
+    if req_type not in {"pending", "delete"}:
+        await message.answer("Некорректный тип заявок.")
+        return
+
+    if req_type == "pending":
+        ex_cnt = await count_pending_exchange_batches()
+        lots = await get_pending_auctions()
+
+        if not lots and ex_cnt == 0:
+            await message.answer("Нет заявок на модерацию.")
+            return
+
+        counts = _count_pending_by_kind(lots or [])
+        counts["exchange"] = ex_cnt  # ✅ вот оно
+    else:
+        counts_db = await count_pending_delete_requests_by_kind()
+        counts = _count_delete_by_kind(counts_db)
+        if sum(counts.values()) == 0:
+            await message.answer("Нет заявок на удаление.")
+            return
+
+    await message.answer(
+        f"{_requests_title(req_type)}\nВыберите вид аукциона:",
+        reply_markup=_admin_auk_kind_keyboard(req_type, counts=counts),
+    )
+
+def _kb_ex_appr_back_to_deck(deck_id: int) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="⬅️ Назад", callback_data=f"ex_appr:deck:{int(deck_id)}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+async def safe_send_media(bot, chat_id: int, file_id: str, *, caption: str = "", parse_mode: str = "HTML",
+                          reply_markup=None):
+    file_id = (file_id or "").strip()
+    if not file_id:
+        return await bot.send_message(chat_id, caption, parse_mode=parse_mode, reply_markup=reply_markup)
+
+    try:
+        return await bot.send_photo(chat_id, photo=file_id, caption=caption, parse_mode=parse_mode,
+                                    reply_markup=reply_markup)
+    except TelegramBadRequest as e:
+        s = str(e).lower()
+        if "video as photo" in s or "type video" in s:
+            return await bot.send_video(chat_id, video=file_id, caption=caption, parse_mode=parse_mode,
+                                        reply_markup=reply_markup, supports_streaming=True)
+        if "animation as photo" in s or "gif as photo" in s:
+            return await bot.send_animation(chat_id, animation=file_id, caption=caption, parse_mode=parse_mode,
+                                            reply_markup=reply_markup)
+        # последний шанс
+        return await bot.send_document(chat_id, document=file_id, caption=caption, parse_mode=parse_mode,
+                                       reply_markup=reply_markup)
+    except TelegramAPIError:
+        return await bot.send_document(chat_id, document=file_id, caption=caption, parse_mode=parse_mode,
+                                       reply_markup=reply_markup)
 
 router = Router(name=__name__)
 
@@ -128,7 +292,7 @@ async def start_give_trusted(message: Message, state: FSMContext):
 @router.message(ModActionFSM.waiting_for_trusted_user, F.chat.type == "private")
 @admin_only
 async def give_trusted_user(message: Message, state: FSMContext):
-    await _do_trusted_action(
+    await do_trusted_action(
         message=message,
         state=state,
         who=message.text,
@@ -150,7 +314,7 @@ async def start_remove_trusted(message: Message, state: FSMContext):
 @router.message(ModActionFSM.waiting_for_untrusted_user, F.chat.type == "private")
 @admin_only
 async def remove_trusted_user(message: Message, state: FSMContext):
-    await _do_trusted_action(
+    await do_trusted_action(
         message=message,
         state=state,
         who=message.text,
@@ -229,20 +393,20 @@ async def exchange_menu_button(message: Message):
 @router.callback_query(F.data == "ex_appr:decks")
 @admin_only
 async def ex_appr_decks(call: types.CallbackQuery):
-    decks = await _q_exchange_approved_decks()
+    decks = await q_exchange_approved_decks()
     if not decks:
-        await _safe_edit_text_or_caption(
+        await safe_edit_text_or_caption(
             call.message,
             text="🛒 <b>Биржа</b>\n\nПока нет принятых лотов.",
-            reply_markup=_kb_exchange_approved_root(),
+            reply_markup=kb_exchange_approved_root(),
         )
         await call.answer()
         return
 
-    await _safe_edit_text_or_caption(
+    await safe_edit_text_or_caption(
         call.message,
         text="🛒 <b>Биржа</b>\n\nВыберите колоду:",
-        reply_markup=_kb_exchange_approved_decks(decks),
+        reply_markup=kb_exchange_approved_decks(decks),
     )
     await call.answer()
 
@@ -261,12 +425,12 @@ async def ex_appr_whole(call: types.CallbackQuery):
     page = max(0, page)
 
     per_page = 12
-    rows = await _q_exchange_whole_deck_batches(deck_id, limit=500)
+    rows = await q_exchange_whole_deck_batches(deck_id, limit=500)
     batch_ids = [int(r.get("batch_id") or 0) for r in (rows or []) if int(r.get("batch_id") or 0) > 0]
 
     total = len(batch_ids)
     if total <= 0:
-        await _safe_edit_text_or_caption(
+        await safe_edit_text_or_caption(
             call.message,
             text=(
                 "📚 <b>Биржа → Колода целиком</b>\n\n"
@@ -306,7 +470,7 @@ async def ex_appr_whole(call: types.CallbackQuery):
     kb.button(text="⬅️ Назад", callback_data=f"ex_appr:deck:{deck_id}")
     kb.adjust(3, 3, 3, 3, 1, 1)
 
-    await _safe_edit_text_or_caption(call.message, text="\n".join(lines), reply_markup=kb.as_markup())
+    await safe_edit_text_or_caption(call.message, text="\n".join(lines), reply_markup=kb.as_markup())
     await call.answer()
 
 
@@ -323,9 +487,9 @@ async def ex_appr_lotdeck_show(call: types.CallbackQuery):
     page = int(parts[3])
     batch_id = int(parts[4])
 
-    caption = await _format_exchange_approved_lot_caption(batch_id)
+    caption = await format_exchange_approved_lot_caption(batch_id)
     back_cb = f"ex_appr:whole:{deck_id}:{page}"
-    kb = _kb_exchange_approved_lot_actions(batch_id=batch_id, back_cb=back_cb)
+    kb = kb_exchange_approved_lot_actions(batch_id=batch_id, back_cb=back_cb)
 
     media_id = None
     kind = "photo"

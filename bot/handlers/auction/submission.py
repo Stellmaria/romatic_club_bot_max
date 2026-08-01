@@ -15,7 +15,7 @@ from bot.handlers.admin.helper.admin_constants import load_full_auction_ctx
 from bot.core.time import to_moscow
 from bot.services.admin_logging import send_admin_log
 from bot.handlers.constants import USER_MESSAGES
-from bot.handlers.helper.helpers_users import _emoji_by_currency
+from bot.handlers.helper.helpers_users import emoji_by_currency
 from bot.handlers.auction.kinds import auction_kind_keyboard
 from bot.handlers.auction.exchange import (
     clean_telegram_text as _tg_clean,
@@ -1341,7 +1341,7 @@ async def _send_user_pending_lot_preview(
     if kind_key == AuctionKind.REVERSE.value:
         price_preview = (
             f"Валюта ставок: <b>{html.escape(currencies_preview)}</b>\n"
-            f"Стартовый потолок: <b>{int(start_price)}</b> {_emoji_by_currency(currency)}\n"
+            f"Стартовый потолок: <b>{int(start_price)}</b> {emoji_by_currency(currency)}\n"
             "Ставки идут на понижение"
         )
     elif kind_key == AuctionKind.FREE.value:
@@ -1351,7 +1351,7 @@ async def _send_user_pending_lot_preview(
         )
     else:
         price_preview = (
-            f"Цена старта: <b>{int(start_price)}</b> (мин. ставка) {_emoji_by_currency(currency)}"
+            f"Цена старта: <b>{int(start_price)}</b> (мин. ставка) {emoji_by_currency(currency)}"
         )
 
     # подтянем расширенный контекст по лоту (карта/колода/редкость/цитата и т.д.)
@@ -1383,7 +1383,7 @@ async def _send_user_pending_lot_preview(
         title_line = html.escape(hero)
 
     cur = (currency or auction.get("currency") or "").strip().lower()
-    cur_emoji = _emoji_by_currency(cur)  # уже есть в imports
+    cur_emoji = emoji_by_currency(cur)  # уже есть в imports
     start_i = int(start_price or auction.get("start_price") or 0)
 
     # “Продано ранее”
@@ -1606,7 +1606,7 @@ async def _final_addlot_create(
         user_ref = f"@{html.escape(uname)}" if uname else f"<code>{user_id}</code>"
 
         kind_label = html.escape(auction_kind_label(auction_kind))
-        cur_emoji = _emoji_by_currency(currency)
+        cur_emoji = emoji_by_currency(currency)
         accepted_label = html.escape(
             currency_choices_label(accepted_currencies, fallback=currency, custom_terms=custom_offer_terms)
         )

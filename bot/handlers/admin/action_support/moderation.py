@@ -15,16 +15,16 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, U
 from bot.core.legacy_config import legacy_config
 from bot.core.time import to_moscow
 from bot.handlers.admin.action_support.exchange import (
-    _send_exchange_batch_card_admin,
+    send_exchange_batch_card_admin,
     build_exchange_pending_keyboard,
     safe_answer_photo,
     tg_clean,
 )
 from bot.handlers.admin.action_support.transport import (
-    _human_wait,
-    _resolve_bot_from_message,
-    _safe_strip,
-    _to_msk,
+    human_wait,
+    resolve_bot_from_message,
+    safe_strip,
+    to_msk,
     parse_datetime_field,
     send_lot_card_safe,
 )
@@ -103,11 +103,11 @@ async def show_pendinglots(message: Message, kind: str | None = None) -> None:
             em = currency_emoji.get((b.get("currency") or "").lower(), "💰")
             items_cnt = int(b.get("items_count") or 0)
 
-            created_msk = _to_msk(b.get("created_at"))
+            created_msk = to_msk(b.get("created_at"))
             created_block = ""
             if created_msk:
                 sent_str = created_msk.strftime("%d.%m.%Y %H:%M")
-                wait_str = _human_wait(datetime.now(MSK_TZ) - created_msk)
+                wait_str = human_wait(datetime.now(MSK_TZ) - created_msk)
                 created_block = (
                     f"⏱ <b>Отправлено:</b> {html.escape(sent_str)} (МСК)\n"
                     f"🕒 <b>На модерации:</b> {html.escape(wait_str)}\n"
@@ -129,7 +129,7 @@ async def show_pendinglots(message: Message, kind: str | None = None) -> None:
             has_proof = bool(proof) and proof.upper() != "NO_PROOF"
             kb = build_exchange_pending_keyboard(batch_id, has_proof=has_proof)
 
-            await _send_exchange_batch_card_admin(
+            await send_exchange_batch_card_admin(
                 message,
                 batch_id=batch_id,
                 text=text,
@@ -383,7 +383,7 @@ async def show_delete_requests_for_moderation(message: Message, kind: str | None
 
 
 def _extract_reason_text(message: Message) -> str:
-    return _safe_strip(getattr(message, "text", None))
+    return safe_strip(getattr(message, "text", None))
 
 
 async def _get_obj_row_lot(
@@ -537,7 +537,7 @@ async def process_reject_action(
     await update_status_fn(obj_id, status_value)
 
     log_text = admin_log_text_builder(lot, owners_text, row, reason, message)
-    bot = _resolve_bot_from_message(message)
+    bot = resolve_bot_from_message(message)
     if bot is not None:
         await send_admin_log(bot, log_text)
 

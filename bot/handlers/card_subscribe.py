@@ -713,3 +713,7 @@ def register_card_subscribe_handlers(router: Router) -> None:
 
     router.message.register(my_subscriptions_cmd, Command("my_subscriptions"))
     router.message.register(my_subscriptions_cmd, Command("my_subs"))
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+decks_keyboard = _decks_keyboard
+presets_manage_keyboard = _presets_manage_keyboard

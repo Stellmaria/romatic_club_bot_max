@@ -51,7 +51,7 @@ def test_exchange_navigation_exposes_pending_and_approved_flows() -> None:
     assert "show_pending_exchange_requests(call.message)" in navigation
     assert "show_pending_exchange_requests_all(call.message)" in navigation
     assert 'F.data == "ex_appr:root"' in navigation
-    assert "_kb_exchange_approved_root()" in navigation
+    assert "kb_exchange_approved_root()" in navigation
     assert "exinv|" not in navigation
     assert '@router.callback_query(F.data == "ex_appr:decks")' in catalog
     assert '@router.callback_query(F.data.startswith("ex_appr:list:all:"))' in catalog

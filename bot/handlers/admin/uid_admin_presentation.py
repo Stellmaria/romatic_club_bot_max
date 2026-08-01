@@ -13,10 +13,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.uid_admin_shared import (
     REQUIRED_CONFIRMS,
-    _days_ago,
-    _fmt_dt,
-    _mask_uid,
-    _uidv_counts,
+    days_ago,
+    fmt_dt,
+    mask_uid,
+    uidv_counts,
 )
 from bot.services.uid_verification import (
     get_uid_profile_binding,
@@ -202,7 +202,7 @@ async def _render_req(call: types.CallbackQuery, req_id: int, req: dict[str, Any
     created_at = req.get("created_at") or "—"
 
     confirmations = req.get("confirmations") or []
-    confirmed, rejected, pending = _uidv_counts(req)
+    confirmed, rejected, pending = uidv_counts(req)
     total = len(confirmations)
 
     lines = []
@@ -235,7 +235,7 @@ async def _render_whois_by_uid(message: types.Message, uid: str) -> None:
     if not data:
         await message.answer(
             "<b>WHOIS по UID</b>\n"
-            f"UID: <code>{_mask_uid(uid)}</code>\n"
+            f"UID: <code>{mask_uid(uid)}</code>\n"
             "Статус: не найден в базе\n"
             "UID в ЧС: <b>❌ нет</b>",
             parse_mode="HTML",
@@ -248,7 +248,7 @@ async def _render_whois_by_uid(message: types.Message, uid: str) -> None:
 
     lines = [
         "<b>WHOIS по UID</b>",
-        f"UID: <code>{_mask_uid(uid)}</code>",
+        f"UID: <code>{mask_uid(uid)}</code>",
         f"UID в ЧС: <b>{'✅ есть' if is_banned else '❌ нет'}</b>",
     ]
 
@@ -262,7 +262,7 @@ async def _render_whois_by_uid(message: types.Message, uid: str) -> None:
             f"Username: <b>{username_line}</b>",
             f"Имя: {verified.get('full_name') or '—'}",
             f"Статус: <b>{verified.get('status') or '—'}</b>",
-            f"Подтверждён: <code>{_fmt_dt(verified.get('verified_at'))}</code>",
+            f"Подтверждён: <code>{fmt_dt(verified.get('verified_at'))}</code>",
         ])
     elif request:
         uname = (request.get("username") or "").strip()
@@ -275,8 +275,8 @@ async def _render_whois_by_uid(message: types.Message, uid: str) -> None:
             f"Username: <b>{username_line}</b>",
             f"Имя: {request.get('full_name') or '—'}",
             f"Статус заявки: <b>{request.get('status') or '—'}</b>",
-            f"Создана: <code>{_fmt_dt(request.get('created_at'))}</code>",
-            f"Решение: <code>{_fmt_dt(request.get('decided_at'))}</code>",
+            f"Создана: <code>{fmt_dt(request.get('created_at'))}</code>",
+            f"Решение: <code>{fmt_dt(request.get('decided_at'))}</code>",
         ])
     else:
         lines.extend([
@@ -319,7 +319,7 @@ async def _render_whois(message: types.Message, user_id: int) -> None:
     role_line = ", ".join(role) if role else "обычный"
 
     created_at = u.get("created_at")
-    reg_line = f"{_fmt_dt(created_at)} ({_days_ago(created_at)})"
+    reg_line = f"{fmt_dt(created_at)} ({days_ago(created_at)})"
     pm_opened = bool(u.get("pm_opened"))
     last_pm = u.get("last_pm_at")
     unreach = payload.get("unreachable")
@@ -335,7 +335,7 @@ async def _render_whois(message: types.Message, user_id: int) -> None:
     else:
         if unreach:
             reason = (unreach.get("reason") or "—").strip()
-            last_seen = _fmt_dt(unreach.get("last_seen"))
+            last_seen = fmt_dt(unreach.get("last_seen"))
             pm_block = (
                 "\nЛС с ботом: 🚫 <b>недоступен</b>\n"
                 f"Последняя ошибка: <code>{reason}</code> • <code>{last_seen}</code>\n"
@@ -351,7 +351,7 @@ async def _render_whois(message: types.Message, user_id: int) -> None:
         else:
             pm_block = (
                 "\nЛС с ботом: ✅ <b>открыт</b>\n"
-                f"Последний контакт: <code>{_fmt_dt(last_pm)}</code>"
+                f"Последний контакт: <code>{fmt_dt(last_pm)}</code>"
             )
     # счётчики подтверждений у контрагента (если миграция уже есть)
     conf_done = u.get("uid_verif_confirmed_count")
@@ -363,7 +363,7 @@ async def _render_whois(message: types.Message, user_id: int) -> None:
     if conf_done is not None and conf_rej is not None:
         counter_block = (
             f"\nПодтверждал чужие сделки: ✅<b>{int(conf_done)}</b> / ❌<b>{int(conf_rej)}</b>\n"
-            f"Последнее ✅: <code>{_fmt_dt(last_conf)}</code> • Последнее ❌: <code>{_fmt_dt(last_rej)}</code>"
+            f"Последнее ✅: <code>{fmt_dt(last_conf)}</code> • Последнее ❌: <code>{fmt_dt(last_rej)}</code>"
         )
 
     ver_block = "\nUID-верификация: —"
@@ -397,7 +397,7 @@ async def _render_whois(message: types.Message, user_id: int) -> None:
             cu = (c.get("counterparty_username") or "").strip().lstrip("@").lower()
             cu_disp = "@" + cu if cu else f"id{c.get('counterparty_user_id')}"
             cs = (c.get("status") or "pending").strip().lower()
-            when = _fmt_dt(c.get("decided_at") or c.get("created_at"))
+            when = fmt_dt(c.get("decided_at") or c.get("created_at"))
 
             if cs == "confirmed":
                 confirmed.append(f"{cu_disp} (<code>{when}</code>)")
@@ -414,7 +414,7 @@ async def _render_whois(message: types.Message, user_id: int) -> None:
             f"\nUID-верификация: <b>{st}</b>\n"
             f"Заявка: <code>#{req_id}</code>\n"
             f"Код: <code>{code}</code>\n"
-            f"Создана: <code>{_fmt_dt(v_created)}</code> • Решение: <code>{_fmt_dt(v_decided)}</code>\n"
+            f"Создана: <code>{fmt_dt(v_created)}</code> • Решение: <code>{fmt_dt(v_decided)}</code>\n"
             f"Кому отправлял запросы: {', '.join(req_users) if req_users else '—'}\n"
             f"Подтвердили: {', '.join(confirmed) if confirmed else '—'}\n"
             f"Отклонили: {', '.join(rejected) if rejected else '—'}\n"
@@ -490,24 +490,18 @@ def _rev_flags_to_lines(flags: list[str]) -> list[str]:
     return [f"• {m.get(f, f)}" for f in flags]
 
 
-__all__ = [
-    "_REV_ALLOWED",
-    "_REV_FLAG_TITLES",
-    "_REV_ORDER",
-    "_cnt",
-    "_fmt_conf_status",
-    "_kb_req_actions",
-    "_kb_req_list",
-    "_kb_uidv_revision",
-    "_kb_verif_menu",
-    "_render_req",
-    "_render_uid_verif_view",
-    "_render_whois",
-    "_render_whois_by_uid",
-    "_rev_flags_to_lines",
-    "_send_media_any",
-    "_sort_rev_flags",
-    "_unpack_media",
-    "safe_call_answer",
-    "safe_edit",
-]
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+REV_ALLOWED = _REV_ALLOWED
+kb_req_list = _kb_req_list
+kb_uidv_revision = _kb_uidv_revision
+kb_verif_menu = _kb_verif_menu
+render_req = _render_req
+render_uid_verif_view = _render_uid_verif_view
+render_whois = _render_whois
+render_whois_by_uid = _render_whois_by_uid
+rev_flags_to_lines = _rev_flags_to_lines
+send_media_any = _send_media_any
+sort_rev_flags = _sort_rev_flags
+
+__all__ = ['_REV_ALLOWED', '_REV_FLAG_TITLES', '_REV_ORDER', '_cnt', '_fmt_conf_status', '_kb_req_actions', '_kb_req_list', '_kb_uidv_revision', '_kb_verif_menu', '_render_req', '_render_uid_verif_view', '_render_whois', '_render_whois_by_uid', '_rev_flags_to_lines', '_send_media_any', '_sort_rev_flags', '_unpack_media', 'safe_call_answer', 'safe_edit', 'REV_ALLOWED', 'kb_req_list', 'kb_uidv_revision', 'kb_verif_menu', 'render_req', 'render_uid_verif_view', 'render_whois', 'render_whois_by_uid', 'rev_flags_to_lines', 'send_media_any', 'sort_rev_flags']

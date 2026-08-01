@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Exchange flow component extracted during refactoring phase 7."""
 
-from html import escape as _h
+from html import escape as escape_html
 from aiogram import Bot
 from aiogram.types import Message
 from bot.services.luxury import get_user_luxury_level, is_luxury_member
@@ -11,12 +11,12 @@ from bot.core.legacy_config import legacy_config
 from db.legacy import count_sold_by_card_id, count_sold_same_card, get_deck_by_id, get_user, is_admin
 
 from .common import (
-    _exchange_gain_for_card,
-    _exchange_gift_for_card,
-    _gift_emoji,
-    _h,
-    _rarity_badge,
-    _rarity_norm,
+    exchange_gain_for_card,
+    exchange_gift_for_card,
+    gift_emoji,
+    escape_html,
+    rarity_badge,
+    rarity_norm,
     currency_to_emoji,
     h,
 )
@@ -78,8 +78,8 @@ async def _send_user_exchange_confirmation(
     cur_emoji = currency_to_emoji(currency) or "💎"
     preview = (cards or [{}])[0]
 
-    hero = _h(preview.get("hero_name") or "—")
-    card_name = _h(preview.get("card_name") or preview.get("title") or "—")
+    hero = escape_html(preview.get("hero_name") or "—")
+    card_name = escape_html(preview.get("card_name") or preview.get("title") or "—")
 
     # статус пользователя (нормальный)
     status_line = await _format_user_status(message.bot, int(user_id))
@@ -95,8 +95,8 @@ async def _send_user_exchange_confirmation(
             deck_line = f"🧩 {int(deck_id)} колода"
 
     # редкость
-    rn = _rarity_norm(preview.get("rarity") or preview.get("rarity_norm"))
-    rarity_line = f"{_rarity_badge(rn)} {rn or '—'}"
+    rn = rarity_norm(preview.get("rarity") or preview.get("rarity_norm"))
+    rarity_line = f"{rarity_badge(rn)} {rn or '—'}"
 
     # продано ранее
     sold = "—"
@@ -109,12 +109,12 @@ async def _send_user_exchange_confirmation(
         pass
 
     # подарок/профит
-    obtain_type, obtain_amount = _exchange_gift_for_card(preview)
+    obtain_type, obtain_amount = exchange_gift_for_card(preview)
     obtain_emoji = currency_to_emoji(obtain_type) or "💎"
     gift_line = f"🎁 +{obtain_amount} {obtain_emoji}" if obtain_amount else "—"
 
-    story = _h(preview.get("story") or "—")
-    quote = _h(preview.get("quote") or "—")
+    story = escape_html(preview.get("story") or "—")
+    quote = escape_html(preview.get("quote") or "—")
 
     caption = (
         "✅ <b>Заявка отправлена на модерацию</b>\n\n"
@@ -132,7 +132,7 @@ async def _send_user_exchange_confirmation(
     )
 
     if comment and comment.strip() and comment.strip() != "0":
-        caption += f"\nКомментарий: {_h(comment)}"
+        caption += f"\nКомментарий: {escape_html(comment)}"
 
     file_id = (preview.get("image_id") or "").strip()
     sent = None
@@ -202,13 +202,13 @@ async def _send_user_exchange_confirmation_multi(
         "✅ <b>Заявки отправлены на модерацию</b>\n\n"
         f"Статус пользователя: {status_line}\n"
         f"Колода: {deck_line}\n"
-        f"Режим: <b>{_h(mode_ru)}</b>\n\n"
+        f"Режим: <b>{escape_html(mode_ru)}</b>\n\n"
     )
 
     if same_card and created:
         c = created[0]["card"]
-        hero = _h(c.get("hero_name"))
-        name = _h(c.get("card_name"))
+        hero = escape_html(c.get("hero_name"))
+        name = escape_html(c.get("card_name"))
         price = int(created[0].get("price") or 0)
         caption += (
                 f"Карта: <b>{hero} — {name}</b>\n"
@@ -221,14 +221,14 @@ async def _send_user_exchange_confirmation_multi(
         for x in created:
             bid = int(x["batch_id"])
             c = x.get("card") or {}
-            hero = _h(c.get("hero_name"))
-            name = _h(c.get("card_name"))
-            rn = _rarity_norm(c.get("rarity") or c.get("rarity_norm"))
+            hero = escape_html(c.get("hero_name"))
+            name = escape_html(c.get("card_name"))
+            rn = rarity_norm(c.get("rarity") or c.get("rarity_norm"))
             price = int(x.get("price") or 0)
-            caption += f"• <b>{hero} — {name}</b> ({_h(rn)}) → №<code>{bid}</code> • <b>{price}</b> {cur_emoji}\n"
+            caption += f"• <b>{hero} — {name}</b> ({escape_html(rn)}) → №<code>{bid}</code> • <b>{price}</b> {cur_emoji}\n"
 
     if comment and comment.strip() and comment.strip() != "0":
-        caption += f"\nКомментарий: {_h(comment)}"
+        caption += f"\nКомментарий: {escape_html(comment)}"
 
     sent = None
     if file_id:
@@ -261,8 +261,8 @@ async def _send_user_exchange_confirmation_copies(
     hero = h(card.get("hero_name") or "—")
     name = h(card.get("card_name") or "—")
 
-    rn = _rarity_norm(card.get("rarity") or card.get("rarity_norm"))
-    rarity_line = f"{_rarity_badge(rn)} {h(rn or '—')}"
+    rn = rarity_norm(card.get("rarity") or card.get("rarity_norm"))
+    rarity_line = f"{rarity_badge(rn)} {h(rn or '—')}"
 
     sold = "—"
     try:
@@ -271,8 +271,8 @@ async def _send_user_exchange_confirmation_copies(
     except Exception:
         pass
 
-    ot, oa = _exchange_gain_for_card(card)
-    gift_line = f"🎁 +{int(oa)} {_gift_emoji(ot)}" if oa else "—"
+    ot, oa = exchange_gain_for_card(card)
+    gift_line = f"🎁 +{int(oa)} {gift_emoji(ot)}" if oa else "—"
 
     story = h(card.get("story") or "—")
     quote = h(card.get("quote") or "—")
@@ -356,9 +356,9 @@ async def _send_user_exchange_confirmation_deck_split(
     for bid, c, price in created:
         hero = h(c.get("hero_name") or "—")
         name = h(c.get("card_name") or "—")
-        rn = _rarity_norm(c.get("rarity") or c.get("rarity_norm"))
-        ot, oa = _exchange_gain_for_card(c)
-        gain = f"+{int(oa)}{_gift_emoji(ot)}" if oa else "—"
+        rn = rarity_norm(c.get("rarity") or c.get("rarity_norm"))
+        ot, oa = exchange_gain_for_card(c)
+        gain = f"+{int(oa)}{gift_emoji(ot)}" if oa else "—"
         lines.append(f"• №<code>{int(bid)}</code> {hero} — {name} ({h(rn)}) • <b>{int(price)}</b>💎 • {gain}")
 
     await message.answer("\n".join(lines), parse_mode="HTML")
@@ -380,8 +380,8 @@ async def _send_user_exchange_confirmation_card(
     cur_emoji = currency_to_emoji(currency) or "💎"
     preview = (cards or [{}])[0]
 
-    hero = _h(preview.get("hero_name") or "—")
-    card_name = _h(preview.get("card_name") or preview.get("title") or "—")
+    hero = escape_html(preview.get("hero_name") or "—")
+    card_name = escape_html(preview.get("card_name") or preview.get("title") or "—")
 
     # статус пользователя
     try:
@@ -403,8 +403,8 @@ async def _send_user_exchange_confirmation_card(
             deck_line = f"🧩 {deck_id} колода"
 
     # редкость
-    rn = _rarity_norm(preview.get("rarity") or preview.get("rarity_norm"))
-    rarity_line = f"{_rarity_badge(rn)} {rn or '—'}"
+    rn = rarity_norm(preview.get("rarity") or preview.get("rarity_norm"))
+    rarity_line = f"{rarity_badge(rn)} {rn or '—'}"
 
     # продано ранее
     sold = "—"
@@ -416,12 +416,12 @@ async def _send_user_exchange_confirmation_card(
     except Exception:
         pass
 
-    obtain_type, obtain_amount = _exchange_gift_for_card(preview)
+    obtain_type, obtain_amount = exchange_gift_for_card(preview)
     obtain_emoji = currency_to_emoji(obtain_type) or "💎"
     gift_line = f"🎁 +{obtain_amount} {obtain_emoji}" if obtain_amount else "—"
 
-    story = _h(preview.get("story") or "—")
-    quote = _h(preview.get("quote") or "—")
+    story = escape_html(preview.get("story") or "—")
+    quote = escape_html(preview.get("quote") or "—")
 
     caption = (
         "✅ <b>Заявка отправлена на модерацию</b>\n\n"
@@ -439,7 +439,7 @@ async def _send_user_exchange_confirmation_card(
     )
 
     if comment and comment.strip() and comment.strip() != "0":
-        caption += f"\nКомментарий: {_h(comment)}"
+        caption += f"\nКомментарий: {escape_html(comment)}"
 
     file_id = (preview.get("image_id") or "").strip()
     sent = None
@@ -451,3 +451,8 @@ async def _send_user_exchange_confirmation_card(
 
     if not sent:
         await message.answer(caption, parse_mode="HTML")
+
+# Public feature contracts. Private names remain temporary local aliases.
+send_user_exchange_confirmation = _send_user_exchange_confirmation
+send_user_exchange_confirmation_copies = _send_user_exchange_confirmation_copies
+send_user_exchange_confirmation_deck_split = _send_user_exchange_confirmation_deck_split

@@ -1,8 +1,72 @@
 """Approved lot and schedule editing.
 Handlers retain their relative order from the legacy ``admin_panel`` module.
 """
+
+import logging
+from typing import (
+    Any,
+    Optional,
+)
+from bot.services.auction_workflows import AuctionModerationService
+from bot.domain.auctions import (
+    AuctionSlotConflict,
+    InvalidAuctionTransition,
+)
+from bot.handlers.admin.helper.admin_constants import CURRENCY_EMOJI
+from aiogram.types import (
+    CallbackQuery,
+    Message,
+    User,
+)
+from bot.telegram.states import EditScheduleFSM
+from aiogram import (
+    F,
+    Router,
+    types,
+)
+from aiogram.fsm.context import FSMContext
+from bot.telegram.media import bot_send_media_any as _bot_send_media_any
+from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.core.time import (
+    auction_end_at_59,
+    to_moscow,
+)
+from bot.services.admin_thanks import build_thanks_kb
+from datetime import (
+    date,
+    datetime,
+)
+from bot.handlers.admin.helper.admin_keyboards import (
+    days_keyboard,
+    months_keyboard,
+)
+from bot.handlers.admin.helper.new.formatting import format_admin_action_log
+from db.auctions import (
+    get_auctions_by_date_with_owners,
+    get_lot_by_id,
+    get_lot_owners,
+)
+from bot.handlers.admin.helper.admin_service import (
+    get_free_slots_and_schedule_for_lot,
+    parse_auction_and_date_from_callback,
+)
+from bot.services.admin_owners import get_lot_owners_text
+from db.users import (
+    get_user,
+    is_luxury_user,
+)
+from db.admin import log_audit_action
+from bot.handlers.admin.action_support.exchange import safe_answer_photo
+from bot.services.admin_logging import send_admin_log
+from bot.handlers.admin.logs_admin import (
+    send_lot_edit_log,
+    short_media_id,
+)
+from bot.handlers.auction.exchange_moderation import show_pending_exchange_requests_all
+from bot.handlers.admin.action_support.forms import start_edit_schedule
+from bot.handlers.admin.helper.new.keyboards import time_slots_keyboard
+
 import asyncio
-from bot.handlers.admin.admin_panel_shared import *  # noqa: F403
 from bot.handlers.admin.schedule_card_view import (
     build_schedule_lot_caption,
     build_schedule_lot_keyboard,
@@ -10,6 +74,164 @@ from bot.handlers.admin.schedule_card_view import (
     remember_schedule_card_origin,
 )
 from bot.telegram.callback_parser import split_callback_data
+from bot.telegram.callbacks import safe_callback_answer
+from bot.handlers.admin.presentation.exchange_queue import show_pending_exchange_one
+from bot.services.admin_auction_notifications import notify_owners_lot_changed
+logger = logging.getLogger(__name__)
+
+ADMIN_AUK_KIND_LABELS: dict[str, str] = {
+    "standard": "⭐ Стандартный",
+    "reverse": "✨ Обратный",
+    "fast": "⚡ Быстрый",
+    "free": "🪶 Свободный",
+    "black": "👑 Чёрный",
+    "exchange": "🛍 Биржа",
+}
+
+ADMIN_AUK_KIND_ORDER = ["standard", "reverse", "fast", "free", "black", "exchange"]
+
+def _norm_auk_kind(v: object) -> str:
+    s = (str(v) if v is not None else "").strip().lower()
+    return s or "standard"
+
+async def update_lot_field_with_notify(
+        bot,
+        *,
+        auction_id: int,
+        field: str,
+        value,
+        admin_user: types.User,
+        field_label: str,
+) -> None:
+    before = await get_lot_by_id(auction_id)
+    old_val = before.get(field)
+
+    await _update_auction_field(auction_id, field, value)
+
+    after = await get_lot_by_id(auction_id)
+    # уведомляем только если лот уже в расписании/активен
+    if str(after.get("status")) in {"scheduled", "active", "approved"}:
+        body = (
+            f"Лот №<b>{auction_id}</b>\n"
+            f"Поле: <b>{field_label}</b>\n"
+            f"Было: <code>{old_val}</code>\n"
+            f"Стало: <code>{after.get(field)}</code>"
+        )
+        await notify_owners_lot_changed(
+            bot,
+            auction_id=auction_id,
+            admin_user=admin_user,
+            title="Изменения по вашему лоту",
+            body=body,
+        )
+
+async def _update_auction_field(auction_id: int, field: str, value: Any) -> dict[str, Any]:
+    service = await AuctionModerationService.create()
+    return await service.update_field(auction_id, field=field, value=value)
+
+def _back_to_lot_kb() -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[[types.InlineKeyboardButton(text="⬅️ Назад", callback_data="edit_lot_back")]]
+    )
+
+def _edit_lot_menu_kb(auction_id: int) -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text="⚙️ Тип аука", callback_data=f"edit_field|auction_kind|{auction_id}")],
+            [types.InlineKeyboardButton(text="🆔 Крафт на UID", callback_data=f"edit_field|craft_uid|{auction_id}")],
+            [types.InlineKeyboardButton(text="🕒 Время", callback_data=f"edit_field|time|{auction_id}")],
+            [types.InlineKeyboardButton(text="💵 Цена", callback_data=f"edit_field|price|{auction_id}")],
+            [types.InlineKeyboardButton(text="💱 Валюта", callback_data=f"edit_field|currency|{auction_id}")],
+            [types.InlineKeyboardButton(text="💬 Комментарий", callback_data=f"edit_field|comment|{auction_id}")],
+            [types.InlineKeyboardButton(text="🖼 Фото", callback_data=f"edit_field|photo|{auction_id}")],
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="edit_schedule_back")],
+        ]
+    )
+
+def _auk_kind_kb(auction_id: int) -> types.InlineKeyboardMarkup:
+    rows: list[list[types.InlineKeyboardButton]] = []
+    row: list[types.InlineKeyboardButton] = []
+    for k in ADMIN_AUK_KIND_ORDER:
+        row.append(
+            types.InlineKeyboardButton(
+                text=ADMIN_AUK_KIND_LABELS.get(k, k),
+                callback_data=f"set_auk_kind|{k}|{auction_id}",
+            )
+        )
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+
+    rows.append([types.InlineKeyboardButton(text="⬅️ Назад", callback_data="edit_lot_back")])
+    return types.InlineKeyboardMarkup(inline_keyboard=rows)
+
+def _craft_uid_kb(auction_id: int) -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="✅ Да", callback_data=f"set_craft_uid|1|{auction_id}"),
+                types.InlineKeyboardButton(text="❌ Нет", callback_data=f"set_craft_uid|0|{auction_id}"),
+            ],
+            [types.InlineKeyboardButton(text="♻️ Сбросить", callback_data=f"set_craft_uid|none|{auction_id}")],
+            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="edit_lot_back")],
+        ]
+    )
+
+async def _send_edit_lot_menu(target_message: Message, state: FSMContext, auction_id: int) -> None:
+    lot = await get_lot_by_id(auction_id)
+    if not lot:
+        await target_message.answer("Лот не найден.")
+        return
+
+    currency_raw = lot.get("currency", "")
+    currency_fancy = CURRENCY_EMOJI.get(str(currency_raw).lower(), currency_raw)
+
+    kind = _norm_auk_kind(lot.get("auction_kind"))
+    kind_label = ADMIN_AUK_KIND_LABELS.get(kind, kind)
+
+    craft_val = lot.get("craft_uid_possible")
+    if craft_val is True:
+        craft_s = "✅ Да"
+    elif craft_val is False:
+        craft_s = "❌ Нет"
+    else:
+        craft_s = "—"
+
+    comment = (lot.get("comment") or "—").strip() if isinstance(lot.get("comment"), str) else (
+            lot.get("comment") or "—")
+
+    text = (
+        f"<b>Лот:</b> {lot.get('card_name')} [{lot.get('hero_name') or '-'}]\n"
+        f"⚙️ <b>Тип аука:</b> {kind_label}\n"
+        f"🆔 <b>Крафт на UID:</b> {craft_s}\n"
+        f"💬 <b>Комментарий:</b> {comment}\n"
+        f"💵 <b>Стартовая цена:</b> {lot.get('start_price')} {currency_fancy}\n"
+        f"🕒 <b>Время:</b> {to_moscow(lot['start_time']).strftime('%d.%m %H:%M')}–{to_moscow(lot['end_time']).strftime('%H:%M')}\n\n"
+        "Что хотите изменить?"
+    )
+
+    await state.update_data(auction_id=auction_id)
+    await target_message.answer(text, reply_markup=_edit_lot_menu_kb(auction_id), parse_mode="HTML")
+    await state.set_state(EditScheduleFSM.choosing_field)
+
+def _kb_add_back(kb: types.InlineKeyboardMarkup, cb: str, text: str = "⬅️ Назад") -> types.InlineKeyboardMarkup:
+    if not kb:
+        return kb
+    if not getattr(kb, "inline_keyboard", None):
+        return kb
+
+    # не плодим дубликаты
+    try:
+        if kb.inline_keyboard and kb.inline_keyboard[-1] and kb.inline_keyboard[-1][0].callback_data == cb:
+            return kb
+    except Exception:
+        pass
+
+    kb.inline_keyboard.append([types.InlineKeyboardButton(text=text, callback_data=cb)])
+    return kb
+
 router = Router(name=__name__)
 @router.message(F.text == "📝 Редактировать расписание", F.chat.type == "private")
 @admin_only

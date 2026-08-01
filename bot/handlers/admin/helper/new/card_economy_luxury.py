@@ -23,7 +23,7 @@ from aiogram.types import (
 from bot.auction_notify import _kb_equal
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log as _send_admin_log
-from bot.handlers.card_subscribe import _decks_keyboard, _presets_manage_keyboard
+from bot.handlers.card_subscribe import decks_keyboard, presets_manage_keyboard
 from bot.services.card_economy import CardEconomyService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.telegram.callbacks import safe_callback_answer
@@ -61,9 +61,9 @@ from bot.handlers.admin.helper.new.card_economy_shared import (
     DEFAULT_VIEW,
     PAGE_SIZE,
     LUXURY_SEND_HTML_KW,
-    _NOM,
-    _safe_edit,
-    _subs_word,
+    NOM,
+    safe_edit,
+    subs_word,
 )
 
 router = Router(name="admin_card_economy_luxury")
@@ -188,7 +188,7 @@ def _gift_pretty(obtain_type: str | None, obtain_amount: int | None, emoji: bool
         t = t_raw
 
     t_l = t.strip().lower()
-    unit = _NOM.get(t_l, t_l)  # _NOM у тебя уже есть в файле
+    unit = NOM.get(t_l, t_l)  # _NOM у тебя уже есть в файле
     if emoji:
         cur_emoji = _GIFT_EMOJI.get(t_l, "🎁")
         return f"🎁 +{amt} {cur_emoji} {unit}"
@@ -211,7 +211,7 @@ def _format_line_compact(i: int, row: dict, emoji: bool) -> str:
 
     return (
         f"{i}. <b>{name} — {hero}</b> · "
-        f"<b>{subs}</b> {_subs_word(subs)} · "
+        f"<b>{subs}</b> {subs_word(subs)} · "
         f"{cal}запланировано: {sched} · {book}колода {deck_txt} · "
         f"редк.: {rarity_txt} · 🎁 {gift_txt}"
     )
@@ -232,7 +232,7 @@ def _format_line_spaced(i: int, row: dict, emoji: bool) -> str:
     gift_txt = _gift_pretty(row.get("obtain_type"), row.get("obtain_amount"), emoji)
 
     line1 = f"{i}. <b>{name} — {hero}</b>"
-    line2 = f"   <b>{subs}</b> {_subs_word(subs)} · {cal}{sched} · {book}{deck_txt}"
+    line2 = f"   <b>{subs}</b> {subs_word(subs)} · {cal}{sched} · {book}{deck_txt}"
     line3 = f"   редк.: {rarity_txt} · 🎁 {gift_txt}"
     return f"{line1}\n{line2}\n{line3}"
 
@@ -339,7 +339,7 @@ async def _render_page(
     )
 
     if edit and isinstance(message_or_call, types.CallbackQuery) and msg:
-        await _safe_edit(message_or_call, text, kb)
+        await safe_edit(message_or_call, text, kb)
         return
 
     await msg.answer(text, reply_markup=kb, **LUXURY_SEND_HTML_KW)

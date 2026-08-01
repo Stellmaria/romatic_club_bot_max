@@ -15,14 +15,12 @@ from bot.handlers.admin.services.slots import slot_allowed_for_user
 
 
 def menu_keyboard(*rows: Any) -> ReplyKeyboardMarkup:
+    """Build a reply keyboard without reflowing previously added rows."""
+
     kb = ReplyKeyboardBuilder()
     for row in rows:
-        if isinstance(row, (list, tuple)):
-            kb.add(*(KeyboardButton(text=str(text)) for text in row))
-            kb.adjust(len(row))
-        else:
-            kb.add(KeyboardButton(text=str(row)))
-            kb.adjust(1)
+        values = row if isinstance(row, (list, tuple)) else (row,)
+        kb.row(*(KeyboardButton(text=str(text)) for text in values))
     return kb.as_markup(resize_keyboard=True)
 
 

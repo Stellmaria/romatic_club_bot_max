@@ -1891,4 +1891,6 @@ def format_exchange_approved_log(*,
         "Действие: <code>exchange_approve</code> через бота"
     )
 
-
+# Public compatibility aliases. Cross-feature imports must use these names.
+fmt_dt_msk = _fmt_dt_msk
+user_link = _user_link

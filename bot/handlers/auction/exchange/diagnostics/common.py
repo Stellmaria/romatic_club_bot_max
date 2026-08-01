@@ -231,3 +231,12 @@ def _chunk(text: str, limit: int = 3900) -> list[str]:
     if cur:
         out.append("\n".join(cur))
     return out
+
+# Public feature contracts. Private names remain temporary local aliases.
+cards_preview = _cards_preview
+chunk = _chunk
+chunk_lines = _chunk_lines
+exchange_mode_label = _ex_mode_label
+extract_usernames_from_text = _extract_usernames_from_text
+parse_batch_ids = _parse_batch_ids
+parse_expected_from_text = _parse_expected_from_text

@@ -4,12 +4,20 @@ It exposes the decomposed owners without depending on the retired legacy
 facade. Consumers can migrate to narrower modules incrementally.
 """
 
-from bot.handlers.admin.action_support.exchange import *  # noqa: F403
-from bot.handlers.admin.action_support.forms import *  # noqa: F403
-from bot.handlers.admin.action_support.moderation import *  # noqa: F403
-from bot.handlers.admin.action_support.roles import *  # noqa: F403
-from bot.handlers.admin.action_support.scheduled_edits import *  # noqa: F403
-from bot.handlers.admin.action_support.transport import *  # noqa: F403
+from bot.handlers.admin.action_support import (
+    exchange,
+    forms,
+    moderation,
+    roles,
+    scheduled_edits,
+    transport,
+)
+for _module in (exchange, forms, moderation, roles, scheduled_edits, transport):
+    for _name in _module.__all__:
+        globals()[_name] = getattr(_module, _name)
+
+del _module, _name
+
 from bot.handlers.admin.helper.new.formatting import get_lot_owners_with_levels
 from bot.presentation.admin import format_owner_html, format_owners_block
 from bot.services.admin_logging import send_admin_log

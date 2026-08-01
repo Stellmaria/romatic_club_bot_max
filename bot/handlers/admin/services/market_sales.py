@@ -129,3 +129,9 @@ async def _my_sales_render(
         await target.answer_photo(cover, caption=caption, reply_markup=keyboard, parse_mode="HTML")
     else:
         await target.answer(caption, reply_markup=keyboard, parse_mode="HTML")
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+MY = _MY
+my_sales_enter = _my_sales_enter
+my_sales_render = _my_sales_render
+my_sales_set_filter_and_show = _my_sales_set_filter_and_show

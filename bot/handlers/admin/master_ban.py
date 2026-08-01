@@ -13,11 +13,11 @@ from aiogram.types import Message
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log
 from bot.handlers.admin.uid_admin_resolvers import (
-    _extract_uid_anywhere,
-    _extract_user_anywhere,
-    _resolve_master_user,
+    extract_uid_anywhere,
+    extract_user_anywhere,
+    resolve_master_user,
 )
-from bot.handlers.admin.uid_admin_shared import _mask_uid, _parse_master_reason
+from bot.handlers.admin.uid_admin_shared import mask_uid, parse_master_reason
 from bot.services.admin_thanks import admin_tag
 from bot.services.uid_verification import apply_master_ban, apply_master_unban
 from bot.telegram.states import ModActionFSM
@@ -44,12 +44,12 @@ async def master_ban_start(message: Message, state: FSMContext):
 async def master_ban_got_user(message: Message, state: FSMContext):
     text = message.text or ""
 
-    uid = _extract_uid_anywhere(text)
-    user_token = _extract_user_anywhere(text)
+    uid = extract_uid_anywhere(text)
+    user_token = extract_user_anywhere(text)
 
     # если прислали одной строкой "UID @user" / "UID 123"
     if uid and user_token:
-        user_id, username, err = await _resolve_master_user(user_token)
+        user_id, username, err = await resolve_master_user(user_token)
         if not user_id:
             if err == "not_in_db":
                 await message.answer(
@@ -73,7 +73,7 @@ async def master_ban_got_user(message: Message, state: FSMContext):
         return
 
     # обычный режим: ждём только TG на шаге 1
-    user_id, username, err = await _resolve_master_user(text)
+    user_id, username, err = await resolve_master_user(text)
     if not user_id:
         if err == "not_in_db":
             await message.answer(
@@ -97,7 +97,7 @@ async def master_ban_got_user(message: Message, state: FSMContext):
 @router.message(ModActionFSM.waiting_for_master_ban_uid, F.chat.type == "private")
 @admin_only
 async def master_ban_got_uid(message: Message, state: FSMContext):
-    uid = _extract_uid_anywhere(message.text or "")
+    uid = extract_uid_anywhere(message.text or "")
     if not uid:
         await message.answer("UID должен быть ровно 24 hex символа. Пришли UID ещё раз.")
         return
@@ -126,7 +126,7 @@ async def master_ban_got_reason(message: Message, state: FSMContext):
         await message.answer("Потерял данные (user/uid) в состоянии. Начни заново.")
         return
 
-    reason, days = _parse_master_reason(message.text or "")
+    reason, days = parse_master_reason(message.text or "")
 
     # UID-ban: если days нет -> навсегда
     uid_until = None if days is None else (datetime.now(ZoneInfo("UTC")) + timedelta(days=int(days)))
@@ -150,7 +150,7 @@ async def master_ban_got_reason(message: Message, state: FSMContext):
         mismatch_note = f"\n⚠️ UID принадлежит другому user_id: <code>{owner_user_id}</code>"
 
     who = f"@{username}" if username else f"id{user_id}"
-    uid_txt = _mask_uid(uid)
+    uid_txt = mask_uid(uid)
     uid_until_txt = "навсегда" if uid_until is None else str(uid_until)
 
     log_text = (
@@ -189,11 +189,11 @@ async def master_unban_start(message: Message, state: FSMContext):
 @admin_only
 async def master_unban_got_user(message: Message, state: FSMContext):
     text = message.text or ""
-    uid = _extract_uid_anywhere(text)
-    user_token = _extract_user_anywhere(text)
+    uid = extract_uid_anywhere(text)
+    user_token = extract_user_anywhere(text)
 
     if uid and user_token:
-        user_id, username, err = await _resolve_master_user(user_token)
+        user_id, username, err = await resolve_master_user(user_token)
         if not user_id:
             await message.answer("Нужно прислать @username или user_id.")
             return
@@ -202,7 +202,7 @@ async def master_unban_got_user(message: Message, state: FSMContext):
         await _do_master_unban(message, state)
         return
 
-    user_id, username, err = await _resolve_master_user(text)
+    user_id, username, err = await resolve_master_user(text)
     if not user_id:
         if err == "not_in_db":
             await message.answer("Этого @username нет в базе. Пришли user_id или UID.")
@@ -218,7 +218,7 @@ async def master_unban_got_user(message: Message, state: FSMContext):
 @router.message(ModActionFSM.waiting_for_master_unban_uid, F.chat.type == "private")
 @admin_only
 async def master_unban_got_uid(message: Message, state: FSMContext):
-    uid = _extract_uid_anywhere(message.text or "")
+    uid = extract_uid_anywhere(message.text or "")
     if not uid:
         await message.answer("UID должен быть 24 hex. Пришли UID ещё раз.")
         return
@@ -241,7 +241,7 @@ async def _do_master_unban(message: Message, state: FSMContext):
     did_user = result.user_removed
 
     who = f"@{username}" if username else f"id{user_id}"
-    uid_txt = _mask_uid(uid) if uid else "—"
+    uid_txt = mask_uid(uid) if uid else "—"
 
     log_text = (
         f"🧹 <b>МАСТЕР-РАЗБАН</b>\n"

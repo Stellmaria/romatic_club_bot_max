@@ -10,8 +10,8 @@ from aiogram import F, Router, types
 from aiogram.filters import Command
 
 from bot.core.time import to_moscow, utc_now
-from bot.handlers.admin.services.schedule import _chunks
-from bot.handlers.helper.helpers_users import _deck_tag, _emoji_by_currency
+from bot.handlers.admin.services.schedule import chunks
+from bot.handlers.helper.helpers_users import deck_tag, emoji_by_currency
 from db.legacy import (
     get_auctions_by_card_ref,
     get_auctions_in_range,
@@ -255,13 +255,13 @@ async def cmd_when(message: types.Message) -> None:
             seen.add(key)
             price = lot.get("start_price")
             price_part = (
-                f"  {price} {_emoji_by_currency(lot.get('currency'))}"
+                f"  {price} {emoji_by_currency(lot.get('currency'))}"
                 if isinstance(price, int)
                 else ""
             )
             lines.append(
                 f"{start} 🃏({escape(lot.get('hero_name') or '-')})"
-                f"{_deck_tag(lot.get('deck_id'))} "
+                f"{deck_tag(lot.get('deck_id'))} "
                 f"{escape(lot.get('card_name') or '-')}{price_part}"
             )
         lines.append("")
@@ -395,5 +395,5 @@ async def cmd_gaps(message: types.Message) -> None:
         f"\nИтого свободных слотов (по окну {WORK_START:%H:%M}–{WORK_END:%H:%M}): "
         f"<b>{total_free}</b>"
     )
-    for part in _chunks(_tg_clean("\n".join(lines))):
+    for part in chunks(_tg_clean("\n".join(lines))):
         await message.answer(part, parse_mode="HTML", protect_content=True)

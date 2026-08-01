@@ -21,8 +21,8 @@ from bot.handlers.admin.admin_menu import send_admin_main_menu
 from bot.handlers.admin.helper.new.keyboards import period_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.auction.exchange.catalog import (
-    _kb_exchange_approved_root,
-    _safe_edit_text_or_caption,
+    kb_exchange_approved_root,
+    safe_edit_text_or_caption,
 )
 from bot.handlers.auction.exchange.moderation import (
     show_pending_exchange_requests,
@@ -316,10 +316,10 @@ async def exchange_pending_mode_compat(
 @admin_only
 async def exchange_approved_root(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await _safe_edit_text_or_caption(
+    await safe_edit_text_or_caption(
         call.message,
         text="🛒 <b>Биржа</b>\n\nВыберите способ просмотра принятых лотов:",
-        reply_markup=_kb_exchange_approved_root(),
+        reply_markup=kb_exchange_approved_root(),
     )
     await call.answer()
 

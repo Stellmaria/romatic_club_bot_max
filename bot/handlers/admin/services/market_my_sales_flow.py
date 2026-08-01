@@ -9,7 +9,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 
-from bot.handlers.admin.services.market_constants import CB_KIND, CB_PREFIX, _EXTRAS_TAIL_RE, _EXTRAS_HEAD_RE, \
+from bot.handlers.admin.services.market_constants import CB_KIND, CB_PREFIX, EXTRAS_TAIL_RE, EXTRAS_HEAD_RE, \
     STAR_DB_CODE, PAGE_CARDS, CB_PAGE, CB_SEL, CB_BACK
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_diamonds_flow import start_diamonds_currency_flow
@@ -17,18 +17,18 @@ from bot.handlers.admin.services.market_fsm import MarketAddFSM, MarketEditFSM, 
 from bot.handlers.admin.services.market_keyboards import market_kind_kb, market_decks_kb, currency_multi_keyboard, \
     cash_multi_keyboard, kb_deck_mode, kb_custom_qty_choice, confirm_publish_kb, prices_menu_kb, prices_cash_menu_kb, \
     sold_confirm_kb, kb_proof_choice, kb_proof_single_skip, market_cards_kb
-from bot.handlers.admin.services.market_render import build_card_preview_caption, _reload_listing_inplace, \
-    _format_extra_for_summary
+from bot.handlers.admin.services.market_render import build_card_preview_caption, reload_listing_inplace, \
+    format_extra_for_summary
 from bot.handlers.admin.services.market_sales import (
-    _MY,
-    _my_sales_enter,
-    _my_sales_render,
-    _my_sales_set_filter_and_show,
+    MY,
+    my_sales_enter,
+    my_sales_render,
+    my_sales_set_filter_and_show,
 )
-from bot.handlers.admin.services.market_service import _kb_proof_each_skip, _send_prompt
-from bot.handlers.admin.services.market_utils import get_selected_ids, safe_delete, _normalize_pay_type, parse_tiers, \
-    _distinct_cards_count, safe_edit_text, remove_selected_id, add_selected_id, currency_emoji, \
-    validate_price_by_currency, _card_title
+from bot.handlers.admin.services.market_service import kb_proof_each_skip, send_prompt
+from bot.handlers.admin.services.market_utils import get_selected_ids, safe_delete, normalize_pay_type, parse_tiers, \
+    distinct_cards_count, safe_edit_text, remove_selected_id, add_selected_id, currency_emoji, \
+    validate_price_by_currency, card_title
 from bot.services.market import (
     get_all_decks,
     get_cards_by_deck,
@@ -163,7 +163,7 @@ router = my_sales_continuation_router
 async def my_sales_nav(call: CallbackQuery, state: FSMContext):
     await call.answer()
     data = await state.get_data()
-    s = data.get(_MY) or {}
+    s = data.get(MY) or {}
     ids: list[int] = list(s.get("ids") or [])
     if not ids:
         try:
@@ -178,15 +178,15 @@ async def my_sales_nav(call: CallbackQuery, state: FSMContext):
     total = len(ids)
     idx = (idx - 1) % total if call.data.endswith("prev") else (idx + 1) % total
     s["idx"] = idx
-    await state.update_data({_MY: s})
-    await _my_sales_render(call, state, edit=True)
+    await state.update_data({MY: s})
+    await my_sales_render(call, state, edit=True)
 
 
 @router.callback_query(F.data.startswith("my:act:"))
 async def my_sales_actions(call: CallbackQuery, state: FSMContext):
     await call.answer()
     data = await state.get_data()
-    s = data.get(_MY) or {}
+    s = data.get(MY) or {}
     ids: list[int] = list(s.get("ids") or [])
     idx = int(s.get("idx") or 0)
     if not ids:
@@ -204,12 +204,12 @@ async def my_sales_actions(call: CallbackQuery, state: FSMContext):
         # удаляем из списка и перелистываем
         ids.pop(idx)
         if not ids:
-            await state.update_data({_MY: {"ids": [], "idx": 0, "tab": s.get('tab', 'active')}})
+            await state.update_data({MY: {"ids": [], "idx": 0, "tab": s.get('tab', 'active')}})
             await call.message.edit_text("Все объявления удалены.")
             return
         idx = 0 if idx >= len(ids) else idx
-        await state.update_data({_MY: {"ids": ids, "idx": idx, "tab": s.get('tab', 'active')}})
-        await _my_sales_render(call, state, edit=True)
+        await state.update_data({MY: {"ids": ids, "idx": idx, "tab": s.get('tab', 'active')}})
+        await my_sales_render(call, state, edit=True)
         return
 
     # стейт-машина статусов
@@ -223,16 +223,15 @@ async def my_sales_actions(call: CallbackQuery, state: FSMContext):
         await market_toggle_named_status(lid, "sold")
 
     # edit текущей карточки
-    await _my_sales_render(call, state, edit=True)
+    await my_sales_render(call, state, edit=True)
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?(Активные|Скрытые|Проданные|Архив|Все)$"))
 async def my_sales_filter_click(message: Message, state: FSMContext):
     mapping = {"Активные": "active", "Скрытые": "hidden", "Проданные": "sold", "Архив": "archived", "Все": "all"}
     name = message.text.replace("▪️ ", "").replace("▫️ ", "")
-    await _my_sales_enter(message, state, mapping[name])
+    await my_sales_enter(message, state, mapping[name])
 
 
 # Compatibility: the primary fragment remains the module-level router.
 router = my_sales_router
-

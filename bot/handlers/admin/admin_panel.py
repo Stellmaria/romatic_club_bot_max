@@ -16,13 +16,112 @@ from bot.handlers.admin import (
     admin_panel_system,
     admin_user_lists,
 )
-from bot.handlers.admin.admin_panel_exchange import *  # noqa: F401,F403
-from bot.handlers.admin.admin_panel_requests import *  # noqa: F401,F403
-from bot.handlers.admin.admin_panel_schedule import *  # noqa: F401,F403
-from bot.handlers.admin.admin_panel_sections import *  # noqa: F401,F403
-from bot.handlers.admin.admin_panel_system import *  # noqa: F401,F403
-from bot.handlers.admin.admin_user_lists import *  # noqa: F401,F403
-from bot.handlers.admin.admin_panel_shared import notify_owners_lot_changed
+from bot.handlers.admin.admin_panel_exchange import (
+    cmd_card_video,
+    cmd_fileid,
+    cmd_print_ex,
+    cb_print_ex,
+    howmax_cmd,
+    pex_set_winner,
+    pex_set_price,
+    pex_set_link,
+    cmd_id,
+    ex_back_to_moderation,
+    ex1_approve,
+    ex1_delete_ask,
+    ex1_delete_no,
+    ex1_delete_yes,
+    ex1_reject_start,
+    ex1_reject_reason,
+)
+from bot.handlers.admin.admin_panel_requests import (
+    admreq_back,
+    cmd_ex_owners,
+    admreq_select,
+    show_admin_menu,
+    moderation_menu,
+    start_give_trusted,
+    give_trusted_user,
+    start_remove_trusted,
+    remove_trusted_user,
+    start_add_admin,
+    add_admin_user,
+    start_remove_admin,
+    remove_admin_user,
+    pendinglots_cmd,
+    show_delete_requests_cmd,
+    schedule_button,
+    exchange_menu_button,
+    ex_appr_decks,
+    ex_appr_whole,
+    ex_appr_lotdeck_show,
+    cb_exchange_approved_root,
+)
+from bot.handlers.admin.admin_panel_schedule import (
+    edit_schedule_button,
+    edit_lot_menu,
+    exchange_pending_mode_pick,
+    edit_field_handler,
+    set_auction_kind_handler,
+    set_craft_uid_handler,
+    edit_schedule_value_photo,
+    edit_schedule_value_text,
+    edit_time_months,
+    edit_schedule_router,
+    edit_lot_back,
+    edit_schedule_back_any,
+    delete_lot_confirm,
+    delete_lot_final,
+    edit_time_slot_confirm,
+    save_edited_time,
+    set_currency_handler,
+    set_currency_price_handler,
+    edit_price_handler,
+)
+from bot.handlers.admin.admin_panel_sections import (
+    show_decks_for_cards,
+    show_cards_in_deck,
+    users_menu,
+    logs_menu,
+    audit_logs_cmd,
+    broadcast_menu,
+    start_broadcast_from_menu,
+    stats_menu,
+    stats_full_schedule,
+    stats_schedule_set_month,
+    stats_schedule_today,
+    stats_schedule_noop,
+    cards_menu,
+    add_deck_button,
+    check_admin_password,
+    deck_name_received,
+    confirm_add_deck,
+    cancel_add_deck,
+    add_card_button,
+    universal_cancel_callback,
+    universal_cancel,
+    universal_back_to_main,
+    admin_inline_back,
+    pending_menu_auctions,
+    admin_help,
+)
+from bot.handlers.admin.admin_panel_system import (
+    show_admin_menu_with_system,
+    show_system_menu,
+    show_restart_confirmation,
+    show_system_callback,
+    show_system_confirmation,
+    run_system_operation,
+    show_system_logs,
+    close_system_callback,
+)
+from bot.handlers.admin.admin_user_lists import (
+    show_admins_list,
+    show_users_list,
+    show_trusted_list,
+    paginate_admin_user_list,
+)
+from bot.services.admin_auction_notifications import notify_owners_lot_changed
 
 # Preserve the historical feature inventory and ordering for compatibility.
 # The system router itself is attached directly by bot.bootstrap.routers before

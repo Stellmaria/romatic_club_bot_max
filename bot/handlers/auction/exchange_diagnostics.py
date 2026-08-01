@@ -10,7 +10,7 @@ from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from bot.handlers.admin.action_support.exchange import _safe_user_mention
+from bot.handlers.admin.action_support.exchange import safe_user_mention
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import short_media_id
 from bot.services.admin_thanks import admin_tag, build_thanks_kb
@@ -93,7 +93,7 @@ async def cmd_print_ex_multi(message: types.Message):
         u = await get_user(winner_id)
         winner_un = (u.get("username") or u.get("full_name")) if u else str(winner_id)
 
-    winner_mention = _safe_user_mention(winner_id, winner_un or str(winner_id))
+    winner_mention = safe_user_mention(winner_id, winner_un or str(winner_id))
     moderator = admin_tag(message.from_user)
     thanks_kb = await build_thanks_kb(batch_ids[0], moderator)
 
@@ -130,7 +130,7 @@ async def cmd_print_ex_multi(message: types.Message):
             {
                 "batch_id": bid,
                 "owner_id": owner_id,
-                "owner_mention": _safe_user_mention(owner_id, owner_un),
+                "owner_mention": safe_user_mention(owner_id, owner_un),
                 "deck_name": deck_name,
                 "mode": mode,
                 "mode_label": _ex_mode_label(mode),
@@ -158,7 +158,7 @@ async def cmd_print_ex_multi(message: types.Message):
     # платежи победителю
     pay_lines: list[str] = []
     for (oid, cur), amount in sorted(pay_map.items(), key=lambda x: (-x[1], x[0][0])):
-        om = _safe_user_mention(oid, owner_username.get(oid, str(oid)))
+        om = safe_user_mention(oid, owner_username.get(oid, str(oid)))
         pay_lines.append(f"• {om}: <b>{amount}</b> {currency_to_emoji(cur)}")
 
     # состав по лотам
@@ -317,7 +317,7 @@ async def cmd_ex_lot(message: Message):
 
     # безопасный mention (если где-то уже есть _safe_user_mention)
     try:
-        owner_txt = _safe_user_mention(owner_id, owner_un)  # type: ignore[name-defined]
+        owner_txt = safe_user_mention(owner_id, owner_un)  # type: ignore[name-defined]
     except Exception:
         uname = f"@{html.escape(owner_un)}" if owner_un else str(owner_id)
         owner_txt = f"<a href='tg://user?id={owner_id}'>{uname}</a>"
@@ -476,7 +476,7 @@ async def cmd_ex_user(message: Message):
             f"  🎴 {items_txt}"
         )
 
-    who = _safe_user_mention(uid, uname)
+    who = safe_user_mention(uid, uname)
 
     text = (
             f"🛒 <b>Биржа: пользователь</b>\n"
@@ -582,7 +582,7 @@ async def cmd_ex_dump(message: Message):
 
         lots_ranges = _compress_ranges([int(x) for x in batch_ids])
         proof_label = _short_proof(proof)
-        who = _safe_user_mention(user_id, username)
+        who = safe_user_mention(user_id, username)
 
         lines = [
             "",
@@ -742,7 +742,7 @@ async def cmd_dup_user_cards(message: Message):
 
         if cur_uid != uid:
             cur_uid = uid
-            who = _safe_user_mention(uid, uname)
+            who = safe_user_mention(uid, uname)
             block = f"\n\n👤 {who} (id:<code>{uid}</code>)\n"
             if len(out) + len(block) > 3500:
                 await message.answer(out, parse_mode="HTML", disable_web_page_preview=True)

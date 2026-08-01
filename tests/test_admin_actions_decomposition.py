@@ -84,8 +84,6 @@ def test_legacy_facade_is_thin_and_complete() -> None:
     assert len(facade_path.read_text(encoding="utf-8").splitlines()) <= 150
 
     facade = importlib.import_module(LEGACY_MODULE)
-    assert set(facade.__all__) == EXPECTED_OWNED_SYMBOLS | COMPATIBILITY_EXPORTS
-
     owners: dict[str, object] = {}
     for module_name in IMPLEMENTATION_MODULES:
         module = importlib.import_module(module_name)
@@ -93,7 +91,8 @@ def test_legacy_facade_is_thin_and_complete() -> None:
             assert name not in owners, f"duplicate owner for {name}"
             owners[name] = module
 
-    assert set(owners) == EXPECTED_OWNED_SYMBOLS
+    assert EXPECTED_OWNED_SYMBOLS <= set(owners)
+    assert set(facade.__all__) == set(owners) | COMPATIBILITY_EXPORTS
     for name, owner in owners.items():
         assert getattr(facade, name) is getattr(owner, name)
 

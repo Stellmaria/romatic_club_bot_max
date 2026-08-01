@@ -23,7 +23,7 @@ from aiogram.types import (
 from bot.auction_notify import _kb_equal
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log as _send_admin_log
-from bot.handlers.card_subscribe import _decks_keyboard, _presets_manage_keyboard
+from bot.handlers.card_subscribe import decks_keyboard, presets_manage_keyboard
 from bot.services.card_economy import CardEconomyService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.telegram.callbacks import safe_callback_answer
@@ -225,3 +225,12 @@ async def _safe_edit(
             await call.answer()
         else:
             raise
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+NOM = _NOM
+cancel_kb = _cancel_kb
+card_name = _card_name
+deck_name = _deck_name
+log_with_ctx = _log_with_ctx
+safe_edit = _safe_edit
+subs_word = _subs_word

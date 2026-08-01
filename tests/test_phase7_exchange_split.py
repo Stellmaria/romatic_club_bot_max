@@ -70,13 +70,16 @@ def test_exchange_components_import_shared_contracts_without_sibling_cycles() ->
         assert "bot.handlers.auction.exchange" not in top_level_imports
 
 
-def test_admin_consumers_use_current_exchange_owners() -> None:
-    admin_panel = _source("bot/handlers/admin/admin_panel_shared.py")
-    moderation = _source("bot/handlers/admin/moderation_shared.py")
+def test_admin_consumers_use_public_exchange_contracts() -> None:
+    requests = _source("bot/handlers/admin/admin_panel_requests.py")
+    diagnostics = _source("bot/handlers/admin/moderation_diagnostics.py")
+    queue = _source("bot/handlers/admin/presentation/exchange_queue.py")
 
-    assert "exchange_moderation" in admin_panel or "exchange.moderation" in admin_panel
-    assert "exchange_catalog" in admin_panel or "exchange.catalog" in admin_panel
-    assert "show_pending_exchange_requests" in moderation
+    assert "from bot.handlers.auction.exchange_catalog import (" in requests
+    assert "kb_exchange_approved_root" in requests
+    assert "show_pending_exchange_requests" in diagnostics
+    assert "format_pending_exchange_batch_card" in queue
+    assert "import _" not in requests
 
 
 def test_exchange_split_has_no_unresolved_globals() -> None:

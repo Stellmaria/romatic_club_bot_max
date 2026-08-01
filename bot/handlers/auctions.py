@@ -3,16 +3,16 @@
 from aiogram import Router
 
 from bot.handlers.auction import guides, luxury_admin, submission, submission_support
+from bot.handlers.auction.guides import guides_kb
+from bot.handlers.auction.luxury_admin import cmd_remove_luxury
+from bot.handlers.auction.submission_support import compute_start_price_limits
 from bot.handlers.auction.winner_components.common import admin_tag
 from bot.handlers.auction.winner_components.thanks import build_thanks_kb
 from bot.handlers.auction.publication import auction_publisher_loop
 from bot.domain.auctions import AuctionKind
 from bot.legacy_fsm import UserAddLotFSM
 from bot.handlers.auction.submission_support import auction_currency_kb
-from bot.handlers.auction.guides import *  # noqa: F401,F403
-from bot.handlers.auction.luxury_admin import *  # noqa: F401,F403
-from bot.handlers.auction.submission import *  # noqa: F401,F403
-from bot.handlers.auction.submission_support import *  # noqa: F401,F403
+from bot.handlers.auction.submission import addlot_start
 
 router = Router(name=__name__)
 router.include_routers(submission.router, guides.router, luxury_admin.router)

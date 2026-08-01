@@ -10,8 +10,8 @@ from aiogram.types import Message
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log
-from bot.handlers.admin.uid_admin_resolvers import _resolve_user_id_from_text
-from bot.handlers.admin.uid_admin_shared import _parse_user_ban_reason_and_until
+from bot.handlers.admin.uid_admin_resolvers import resolve_user_id_from_text
+from bot.handlers.admin.uid_admin_shared import parse_user_ban_reason_and_until
 from bot.services.admin_thanks import admin_tag
 from bot.services.uid_verification import ban_user, list_active_user_bans, unban_user
 from bot.telegram.states import ModActionFSM
@@ -33,7 +33,7 @@ async def user_ban_start(message: Message, state: FSMContext):
 @router.message(ModActionFSM.waiting_for_user_ban_target, F.chat.type == "private")
 @admin_only
 async def user_ban_got_target(message: Message, state: FSMContext):
-    user_id, uname, err = await _resolve_user_id_from_text(message.text or "")
+    user_id, uname, err = await resolve_user_id_from_text(message.text or "")
     if not user_id:
         if err == "not_in_db":
             await message.answer(
@@ -66,7 +66,7 @@ async def user_ban_got_reason(message: Message, state: FSMContext):
         await message.answer("Потерял user_id в состоянии. Начни заново.")
         return
 
-    reason, banned_until = _parse_user_ban_reason_and_until(message.text or "")
+    reason, banned_until = parse_user_ban_reason_and_until(message.text or "")
 
     await ban_user(
         user_id=int(user_id),
@@ -102,7 +102,7 @@ async def user_unban_start(message: Message, state: FSMContext):
 @router.message(ModActionFSM.waiting_for_user_unban_target, F.chat.type == "private")
 @admin_only
 async def user_unban_got_target(message: Message, state: FSMContext):
-    user_id, uname, err = await _resolve_user_id_from_text(message.text or "")
+    user_id, uname, err = await resolve_user_id_from_text(message.text or "")
     if not user_id:
         if err == "not_in_db":
             await message.answer(

@@ -21,7 +21,7 @@ from db.legacy import get_deck_by_id, get_exchange_batch_by_id, get_exchange_ite
 
 router = Router(name="auction_exchange_catalog")
 
-from .common import EX_MODE_CARD, EX_MODE_DECK, EX_MODE_DECK_SPLIT, _cur_emoji, _currency_emoji, _currency_label, _fmt_dt_msk, _get_exchange_deck_ids, _user_link, currency_to_emoji
+from .common import EX_MODE_CARD, EX_MODE_DECK, EX_MODE_DECK_SPLIT, cur_emoji, currency_emoji, currency_label, fmt_dt_msk, get_exchange_deck_ids, user_link, currency_to_emoji
 
 def _kb_exchange_approved_root() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
@@ -33,7 +33,7 @@ def _kb_exchange_approved_root() -> InlineKeyboardMarkup:
 
 
 async def _q_exchange_approved_decks() -> list[dict]:
-    deck_ids = await _get_exchange_deck_ids()
+    deck_ids = await get_exchange_deck_ids()
     service = await ExchangeCatalogService.create()
     return await service.approved_decks(deck_ids)
 
@@ -524,7 +524,7 @@ async def ex_appr_card(call: types.CallbackQuery):
             price = r.get("price")
             cur = r.get("currency") or ""
             uname = (r.get("username") or "").strip()
-            cur_e = _cur_emoji(cur)
+            cur_e = cur_emoji(cur)
             price_txt = f"{int(price)} {cur_e}" if price is not None else f"— {cur_e}".strip()
             who = f"@{uname}" if uname else "—"
             lines.append(f"• <b>#{int(bid)}</b> — {price_txt} — {who}")
@@ -640,9 +640,9 @@ async def ex_appr_list_all(call: types.CallbackQuery):
         mode = (r.get("mode") or "").strip().lower()
         mode_ru = {"card": "карта", "deck": "колода", "deck_split": "разбор"}.get(mode, mode or "—")
         cur = str(r.get("currency") or "алмазы").strip()
-        cur_emoji = _cur_emoji(cur.lower())
+        currency_icon = cur_emoji(cur.lower())
         price = r.get("price")
-        price_line = f"{int(price)}{cur_emoji}" if price is not None else f"—{cur_emoji}"
+        price_line = f"{int(price)}{currency_icon}" if price is not None else f"—{currency_icon}"
         cnt = int(r.get("items_count") or 0)
         lines.append(
             f"• <code>{bid}</code> • 📚 {deck_title} • 🎛 {html.escape(mode_ru)} • 🃏 {cnt} • 💰 {html.escape(price_line)}")
@@ -708,7 +708,7 @@ async def ex_appr_list_card(call: types.CallbackQuery):
             price = r.get("price")
             cur = r.get("currency") or ""
             uname = (r.get("username") or "").strip()
-            cur_e = _cur_emoji(cur)
+            cur_e = cur_emoji(cur)
             price_txt = f"{int(price)} {cur_e}" if price is not None else f"— {cur_e}".strip()
             who = f"@{uname}" if uname else "—"
             lines.append(f"• <b>#{int(bid)}</b> — {price_txt} — {who}")
@@ -765,7 +765,7 @@ async def ex_appr_list_card(call: types.CallbackQuery):
         uname = (batch.get("username") or "").strip()
         mode = (batch.get("mode") or "").strip()
 
-        cur_e = _cur_emoji(cur)
+        cur_e = cur_emoji(cur)
         price_txt = f"{int(price)} {cur_e}" if price is not None else f"— {cur_e}".strip()
         who = f"@{uname}" if uname else "—"
 
@@ -822,10 +822,10 @@ async def ex_appr_delete(call: types.CallbackQuery):
 
     # лог как у расписания
     try:
-        when_msk = _fmt_dt_msk(datetime.now(timezone.utc))
-        admin_html = _user_link(call.from_user.id, call.from_user.username)
+        when_msk = fmt_dt_msk(datetime.now(timezone.utc))
+        admin_html = user_link(call.from_user.id, call.from_user.username)
         user_id = int(batch.get("user_id") or 0)
-        user_html = _user_link(user_id, batch.get("username")) if user_id else "—"
+        user_html = user_link(user_id, batch.get("username")) if user_id else "—"
         log_text = (
             "🗑 <b>Биржа: лот удалён</b>\n"
             f"🕒 {html.escape(when_msk)} (МСК)\n"
@@ -945,7 +945,7 @@ async def ex_view_card_list(call: types.CallbackQuery):
     for r in rows:
         batch_id = int(r.get("batch_id") or 0)
         price = r.get("price")
-        cur = _currency_label(r.get("currency") or "алмазы")
+        cur = currency_label(r.get("currency") or "алмазы")
         uname = (r.get("username") or "").strip()
         who = f"@{uname}" if uname else f"id:{int(r.get('user_id') or 0)}"
         lines.append(f"• #{batch_id} — {who} — {price} {cur}")
@@ -1000,7 +1000,7 @@ def _kb_back_to_decks() -> InlineKeyboardMarkup:
 
 
 async def _q_exchange_decks_with_approved() -> list[int]:
-    deck_ids = await _get_exchange_deck_ids()
+    deck_ids = await get_exchange_deck_ids()
     service = await ExchangeCatalogService.create()
     return await service.decks_with_approved(deck_ids)
 
@@ -1046,7 +1046,7 @@ async def ex_view_deck_whole(call: types.CallbackQuery):
     for r in rows:
         batch_id = int(r.get("batch_id") or 0)
         price = r.get("price")
-        cur = _currency_label(r.get("currency") or "алмазы")
+        cur = currency_label(r.get("currency") or "алмазы")
         uname = (r.get("username") or "").strip()
         who = f"@{uname}" if uname else f"id:{int(r.get('user_id') or 0)}"
         lines.append(f"• <b>#{batch_id}</b> — {price} {cur} — {who}")
@@ -1112,7 +1112,7 @@ async def ex_view_card_dump(call: types.CallbackQuery):
         amt = r.get("amount")
         cur = (r.get("currency") or "").strip()
         uname = (r.get("user_username") or "").strip()
-        cur_emo = _currency_emoji(cur)
+        cur_emo = currency_emoji(cur)
         price = f"{amt} {cur_emo}" if amt is not None else "—"
         who = f"@{uname}" if uname else "—"
         lines.append(f"• <b>#{bid}</b> — {price} — {who}")
@@ -1188,3 +1188,14 @@ def _kb_ex_appr_back_to_deck(deck_id: int) -> InlineKeyboardMarkup:
     kb.button(text="⬅️ Назад", callback_data=f"ex_appr:deck:{int(deck_id)}")
     kb.adjust(1)
     return kb.as_markup()
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+kb_exchange_approved_root = _kb_exchange_approved_root
+safe_edit_text_or_caption = _safe_edit_text_or_caption
+
+# Public feature contracts. Private names remain temporary local aliases.
+format_exchange_approved_lot_caption = _format_exchange_approved_lot_caption
+kb_exchange_approved_decks = _kb_exchange_approved_decks
+kb_exchange_approved_lot_actions = _kb_exchange_approved_lot_actions
+q_exchange_approved_decks = _q_exchange_approved_decks
+q_exchange_whole_deck_batches = _q_exchange_whole_deck_batches

@@ -3,8 +3,186 @@
 Handlers retain their relative order from the legacy ``admin_panel`` module.
 """
 
-from bot.handlers.admin.admin_panel_shared import *  # noqa: F403
+from bot.handlers.admin.helper.admin_constants import (
+    ADMIN_COMMANDS_INFO,
+    ADMIN_MESSAGES,
+    BUTTONS,
+    CANCEL_TEXTS,
+    RARITY_EMOJI,
+    RARITY_RU,
+    RARITY_TREASURE,
+)
+from bot.telegram.states import (
+    AddDeckFSM,
+    BroadcastFSM,
+    PreviewScheduleFSM,
+)
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
+from aiogram import (
+    F,
+    Router,
+    types,
+)
+from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from bot.handlers.admin.helper.new.Types import Owner
+from aiogram.exceptions import TelegramBadRequest
+from db.cards import (
+    add_deck,
+    get_all_decks,
+    get_cards_by_deck_id,
+)
+from bot.handlers.admin.action_support.forms import (
+    add_deck_fsm_entry,
+    start_add_card_fsm,
+)
+from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.handlers.admin.helper.new.keyboards import (
+    back_keyboard,
+    build_lot_keyboard,
+    decks_keyboard,
+    decks_menu_keyboard,
+    menu_keyboard,
+)
+from typing import cast
+from datetime import date
+from bot.handlers.admin.helper.new.formatting import (
+    format_admin_action_log,
+    format_pending_lot,
+)
+from bot.utils_admin import format_log_entry
+from db.admin import (
+    get_audit_logs,
+    log_audit_action,
+)
+from db.auctions import (
+    get_lot_owners,
+    get_pending_auctions,
+)
+from bot.security import is_owner_or_valid_secret
+from bot.handlers.admin.action_support.transport import (
+    process_universal_cancel_callback,
+    send_lot_card_safe,
+)
+from bot.services.admin_logging import send_admin_log
+
+
 from bot.telegram.callback_parser import split_callback_data
+from bot.handlers.admin.admin_menu import send_admin_main_menu
+
+async def _answer_media_any(
+        message: types.Message,
+        file_id: str,
+        *,
+        caption: str,
+        reply_markup: types.InlineKeyboardMarkup | None = None,
+        parse_mode: str | None = "HTML",
+        protect_content: bool = False,
+) -> types.Message | None:
+    """
+    Пытается отправить file_id как photo -> video -> animation.
+    Возвращает отправленное сообщение или None.
+    """
+    fid = (file_id or "").strip()
+    if not fid:
+        return None
+
+    # 1) photo
+    try:
+        return await message.answer_photo(
+            photo=fid,
+            caption=caption,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+            protect_content=protect_content,
+        )
+    except TelegramBadRequest:
+        pass
+    except Exception:
+        pass
+
+    # 2) video
+    try:
+        return await message.answer_video(
+            video=fid,
+            caption=caption,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+            protect_content=protect_content,
+        )
+    except TelegramBadRequest:
+        pass
+    except Exception:
+        pass
+
+    # 3) animation (gif)
+    try:
+        return await message.answer_animation(
+            animation=fid,
+            caption=caption,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+            protect_content=protect_content,
+        )
+    except Exception:
+        return None
+
+_MONTH_RU_SHORT = {
+    1: "Янв", 2: "Фев", 3: "Мар", 4: "Апр", 5: "Май", 6: "Июн",
+    7: "Июл", 8: "Авг", 9: "Сен", 10: "Окт", 11: "Ноя", 12: "Дек",
+}
+
+def _prev_month(year: int, month: int) -> tuple[int, int]:
+    if month <= 1:
+        return year - 1, 12
+    return year, month - 1
+
+def _next_month(year: int, month: int) -> tuple[int, int]:
+    if month >= 12:
+        return year + 1, 1
+    return year, month + 1
+
+def _kb_stats_schedule_navigator(year: int, month: int) -> InlineKeyboardMarkup:
+    # страховка от мусора
+    month = max(1, min(12, int(month)))
+    year = int(year)
+
+    py, pm = _prev_month(year, month)
+    ny, nm = _next_month(year, month)
+
+    kb = InlineKeyboardBuilder()
+
+    # навигация по годам
+    kb.row(
+        InlineKeyboardButton(text="⏪", callback_data=f"stats_schedule_set|{year - 1}-{month:02d}"),
+        InlineKeyboardButton(text=str(year), callback_data="stats_schedule_noop"),
+        InlineKeyboardButton(text="⏩", callback_data=f"stats_schedule_set|{year + 1}-{month:02d}"),
+    )
+
+    # навигация по месяцам
+    kb.row(
+        InlineKeyboardButton(text="◀️", callback_data=f"stats_schedule_set|{py}-{pm:02d}"),
+        InlineKeyboardButton(text=f"{_MONTH_RU_SHORT.get(month, str(month))} {year}",
+                             callback_data="stats_schedule_noop"),
+        InlineKeyboardButton(text="▶️", callback_data=f"stats_schedule_set|{ny}-{nm:02d}"),
+    )
+
+    # открытие выбранного месяца (используем существующую модерационную логику)
+    kb.row(
+        InlineKeyboardButton(text="📅 Открыть месяц", callback_data=f"preview_schedule|{year}-{month:02d}")
+    )
+
+    # быстрый прыжок на текущий месяц
+    kb.row(
+        InlineKeyboardButton(text="⏺ Сегодня", callback_data="stats_schedule_today")
+    )
+
+    return kb.as_markup()
 
 router = Router(name=__name__)
 

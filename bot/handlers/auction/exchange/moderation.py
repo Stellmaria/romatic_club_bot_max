@@ -27,15 +27,15 @@ router = Router(name="auction_exchange_moderation")
 from .common import (
     CURRENCY_EMOJI,
     UTC,
-    _cur_emoji,
-    _deck_id_from_row,
-    _exchange_gain_for_card,
-    _exchange_price_for_card,
-    _fmt_dt_msk,
-    _get_exchange_deck_ids,
-    _get_exchange_decks_for_menu,
-    _tg_clean,
-    _user_link,
+    cur_emoji,
+    deck_id_from_row,
+    exchange_gain_for_card,
+    exchange_price_for_card,
+    fmt_dt_msk,
+    get_exchange_deck_ids,
+    get_exchange_decks_for_menu,
+    clean_telegram_text,
+    user_link,
     tg_clean,
 )
 
@@ -111,12 +111,12 @@ async def exchange_approve(call: types.CallbackQuery):
         return
 
     # ---------- данные для лога ----------
-    when_msk = _fmt_dt_msk(datetime.now(timezone.utc))
+    when_msk = fmt_dt_msk(datetime.now(timezone.utc))
 
-    admin_html = _user_link(call.from_user.id, call.from_user.username)
+    admin_html = user_link(call.from_user.id, call.from_user.username)
 
     user_id = int(batch.get("user_id") or 0)
-    user_html = _user_link(user_id, batch.get("username")) if user_id else "—"
+    user_html = user_link(user_id, batch.get("username")) if user_id else "—"
 
     deck_id = int(batch.get("deck_id") or 0)
     deck_name = None
@@ -184,8 +184,8 @@ async def exchange_approve(call: types.CallbackQuery):
         "deck_split": "Разбор колоды",
     }.get(mode_key, mode or "—")
 
-    cur_emoji = _cur_emoji(currency.lower())
-    price_line = f"{int(price)} {cur_emoji} ({html.escape(currency)})" if price is not None else f"— {cur_emoji} ({html.escape(currency)})"
+    currency_icon = cur_emoji(currency.lower())
+    price_line = f"{int(price)} {currency_icon} ({html.escape(currency)})" if price is not None else f"— {currency_icon} ({html.escape(currency)})"
     proof_line = "✅ Да" if has_proof else "❌ Нет"
 
     notify_text = (
@@ -362,7 +362,7 @@ async def exchange_reject_reason(message: types.Message, state: FSMContext):
         proof_id = (batch.get("proof_photo_id") or "").strip()
         has_proof = bool(proof_id) and proof_id.upper() != "NO_PROOF"
 
-        when_msk = _fmt_dt_msk(datetime.now(timezone.utc))
+        when_msk = fmt_dt_msk(datetime.now(timezone.utc))
 
         log_text = format_exchange_moderation_log(
             action_title="Отклонена заявка на биржу",
@@ -495,8 +495,8 @@ async def cb_exchange_approve(call: CallbackQuery):
             "🛒 <b>Биржа: одобрено</b>\n"
             f"🕒 {now_str} (МСК)\n"
             f"Batch: <code>{batch_id}</code>\n"
-            f"Админ: {_user_link(call.from_user.id, call.from_user.username)}\n"
-            f"Пользователь: {_user_link(int(batch.get('user_id')), batch.get('username'))}\n"
+            f"Админ: {user_link(call.from_user.id, call.from_user.username)}\n"
+            f"Пользователь: {user_link(int(batch.get('user_id')), batch.get('username'))}\n"
             "Действие: exchange_approve через бота."
         )
         await send_admin_log(call.bot, log_text)
@@ -543,8 +543,8 @@ async def cb_exchange_reject(call: CallbackQuery):
             "🛒 <b>Биржа: отклонено</b>\n"
             f"🕒 {now_str} (МСК)\n"
             f"Batch: <code>{batch_id}</code>\n"
-            f"Админ: {_user_link(call.from_user.id, call.from_user.username)}\n"
-            f"Пользователь: {_user_link(int(batch.get('user_id')), batch.get('username'))}\n"
+            f"Админ: {user_link(call.from_user.id, call.from_user.username)}\n"
+            f"Пользователь: {user_link(int(batch.get('user_id')), batch.get('username'))}\n"
             "Действие: exchange_reject через бота."
         )
         await send_admin_log(call.bot, log_text)
@@ -637,12 +637,12 @@ def format_pending_exchange_batch_card(batch: dict, *, items_count: int) -> str:
     mode_title = mode_labels.get(mode, mode or "-")
 
     currency = (batch.get("currency") or "алмазы").strip().lower()
-    cur_emoji = _cur_emoji(currency)
+    currency_icon = cur_emoji(currency)
 
     price = batch.get("price")
     comment = (batch.get("comment") or "").strip() or "-"
 
-    created_str = _fmt_dt_msk(created)
+    created_str = fmt_dt_msk(created)
 
     # стиль "как заявка на аукцион": короткие строки + иконки
     return (
@@ -653,7 +653,7 @@ def format_pending_exchange_batch_card(batch: dict, *, items_count: int) -> str:
         f"👤 <b>Пользователь:</b> {user_line}\n"
         f"📚 <b>Колода:</b> <b>{html.escape(deck_title)}</b>\n"
         f"🎛 <b>Режим:</b> <b>{html.escape(mode_title)}</b>\n"
-        f"💰 <b>Цена:</b> <b>{html.escape(str(price))} {cur_emoji}</b> ({html.escape(currency)})\n"
+        f"💰 <b>Цена:</b> <b>{html.escape(str(price))} {currency_icon}</b> ({html.escape(currency)})\n"
         f"🃏 <b>Карт:</b> <b>{items_count}</b>\n"
         f"💬 <b>Комментарий:</b> {html.escape(comment)}"
     )
@@ -691,8 +691,8 @@ def _format_exchange_user_notice(
         moderator_html: str,
 ) -> str:
     batch_id = int(batch["batch_id"])
-    cur_emoji = _cur_emoji(currency)
-    price_line = f"{price} {cur_emoji} ({html.escape(currency)})" if price is not None else f"— {cur_emoji} ({html.escape(currency)})"
+    currency_icon = cur_emoji(currency)
+    price_line = f"{price} {currency_icon} ({html.escape(currency)})" if price is not None else f"— {currency_icon} ({html.escape(currency)})"
     proof_line = "✅ Да" if has_proof else "❌ Нет"
 
     created_at = batch.get("created_at")
@@ -855,22 +855,22 @@ def pending_exchange_kb_simple(*, batch_id: int, has_proof: bool) -> InlineKeybo
     return kb.as_markup()
 
 
-exchange_deck_id_from_row = _deck_id_from_row
+exchange_deck_id_from_row = deck_id_from_row
 
 
-get_exchange_deck_ids = _get_exchange_deck_ids
+get_exchange_deck_ids = get_exchange_deck_ids
 
 
-get_exchange_decks_for_menu = _get_exchange_decks_for_menu
+get_exchange_decks_for_menu = get_exchange_decks_for_menu
 
 
-exchange_price_for_card = _exchange_price_for_card
+exchange_price_for_card = exchange_price_for_card
 
 
-exchange_gain_for_card = _exchange_gain_for_card
+exchange_gain_for_card = exchange_gain_for_card
 
 
-clean_telegram_text = _tg_clean
+clean_telegram_text = clean_telegram_text
 
 
 def _media_kind_from_error(e: Exception) -> str | None:
@@ -885,7 +885,7 @@ def _media_kind_from_error(e: Exception) -> str | None:
 def _fmt_msk_dt(dt: object) -> str:
     # если у тебя уже есть _fmt_dt_msk — используй его вместо этого
     try:
-        return _fmt_dt_msk(dt)  # type: ignore[name-defined]
+        return fmt_dt_msk(dt)  # type: ignore[name-defined]
     except Exception:
         # fallback: просто локальный формат, без TZ магии
         if isinstance(dt, datetime):
@@ -1029,8 +1029,8 @@ async def exchange_delete_yes(call: CallbackQuery, bot: Bot):
     log_text = (
         "🛒 <b>Биржа: удалено</b>\n"
         f"Batch: <code>{batch_id}</code>\n"
-        f"Админ: {_user_link(admin.id, admin.username)}\n"
-        f"Пользователь: {_user_link(int(batch['user_id']), batch.get('username'))}\n"
+        f"Админ: {user_link(admin.id, admin.username)}\n"
+        f"Пользователь: {user_link(int(batch['user_id']), batch.get('username'))}\n"
     )
     await send_admin_log(bot, log_text)
 
@@ -1138,10 +1138,10 @@ def format_exchange_approved_log(*,
 
     cur_print = (currency or "алмазы").strip()
     cur = cur_print.lower()
-    cur_emoji = _cur_emoji(cur)
+    currency_icon = cur_emoji(cur)
 
     proof_line = "✅ Да" if has_proof else "❌ Нет"
-    price_line = f"{int(price)} {cur_emoji} ({tg_clean(cur_print)})" if price is not None else f"— {cur_emoji} ({tg_clean(cur_print)})"
+    price_line = f"{int(price)} {currency_icon} ({tg_clean(cur_print)})" if price is not None else f"— {currency_icon} ({tg_clean(cur_print)})"
 
     cmt = (comment or "").strip()
     if not cmt:
@@ -1167,3 +1167,6 @@ def format_exchange_approved_log(*,
         f"{items_block}\n\n"
         "Действие: <code>exchange_approve</code> через бота"
     )
+
+# Public feature contracts. Private names remain temporary local aliases.
+media_kind_from_error = _media_kind_from_error
