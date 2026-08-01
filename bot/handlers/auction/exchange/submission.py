@@ -649,7 +649,7 @@ def format_exchange_new_request_log(*,
 
     cur_print = (currency or "алмазы").strip()
     cur = cur_print.lower()
-    cur_emoji = cur_emoji(cur)
+    currency_icon = cur_emoji(cur)
 
     mode_key = (mode or "").strip().lower()
     mode_lbl = {
@@ -659,7 +659,7 @@ def format_exchange_new_request_log(*,
     }.get(mode_key, (mode or "—"))
 
     proof_line = "✅ Да" if has_proof else "❌ Нет"
-    price_line = f"{int(price)} {cur_emoji} ({cur_print})" if price is not None else f"— {cur_emoji} ({cur_print})"
+    price_line = f"{int(price)} {currency_icon} ({cur_print})" if price is not None else f"— {currency_icon} ({cur_print})"
 
     cmt = (comment or "").strip()
     if not cmt:

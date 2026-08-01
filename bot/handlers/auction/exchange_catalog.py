@@ -759,9 +759,9 @@ async def ex_appr_list_all(call: types.CallbackQuery):
         mode = (r.get("mode") or "").strip().lower()
         mode_ru = {"card": "карта", "deck": "колода", "deck_split": "разбор"}.get(mode, mode or "—")
         cur = str(r.get("currency") or "алмазы").strip()
-        cur_emoji = cur_emoji(cur.lower())
+        currency_icon = cur_emoji(cur.lower())
         price = r.get("price")
-        price_line = f"{int(price)}{cur_emoji}" if price is not None else f"—{cur_emoji}"
+        price_line = f"{int(price)}{currency_icon}" if price is not None else f"—{currency_icon}"
         cnt = int(r.get("items_count") or 0)
         lines.append(
             f"• <code>{bid}</code> • 📚 {deck_title} • 🎛 {html.escape(mode_ru)} • 🃏 {cnt} • 💰 {html.escape(price_line)}")

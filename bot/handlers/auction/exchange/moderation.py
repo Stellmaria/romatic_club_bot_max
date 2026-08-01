@@ -184,8 +184,8 @@ async def exchange_approve(call: types.CallbackQuery):
         "deck_split": "Разбор колоды",
     }.get(mode_key, mode or "—")
 
-    cur_emoji = cur_emoji(currency.lower())
-    price_line = f"{int(price)} {cur_emoji} ({html.escape(currency)})" if price is not None else f"— {cur_emoji} ({html.escape(currency)})"
+    currency_icon = cur_emoji(currency.lower())
+    price_line = f"{int(price)} {currency_icon} ({html.escape(currency)})" if price is not None else f"— {currency_icon} ({html.escape(currency)})"
     proof_line = "✅ Да" if has_proof else "❌ Нет"
 
     notify_text = (
@@ -637,7 +637,7 @@ def format_pending_exchange_batch_card(batch: dict, *, items_count: int) -> str:
     mode_title = mode_labels.get(mode, mode or "-")
 
     currency = (batch.get("currency") or "алмазы").strip().lower()
-    cur_emoji = cur_emoji(currency)
+    currency_icon = cur_emoji(currency)
 
     price = batch.get("price")
     comment = (batch.get("comment") or "").strip() or "-"
@@ -653,7 +653,7 @@ def format_pending_exchange_batch_card(batch: dict, *, items_count: int) -> str:
         f"👤 <b>Пользователь:</b> {user_line}\n"
         f"📚 <b>Колода:</b> <b>{html.escape(deck_title)}</b>\n"
         f"🎛 <b>Режим:</b> <b>{html.escape(mode_title)}</b>\n"
-        f"💰 <b>Цена:</b> <b>{html.escape(str(price))} {cur_emoji}</b> ({html.escape(currency)})\n"
+        f"💰 <b>Цена:</b> <b>{html.escape(str(price))} {currency_icon}</b> ({html.escape(currency)})\n"
         f"🃏 <b>Карт:</b> <b>{items_count}</b>\n"
         f"💬 <b>Комментарий:</b> {html.escape(comment)}"
     )
@@ -691,8 +691,8 @@ def _format_exchange_user_notice(
         moderator_html: str,
 ) -> str:
     batch_id = int(batch["batch_id"])
-    cur_emoji = cur_emoji(currency)
-    price_line = f"{price} {cur_emoji} ({html.escape(currency)})" if price is not None else f"— {cur_emoji} ({html.escape(currency)})"
+    currency_icon = cur_emoji(currency)
+    price_line = f"{price} {currency_icon} ({html.escape(currency)})" if price is not None else f"— {currency_icon} ({html.escape(currency)})"
     proof_line = "✅ Да" if has_proof else "❌ Нет"
 
     created_at = batch.get("created_at")
@@ -1138,10 +1138,10 @@ def format_exchange_approved_log(*,
 
     cur_print = (currency or "алмазы").strip()
     cur = cur_print.lower()
-    cur_emoji = cur_emoji(cur)
+    currency_icon = cur_emoji(cur)
 
     proof_line = "✅ Да" if has_proof else "❌ Нет"
-    price_line = f"{int(price)} {cur_emoji} ({tg_clean(cur_print)})" if price is not None else f"— {cur_emoji} ({tg_clean(cur_print)})"
+    price_line = f"{int(price)} {currency_icon} ({tg_clean(cur_print)})" if price is not None else f"— {currency_icon} ({tg_clean(cur_print)})"
 
     cmt = (comment or "").strip()
     if not cmt:

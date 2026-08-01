@@ -167,9 +167,9 @@ async def cmd_decktype(message: types.Message) -> None:
         await message.answer(f"Ошибка: {e}")
         return
 
-    deck_name = deck_name(deck, deck_id)
+    deck_title = deck_name(deck, deck_id)
     await message.answer(
-        f"✅ Тип колоды обновлён: <b>{deck_name}</b>\n"
+        f"✅ Тип колоды обновлён: <b>{deck_title}</b>\n"
         f"{before or '-'} → <b>{after}</b>",
         **SEND_HTML_KW,
     )
@@ -177,7 +177,7 @@ async def cmd_decktype(message: types.Message) -> None:
     await log_with_ctx(
         message,
         "<b>⚙️ Тип колоды</b>\n"
-        f"ID: {deck_id} {deck_name}\n"
+        f"ID: {deck_id} {deck_title}\n"
         f"{before or '-'} → <b>{after}</b>",
     )
 
@@ -228,10 +228,10 @@ async def fsm_deck_type(message: types.Message, state: FSMContext) -> None:
         return
 
     deck = await get_deck(deck_id)
-    deck_name = deck_name(deck, deck_id)
+    deck_title = deck_name(deck, deck_id)
 
     await message.answer(
-        f"✅ Тип колоды обновлён: <b>{deck_name}</b>\n"
+        f"✅ Тип колоды обновлён: <b>{deck_title}</b>\n"
         f"{before or '-'} → <b>{after}</b>",
         reply_markup=ReplyKeyboardRemove(),
         **SEND_HTML_KW,
@@ -240,7 +240,7 @@ async def fsm_deck_type(message: types.Message, state: FSMContext) -> None:
     await log_with_ctx(
         message,
         "<b>⚙️ Тип колоды</b>\n"
-        f"ID: {deck_id} {deck_name}\n"
+        f"ID: {deck_id} {deck_title}\n"
         f"{before or '-'} → <b>{after}</b>",
     )
     await state.clear()
