@@ -20,12 +20,14 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           keyboards = Path('bot/handlers/admin/helper/new/keyboards.py')
           source = keyboards.read_text(encoding='utf-8')
           start = source.index('def menu_keyboard(*rows: Any) -> ReplyKeyboardMarkup:')
-          end = source.index('\n\nfrom aiogram.types', start)
-          replacement = '''def menu_keyboard(*rows: Any) -> ReplyKeyboardMarkup:
+          end = source.index('from aiogram.types', start)
+          replacement = dedent('''\
+          def menu_keyboard(*rows: Any) -> ReplyKeyboardMarkup:
               """Build a reply keyboard without reflowing previously added rows."""
 
               kb = ReplyKeyboardBuilder()
@@ -33,18 +35,15 @@ jobs:
                   values = row if isinstance(row, (list, tuple)) else (row,)
                   kb.row(*(KeyboardButton(text=str(text)) for text in values))
               return kb.as_markup(resize_keyboard=True)
-          '''
-          replacement = '\n'.join(
-              line[10:] if line.startswith('          ') else line
-              for line in replacement.splitlines()
-          )
-          keyboards.write_text(source[:start] + replacement + source[end:], encoding='utf-8')
+          ''').rstrip()
+          keyboards.write_text(source[:start] + replacement + '\n\n' + source[end:], encoding='utf-8')
 
           tests = Path('tests/test_admin_handler_split.py')
           source = tests.read_text(encoding='utf-8')
           start = source.index('def _registered_handler_count(router: object) -> int:')
-          end = source.index('\n\ndef test_facades_reexport_feature_routers_without_own_handlers()', start)
-          replacement = '''def _registered_handler_count(router: object) -> int:
+          end = source.index('def test_facades_reexport', start)
+          replacement = dedent('''\
+          def _registered_handler_count(router: object) -> int:
               observers = getattr(router, "observers")
               return sum(len(observer.handlers) for observer in observers.values())
 
@@ -60,14 +59,14 @@ jobs:
                       for item in ast.walk(decorator)
                   )
               )
-          '''
-          replacement = '\n'.join(
-              line[10:] if line.startswith('          ') else line
-              for line in replacement.splitlines()
-          )
-          source = source[:start] + replacement + source[end:]
+          ''').rstrip()
+          source = source[:start] + replacement + '\n\n\n' + source[end:]
           old_assertion = '            assert _registered_handler_count(module.router) == len(names)\n'
-          new_assertion = '            assert _registered_handler_count(module.router) == (\n                _declared_handler_registration_count(feature)\n            )\n'
+          new_assertion = (
+              '            assert _registered_handler_count(module.router) == (\n'
+              '                _declared_handler_registration_count(feature)\n'
+              '            )\n'
+          )
           if source.count(old_assertion) != 1:
               raise SystemExit('unexpected handler registration assertion')
           tests.write_text(source.replace(old_assertion, new_assertion), encoding='utf-8')
