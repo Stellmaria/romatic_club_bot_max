@@ -30,6 +30,7 @@ from .common import (
     user_links_html,
     winner_threshold,
 )
+from bot.telegram.callback_parser import split_callback_data
 
 try:
     from bot.core.legacy_config import WINNER_NOTIFY_DEADLINE_MINUTES
@@ -439,7 +440,7 @@ async def send_notifications(
 async def cb_win_edit_amt(call: types.CallbackQuery) -> None:
     await call.answer()
     try:
-        _, _, auction_id_raw, winner_id_raw = call.data.split(":")
+        _, _, auction_id_raw, winner_id_raw = split_callback_data(call.data, ":")
         auction_id = int(auction_id_raw)
         winner_id = int(winner_id_raw)
     except Exception:
@@ -456,7 +457,7 @@ async def cb_win_edit_amt(call: types.CallbackQuery) -> None:
 async def cb_win_edit_user(call: types.CallbackQuery) -> None:
     await call.answer()
     try:
-        _, _, auction_id_raw, _ = call.data.split(":")
+        _, _, auction_id_raw, _ = split_callback_data(call.data, ":")
         auction_id = int(auction_id_raw)
     except Exception:
         await call.message.answer("❌ Неверные данные кнопки.")
@@ -539,7 +540,7 @@ async def handle_pending_edit(message: types.Message, bot: Bot) -> None:
 async def cb_winner_send(call: types.CallbackQuery, bot: Bot) -> None:
     await call.answer()
     try:
-        _, _, auction_id_raw, winner_id_raw = call.data.split(":")
+        _, _, auction_id_raw, winner_id_raw = split_callback_data(call.data, ":")
         auction_id = int(auction_id_raw)
         winner_id = int(winner_id_raw)
     except Exception:
@@ -580,7 +581,7 @@ async def cb_winner_send(call: types.CallbackQuery, bot: Bot) -> None:
 async def cb_winner_skip(call: types.CallbackQuery, bot: Bot) -> None:
     await call.answer("Рассылка отменена.")
     try:
-        _, _, auction_id_raw, winner_id_raw = call.data.split(":")
+        _, _, auction_id_raw, winner_id_raw = split_callback_data(call.data, ":")
         auction_id = int(auction_id_raw)
         winner_id = int(winner_id_raw)
     except Exception:

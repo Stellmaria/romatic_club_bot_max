@@ -12,6 +12,7 @@ from bot.core.settings import ADMINS_OWNERS
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from db.admin import list_admins
 from db.users import get_all_trusted_users, get_all_users
+from bot.telegram.callback_parser import split_callback_data
 
 
 router = Router(name=__name__)
@@ -215,7 +216,7 @@ async def show_trusted_list(message: Message) -> None:
 @admin_only
 async def paginate_admin_user_list(call: CallbackQuery) -> None:
     try:
-        _, kind, raw_page = str(call.data or "").split("|", 2)
+        _, kind, raw_page = split_callback_data(str(call.data or ""), "|", 2)
         page = int(raw_page)
     except (TypeError, ValueError):
         await call.answer("Некорректная кнопка.", show_alert=True)

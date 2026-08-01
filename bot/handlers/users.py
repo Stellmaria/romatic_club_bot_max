@@ -42,7 +42,9 @@ from db.legacy import (
     mark_user_private_chat_opened,
 )
 from bot.legacy_fsm import UserDeleteLotFSM, UserEditLotFSM, PublicWhoFSM
+from bot.telegram.callback_parser import split_callback_data
 
+from bot.telegram.boundary import escape_html
 router = Router()
 logger = logging.getLogger(__name__)
 UID_HEX_RE = re.compile(r"^[0-9a-f]{24}$", re.IGNORECASE)
@@ -185,7 +187,7 @@ async def user_profile(message: types.Message):
     status = "Подписан ✅" if sub else "Не подписан"
     await message.answer(
         f"<b>Профиль</b>\n"
-        f"👤 {message.from_user.full_name}\n"
+        f"👤 {escape_html(message.from_user.full_name)}\n"
         f"ID: <code>{message.from_user.id}</code>\n"
         f"Статус уведомлений: {status}",
         parse_mode="HTML",
@@ -538,7 +540,7 @@ def build_lot_keyboard(lot: dict, role: str = "user") -> InlineKeyboardMarkup:
 @router.callback_query(F.data.startswith("my_lots:folder|"))
 async def cb_my_lots_set_folder(call: types.CallbackQuery):
     try:
-        _, auction_id_str, folder = call.data.split("|", 2)
+        _, auction_id_str, folder = split_callback_data(call.data, "|", 2)
         auction_id = int(auction_id_str)
     except Exception:
         await call.answer("Некорректная кнопка", show_alert=True)
@@ -706,7 +708,7 @@ async def my_lots_cmd(message: types.Message):
 
 @router.callback_query(F.data.startswith("my_lots:view|"))
 async def cb_my_lots_view(call: types.CallbackQuery):
-    view = call.data.split("|", 1)[1]
+    view = split_callback_data(call.data, "|", 1)[1]
     uid = call.from_user.id
 
     if view == "actuals":
@@ -728,7 +730,7 @@ async def cb_my_lots_view(call: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("delete_lot|"))
 async def user_delete_lot(call: types.CallbackQuery, state: FSMContext):
-    lot_id = int(call.data.split("|")[1])
+    lot_id = int(split_callback_data(call.data, "|")[1])
     owner_service = await AuctionOwnerService.create()
     try:
         lot = await owner_service.get_owned(lot_id, owner_id=call.from_user.id)
@@ -789,7 +791,7 @@ async def cancel_delete_reason(message: types.Message, state: FSMContext):
 @router.callback_query(F.data.startswith("useredit|"))
 async def user_edit_lot_start(call: types.CallbackQuery, state: FSMContext):
     try:
-        lot_id = int(call.data.split("|")[1])
+        lot_id = int(split_callback_data(call.data, "|")[1])
         lot = await get_lot_by_id(lot_id)
 
         if not lot:
@@ -856,7 +858,7 @@ async def user_edit_currency(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(UserEditLotFSM.waiting_for_currency, F.data.startswith("user_edit_currency|"))
 async def process_currency_choice(call: types.CallbackQuery, state: FSMContext):
-    value = call.data.split("|", 1)[1]
+    value = split_callback_data(call.data, "|", 1)[1]
     await state.update_data(new_currency=value)
     await call.message.answer(
         f"Валюта выбрана: <b>{value}</b>\nТеперь введите новую стартовую цену (целое число):",
@@ -1136,7 +1138,7 @@ async def user_profile(message: types.Message):
 
     await message.answer(
         f"<b>Профиль</b>\n"
-        f"👤 {message.from_user.full_name}\n"
+        f"👤 {escape_html(message.from_user.full_name)}\n"
         f"ID: <code>{message.from_user.id}</code>\n"
         f"Статус уведомлений: {status}\n"
         f"Верификация: {ver_line}"

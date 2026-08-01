@@ -22,6 +22,7 @@ from bot.handlers.auction.exchange.catalog import (
 )
 from bot.telegram.states import PreviewScheduleFSM
 from db.auctions import get_auctions_by_date_with_owners
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -92,7 +93,7 @@ async def preview_schedule_navigation(
         return
 
     try:
-        _, raw_date = (call.data or "").split("|", 1)
+        _, raw_date = split_callback_data(call.data or "", "|", 1)
         parts = raw_date.split("-")
     except ValueError:
         await call.answer("Некорректная дата.", show_alert=True)

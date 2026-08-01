@@ -19,6 +19,7 @@ from db.legacy import (
     unban_user,
 )
 
+from bot.telegram.boundary import escape_html
 router = Router(name="auction_warnings")
 
 PRUNE_WARN_AGE_DAYS = 30
@@ -104,7 +105,7 @@ async def my_warnings(message: Message) -> None:
     warnings = await get_warnings_count(message.from_user.id)
     banned = await is_user_banned(message.from_user.id)
     await message.answer(
-        f"👤 @{message.from_user.username or 'user'}\n"
+        f"👤 @{escape_html(message.from_user.username or 'user')}\n"
         f"Ваших предупреждений: <b>{warnings}/4</b>\n"
         f"Статус: {'<b>ЗАБАНЕН</b> 🚫' if banned else 'Активен ✅'}",
         parse_mode="HTML",

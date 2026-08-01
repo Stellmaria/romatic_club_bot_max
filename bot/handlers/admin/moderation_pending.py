@@ -4,6 +4,7 @@ Handlers retain their relative order from the legacy ``moderation`` module.
 """
 
 from bot.handlers.admin.moderation_shared import *  # noqa: F403
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -11,7 +12,7 @@ router = Router(name=__name__)
 @router.callback_query(F.data.startswith("edit_pending_lot|"))
 @admin_only
 async def edit_pending_lot_menu(call: types.CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(auction_id=auction_id)
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="⚙️ Тип аука", callback_data=f"edit_pending_kind|{auction_id}")],
@@ -30,7 +31,7 @@ async def edit_pending_lot_menu(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(ApproveLotFSM.editing_pending_lot, F.data.startswith("edit_pending_kind|"))
 @admin_only
 async def edit_pending_kind(call: types.CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(auction_id=auction_id)
 
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
@@ -50,7 +51,7 @@ async def edit_pending_kind(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(ApproveLotFSM.editing_pending_lot, F.data.startswith("edit_pending_craft|"))
 @admin_only
 async def edit_pending_craft(call: types.CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(auction_id=auction_id)
 
     kb = types.InlineKeyboardMarkup(inline_keyboard=[
@@ -69,7 +70,7 @@ async def edit_pending_craft(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("pending_set_craft|"))
 @admin_only
 async def pending_set_craft(call: types.CallbackQuery, state: FSMContext):
-    _, raw, auction_id_raw = (call.data or "").split("|", 2)
+    _, raw, auction_id_raw = split_callback_data(call.data or "", "|", 2)
     auction_id = int(auction_id_raw)
 
     raw = raw.strip().lower()
@@ -112,7 +113,7 @@ async def pending_set_craft(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(ApproveLotFSM.editing_pending_lot, F.data.startswith("edit_pending_comment|"))
 @admin_only
 async def edit_pending_comment(call: types.CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(auction_id=auction_id)
 
     await call.message.answer("Введите комментарий (или '-' чтобы очистить):")
@@ -166,7 +167,7 @@ async def save_pending_comment(message: types.Message, state: FSMContext):
 @router.callback_query(F.data.startswith("pending_set_kind|"))
 @admin_only
 async def pending_set_kind(call: types.CallbackQuery, state: FSMContext):
-    _, kind, auction_id_raw = (call.data or "").split("|", 2)
+    _, kind, auction_id_raw = split_callback_data(call.data or "", "|", 2)
     auction_id = int(auction_id_raw)
 
     old_lot = await get_lot_by_id(auction_id)
@@ -201,7 +202,7 @@ async def pending_set_kind(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(ApproveLotFSM.editing_pending_lot, F.data.startswith("edit_pending_price|"))
 @admin_only
 async def edit_pending_price(call: types.CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(auction_id=auction_id)
 
     await call.message.answer("Введите новую стартовую цену (число):")
@@ -256,7 +257,7 @@ async def save_pending_price(message: types.Message, state: FSMContext):
 @router.callback_query(F.data.startswith("set_lot_photo|"))
 @admin_only
 async def set_lot_photo_from_lot(call: types.CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(auction_id=auction_id)
     await call.message.answer(
         "Пришли фото для лота. Предыдущее фото (если было) будет заменено.",
@@ -313,7 +314,7 @@ async def handle_uploaded_lot_not_photo(message: types.Message, state: FSMContex
 @router.callback_query(ApproveLotFSM.editing_pending_lot, F.data.startswith("edit_pending_currency|"))
 @admin_only
 async def edit_pending_currency(call: types.CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(auction_id=auction_id)
 
     kb = types.InlineKeyboardMarkup(inline_keyboard=[

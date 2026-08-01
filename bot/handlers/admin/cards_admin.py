@@ -11,6 +11,7 @@ from bot.handlers.admin.helper.user_helpers import is_card_num_exists
 from bot.core.legacy_config import ADMINS_OWNERS, ADMIN_SECRET
 from db.legacy import get_all_decks, log_audit_action, add_card
 from bot.legacy_fsm import AddCardFSM
+from bot.telegram.callback_parser import split_callback_data
 
 
 def register_cards_admin_handlers(router: Router):
@@ -46,7 +47,7 @@ def register_cards_admin_handlers(router: Router):
 
     @router.callback_query(AddCardFSM.waiting_for_deck, F.data.startswith("admin_deck_"))
     async def addcard_choose_deck(call: types.CallbackQuery, state: FSMContext):
-        deck_id = int(call.data.split("_")[-1])
+        deck_id = int(split_callback_data(call.data, "_")[-1])
         await state.update_data(deck_id=deck_id)
         await call.message.answer("Введи название карты:", reply_markup=back_keyboard())
         await state.set_state(AddCardFSM.waiting_for_card_name)
@@ -93,7 +94,7 @@ def register_cards_admin_handlers(router: Router):
 
     @router.callback_query(AddCardFSM.waiting_for_rarity, F.data.startswith("rarity|"))
     async def addcard_rarity_call(call: types.CallbackQuery, state: FSMContext):
-        rarity_value = call.data.split("|")[1]
+        rarity_value = split_callback_data(call.data, "|")[1]
         await state.update_data(rarity=rarity_value)
         await call.message.answer(ADD_CARD_FIELDS[5][1], reply_markup=back_keyboard())
         await state.set_state(AddCardFSM.waiting_for_story)

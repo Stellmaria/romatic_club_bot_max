@@ -6,6 +6,7 @@ Handlers retain their relative order from the legacy ``moderation`` module.
 from bot.handlers.admin.moderation_shared import *  # noqa: F403
 from bot.domain.auctions import currency_choices_label
 from bot.handlers.admin.helper.new.utils import auction_kind_label
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -19,7 +20,7 @@ async def schedule_command(message: types.Message, state: FSMContext):
 @router.callback_query(PreviewScheduleFSM.choosing_month, F.data.startswith("preview_schedule|"))
 @admin_only
 async def preview_schedule_month(call: types.CallbackQuery, state: FSMContext):
-    _, year_month = call.data.split("|")
+    _, year_month = split_callback_data(call.data, "|")
     try:
         year, month = map(int, year_month.split('-')[:2])
     except Exception as e:
@@ -37,7 +38,7 @@ async def preview_schedule_month(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(PreviewScheduleFSM.choosing_day, F.data.startswith("preview_schedule|"))
 @admin_only
 async def preview_schedule_day(call: types.CallbackQuery, state: FSMContext):
-    parts = call.data.split("|")
+    parts = split_callback_data(call.data, "|")
     try:
         date_part = parts[2] if (len(parts) == 3 and parts[2].count("-") == 2) \
             else parts[1] if (len(parts) == 2 and parts[1].count("-") == 2) \

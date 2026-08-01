@@ -76,6 +76,7 @@ from bot.features.auction_submission import (
     auction_currency_kb,
     log,
 )
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 submission_feature = router
@@ -164,7 +165,7 @@ async def auk_kind_locked(call: types.CallbackQuery) -> None:
 
 @router.callback_query(UserAddLotFSM.waiting_for_auction_kind, F.data.startswith("auk_kind:"))
 async def auk_kind_selected(call: types.CallbackQuery, state: FSMContext) -> None:
-    _, kind = call.data.split(":", 1)
+    _, kind = split_callback_data(call.data, ":", 1)
 
     try:
         selected_kind = AuctionKind.from_raw(kind)
@@ -874,7 +875,7 @@ async def cb_presets_back(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(StateFilter(UserAddLotFSM.waiting_for_deck), F.data.startswith("user_deck_"))
 async def user_choose_deck(call: types.CallbackQuery, state: FSMContext):
     # тут твоя старая логика, НО без ветки own_custom
-    deck_id = int(call.data.split("_")[2])
+    deck_id = int(split_callback_data(call.data, "_")[2])
     user_id = call.from_user.id
 
     if not await is_luxury_user(user_id):
@@ -940,7 +941,7 @@ async def user_choose_deck(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(StateFilter(UserAddLotFSM.waiting_for_card), F.data.startswith("user_card_"))
 async def user_choose_concrete_card(call: types.CallbackQuery, state: FSMContext):
-    card_id = int(call.data.split("_")[-1])
+    card_id = int(split_callback_data(call.data, "_")[-1])
     card = await get_card_by_id(card_id)
     if not card:
         await call.answer("Карта не найдена", show_alert=True)
@@ -976,7 +977,7 @@ async def user_choose_concrete_card(call: types.CallbackQuery, state: FSMContext
     StateFilter(UserAddLotFSM.waiting_for_card), F.data.startswith("user_all_deck_")
 )
 async def user_choose_all_deck(call: types.CallbackQuery, state: FSMContext):
-    deck_id = int(call.data.split("_")[-1])
+    deck_id = int(split_callback_data(call.data, "_")[-1])
     deck_type = None
     decks = await get_all_decks()
     for d in decks or []:
@@ -1731,7 +1732,7 @@ async def user_choose_subscription(call: types.CallbackQuery, state: FSMContext)
 )
 async def cb_subscription_period_selected(call: types.CallbackQuery, state: FSMContext):
     try:
-        _, plan, months_raw = call.data.split(":")
+        _, plan, months_raw = split_callback_data(call.data, ":")
         months = int(months_raw)
     except Exception:
         await call.answer("Некорректный срок подписки.", show_alert=True)

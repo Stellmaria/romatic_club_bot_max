@@ -7,6 +7,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton as
 
 from bot.auction_notify import CB_PREFIX
 from .market_fsm import MarketAddFSM
+from bot.telegram.callback_parser import split_callback_data
 
 CB_PREFIX = "mkt"
 router = Router(name="market_diamonds")
@@ -42,7 +43,7 @@ def kb_d_currency(selected: set[str]) -> InlineKeyboardMarkup:
 
 @router.callback_query(F.data.startswith(f"{CB_PREFIX}:dcur:"))
 async def cb_d_currency(call: CallbackQuery, state: FSMContext):
-    _, _, code = call.data.split(":")
+    _, _, code = split_callback_data(call.data, ":")
     data = await state.get_data()
     chosen = set(data.get("d_curs") or [])
     if code == "done":
@@ -104,7 +105,7 @@ def _render_d_tier_preview(state_data: dict) -> str:
 
 @router.callback_query(MarketAddFSM.D_TIER, F.data.startswith(f"{CB_PREFIX}:dt:"))
 async def cb_d_tier(call: CallbackQuery, state: FSMContext):
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     action = parts[2]
     step = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
 

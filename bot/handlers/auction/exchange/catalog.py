@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bot.telegram.callback_parser import split_callback_data
 
 """Exchange flow component extracted during refactoring phase 7."""
 
@@ -313,7 +314,7 @@ async def _q_exchange_whole_deck_count(deck_id: int) -> int:
 @admin_only
 async def ex_appr_deck(call: types.CallbackQuery):
     # ex_appr:deck:<deck_id>
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     deck_id = int(parts[2])
 
     cards = await _q_exchange_approved_cards_by_deck(deck_id)
@@ -385,7 +386,7 @@ def _kb_exchange_approved_whole_batches(deck_id: int, batch_ids: list[int], page
 @admin_only
 async def ex_appr_deck_whole(call: types.CallbackQuery):
     # ex_appr:deck_whole:<deck_id>:<page>
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     deck_id = int(parts[2])
     page = int(parts[3]) if len(parts) > 3 else 0
 
@@ -449,7 +450,7 @@ async def ex_view_deck(call: types.CallbackQuery):
     if await is_admin(call.from_user.id):
         raise SkipHandler
 
-    deck_id = int(call.data.split(":")[2])
+    deck_id = int(split_callback_data(call.data, ":")[2])
     await _render_exchange_deck(call, deck_id)
     await call.answer()
 
@@ -457,7 +458,7 @@ async def ex_view_deck(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("ex_view:deck:"))
 @admin_only
 async def ex_view_deck_admin(call: types.CallbackQuery):
-    deck_id = int(call.data.split(":")[2])
+    deck_id = int(split_callback_data(call.data, ":")[2])
     await _render_exchange_deck(call, deck_id)
     await call.answer()
 
@@ -480,7 +481,7 @@ async def _q_exchange_card_batches(deck_id: int, card_id: int, limit: int = 80) 
 @router.callback_query(F.data.startswith("ex_appr:card:"))
 @admin_only
 async def ex_appr_card(call: types.CallbackQuery):
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     deck_id = int(parts[2])
     card_id = int(parts[3])
     page = int(parts[4]) if len(parts) > 4 else 0
@@ -561,7 +562,7 @@ async def ex_appr_card(call: types.CallbackQuery):
 @admin_only
 async def ex_appr_lot_show(call: types.CallbackQuery):
     # ex_appr:lot:<deck_id>:<card_id>:<batch_id>
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     deck_id = int(parts[2])
     card_id = int(parts[3])
     batch_id = int(parts[4])
@@ -608,7 +609,7 @@ async def ex_appr_lot_show(call: types.CallbackQuery):
 @admin_only
 async def ex_appr_list_all(call: types.CallbackQuery):
     # ex_appr:list:all:<page>
-    page = int(call.data.split(":")[3])
+    page = int(split_callback_data(call.data, ":")[3])
     page = max(0, page)
     per_page = 12
 
@@ -672,7 +673,7 @@ async def ex_appr_list_all(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("ex_appr:list:card:"))
 @admin_only
 async def ex_appr_list_card(call: types.CallbackQuery):
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     deck_id = int(parts[3])
     card_id = int(parts[4])
     page = int(parts[5]) if len(parts) > 5 else 0
@@ -801,7 +802,7 @@ async def ex_appr_list_card(call: types.CallbackQuery):
 @router.callback_query(F.data.startswith("ex_del:"))
 @admin_only
 async def ex_appr_delete(call: types.CallbackQuery):
-    batch_id = int(call.data.split(":")[1])
+    batch_id = int(split_callback_data(call.data, ":")[1])
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
         await call.answer("Лот не найден.", show_alert=True)
@@ -845,7 +846,7 @@ async def ex_appr_delete(call: types.CallbackQuery):
 async def ex_appr_edit_entry(call: types.CallbackQuery, state: FSMContext):
     # точка входа в редактор принятой биржи
     # (дальше ты уже делал FSM на pending: цену/валюту/коммент/пруф/режим и т.д.)
-    batch_id = int(call.data.split(":")[1])
+    batch_id = int(split_callback_data(call.data, ":")[1])
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
         await call.answer("Лот не найден.", show_alert=True)
@@ -914,7 +915,7 @@ async def _q_exchange_batch_items_count(batch_id: int) -> int:
 
 @router.callback_query(F.data.startswith("ex_view:card_list:"))
 async def ex_view_card_list(call: types.CallbackQuery):
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     if len(parts) < 4:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -1024,7 +1025,7 @@ async def ex_view_decks(call: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("ex_view:deck_whole:"))
 async def ex_view_deck_whole(call: types.CallbackQuery):
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     if len(parts) < 3:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -1060,7 +1061,7 @@ async def ex_view_deck_whole(call: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("ex_view:card:"))
 async def ex_view_card(call: types.CallbackQuery):
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     deck_id = int(parts[2])
     card_id = int(parts[3])
     page = int(parts[4]) if len(parts) >= 5 else 0
@@ -1090,7 +1091,7 @@ async def ex_view_card(call: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("ex_view:card_dump:"))
 async def ex_view_card_dump(call: types.CallbackQuery):
-    parts = call.data.split(":")
+    parts = split_callback_data(call.data, ":")
     deck_id = int(parts[2])
     card_id = int(parts[3])
 

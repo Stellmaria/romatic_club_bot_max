@@ -34,6 +34,7 @@ from db.schedule_setup import (
     upsert_deck_emoji,
     upsert_emoji_asset,
 )
+from bot.telegram.callback_parser import rsplit_callback_data
 
 router = Router(name=__name__)
 
@@ -229,7 +230,7 @@ async def _set_schedule_target(message: Message) -> None:
 @router.callback_query(F.data.startswith("schcard:ok:"))
 @admin_only
 async def confirm_schedule_card(call: CallbackQuery) -> None:
-    card_id = int(call.data.rsplit(":", 1)[1])
+    card_id = int(rsplit_callback_data(call.data, ":", 1)[1])
     card = await get_card_for_setup(card_id)
     if not card or not card.get("card_emoji_id"):
         await call.answer("У карты нет сохранённого Premium-эмодзи.", show_alert=True)
@@ -252,7 +253,7 @@ async def confirm_schedule_card(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("schcard:econ:"))
 @admin_only
 async def edit_schedule_card_economy(call: CallbackQuery) -> None:
-    card_id = int(call.data.rsplit(":", 1)[1])
+    card_id = int(rsplit_callback_data(call.data, ":", 1)[1])
     card = await get_card_for_setup(card_id)
     if not card:
         await call.answer("Карточка не найдена.", show_alert=True)
@@ -276,7 +277,7 @@ async def edit_schedule_card_economy(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("schcard:emoji:"))
 @admin_only
 async def replace_schedule_card_emoji(call: CallbackQuery) -> None:
-    card_id = int(call.data.rsplit(":", 1)[1])
+    card_id = int(rsplit_callback_data(call.data, ":", 1)[1])
     card = await get_card_for_setup(card_id)
     if not card:
         await call.answer("Карточка не найдена.", show_alert=True)

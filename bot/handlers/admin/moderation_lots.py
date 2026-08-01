@@ -4,13 +4,14 @@ Handlers retain their relative order from the legacy ``moderation`` module.
 """
 
 from bot.handlers.admin.moderation_shared import *  # noqa: F403
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
 
 @router.callback_query(F.data.startswith("back_to_"))
 async def fsm_back_handler(call: types.CallbackQuery, state: FSMContext):
-    data = call.data.split("|")
+    data = split_callback_data(call.data, "|")
     if len(data) < 2:
         await call.answer("Некорректный возврат!", show_alert=True)
         return
@@ -237,7 +238,7 @@ async def remove_admin_cmd(message: types.Message, state: FSMContext = None, *ar
 
 @router.callback_query(ApproveLotFSM.choosing_month, F.data.startswith("choose_month|"))
 async def choose_month(call: types.CallbackQuery, state: FSMContext):
-    _, auction_id, year_month = call.data.split("|")
+    _, auction_id, year_month = split_callback_data(call.data, "|")
     try:
         year, month = map(int, year_month.split('-')[:2])
     except Exception as e:
@@ -256,7 +257,7 @@ async def choose_month(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(ApproveLotFSM.choosing_day, F.data.startswith("choose_day|"))
 async def choose_day(call: types.CallbackQuery, state: FSMContext):
-    _, auction_id, year_month_day = call.data.split("|")
+    _, auction_id, year_month_day = split_callback_data(call.data, "|")
     year, month, day = map(int, year_month_day.split('-'))
     selected_date = date(year, month, day)
     free_slots, is_luxury, schedule_str, lot, auctions = await get_free_slots_and_schedule_for_lot(int(auction_id),
@@ -285,7 +286,7 @@ async def choose_day(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(ApproveLotFSM.choosing_time, F.data.startswith("choose_time|"))
 async def choose_time(call: types.CallbackQuery, state: FSMContext):
-    _, auction_id, iso_str = call.data.split("|")
+    _, auction_id, iso_str = split_callback_data(call.data, "|")
     auction_id = int(auction_id)
     selected_time = to_moscow(datetime.fromisoformat(iso_str))
     end_time = auction_end_at_59(selected_time)
@@ -339,7 +340,7 @@ async def choose_time(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(ApproveLotFSM.confirming, F.data.startswith("choose_time_back|"))
 async def legacy_choose_time_back(call: types.CallbackQuery, state: FSMContext):
     # поддержка старых сообщений, где назад было choose_time_back|{auction_id}
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 2:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -382,7 +383,7 @@ async def legacy_choose_time_back(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("confirm_lot|"))
 @admin_only
 async def handle_confirm_lot(call: types.CallbackQuery, state: FSMContext):
-    parts = call.data.split("|")
+    parts = split_callback_data(call.data, "|")
     if len(parts) == 2:
         auction_id = int(parts[1])
         lot = await get_lot_by_id(auction_id)
@@ -569,7 +570,7 @@ async def handle_confirm_lot(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("reject_lot|"))
 @admin_only
 async def start_reject_lot(call: types.CallbackQuery, state: FSMContext):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(auction_id=auction_id)
     await call.message.answer(MSG_REASON_REJECT_ADD)
     await state.set_state(ModActionFSM.waiting_for_reject_pending_reason)
@@ -578,7 +579,7 @@ async def start_reject_lot(call: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("show_proof|"))
 async def show_proof_photo(call: types.CallbackQuery):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     lot = await get_lot_by_id(auction_id)
     proof_photo_id = lot.get("proof_photo_id")
     if proof_photo_id:
@@ -595,7 +596,7 @@ async def show_proof_photo(call: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("back_to_lot|"))
 async def back_to_lot(call: types.CallbackQuery):
-    auction_id = int(call.data.split("|")[1])
+    auction_id = int(split_callback_data(call.data, "|")[1])
     lot = await get_lot_by_id(auction_id)
     owners = await get_lot_owners_with_levels(call.bot, auction_id)
     text = format_pending_lot(lot, owners)
@@ -617,7 +618,7 @@ async def show_delete_requests_cmd_command(message: types.Message):
 @router.callback_query(F.data.startswith("approve_delete|"))
 @admin_only
 async def approve_delete_request(call: types.CallbackQuery, state: FSMContext):
-    req_id = int(call.data.split("|")[1])
+    req_id = int(split_callback_data(call.data, "|")[1])
     row = await get_delete_request(req_id)
     if not row:
         await call.answer("Заявка не найдена или уже обработана.", show_alert=True)
@@ -689,7 +690,7 @@ async def approve_delete_request(call: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("reject_delete|"))
 @admin_only
 async def reject_delete_request(call: types.CallbackQuery, state: FSMContext):
-    request_id = int(call.data.split("|")[1])
+    request_id = int(split_callback_data(call.data, "|")[1])
     await state.update_data(request_id=request_id)
     await call.message.answer(MSG_REASON_REJECT_DELETE)
     await state.set_state(ModActionFSM.waiting_for_reject_delete_reason)

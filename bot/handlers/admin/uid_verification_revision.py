@@ -21,6 +21,7 @@ from bot.services.uid_verification import (
     set_uid_verification_request_revision,
 )
 from bot.telegram.states import UIDVerificationRevisionFSM
+from bot.telegram.callback_parser import split_callback_data
 
 
 router = Router(name=__name__)
@@ -29,7 +30,7 @@ router = Router(name=__name__)
 @router.callback_query(F.data.startswith("uidv|rev|"))
 @admin_only
 async def uidv_revision_start(call: types.CallbackQuery, state: FSMContext) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -56,7 +57,7 @@ async def uidv_revision_start(call: types.CallbackQuery, state: FSMContext) -> N
 @router.callback_query(F.data.startswith("uidv|rev_toggle|"))
 @admin_only
 async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
 
     # поддержка обоих форматов:
     # новый: uidv|rev_toggle|<id>|<flag>  (len=4)
@@ -101,7 +102,7 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
 @router.callback_query(F.data.startswith("uidv|rev_reason|"))
 @admin_only
 async def uidv_revision_reason(call: types.CallbackQuery, state: FSMContext) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
@@ -139,7 +140,7 @@ async def uidv_revision_reason_msg(message: types.Message, state: FSMContext) ->
 @router.callback_query(F.data.startswith("uidv|rev_send|"))
 @admin_only
 async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    parts = (call.data or "").split("|")
+    parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await call.answer("Некорректная кнопка.", show_alert=True)
         return

@@ -88,6 +88,8 @@ jobs:
         run: python -m ruff check .
       - name: Persistence exception contract
         run: python scripts/check_persistence_exceptions.py
+      - name: Telegram boundary contract
+        run: python scripts/check_telegram_boundary.py
       - name: Unit and regression tests
         env:
           BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA

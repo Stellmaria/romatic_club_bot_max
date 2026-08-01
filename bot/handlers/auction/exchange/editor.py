@@ -16,6 +16,7 @@ from bot.domain.auctions import (
 from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.exchange_editor import ApprovedExchangeEditorService
+from bot.telegram.callback_parser import split_callback_data
 
 
 router = Router(name="auction_exchange_editor")
@@ -226,7 +227,7 @@ async def exchange_edit_mode(call: types.CallbackQuery) -> None:
 @admin_only
 async def exchange_edit_mode_set(call: types.CallbackQuery) -> None:
     try:
-        _, batch_raw, mode = str(call.data or "").split(":", 2)
+        _, batch_raw, mode = split_callback_data(str(call.data or ""), ":", 2)
         batch_id = int(batch_raw)
         service = await ApprovedExchangeEditorService.create()
         before = await _ensure_editable(service, batch_id)
@@ -329,7 +330,7 @@ async def exchange_edit_currency(call: types.CallbackQuery) -> None:
 @admin_only
 async def exchange_edit_currency_set(call: types.CallbackQuery) -> None:
     try:
-        _, batch_raw, currency = str(call.data or "").split(":", 2)
+        _, batch_raw, currency = split_callback_data(str(call.data or ""), ":", 2)
         batch_id = int(batch_raw)
         service = await ApprovedExchangeEditorService.create()
         before = await _ensure_editable(service, batch_id)

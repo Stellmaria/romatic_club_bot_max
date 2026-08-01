@@ -21,6 +21,7 @@ from db.legacy import get_print_win_missed_for_day, get_exchange_batches_for_car
     get_exchange_cards_for_batch, get_exchange_batch_by_id, \
     get_autobid_action_by_msg_id, _is_user_uid_verified, _users_uid_verification_counts
 from bot.legacy_fsm import PrintExStates
+from bot.telegram.callback_parser import rsplit_callback_data, split_callback_data
 
 MSK = tz.gettz("Europe/Moscow")
 from aiogram import Bot
@@ -2682,7 +2683,7 @@ async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
         await call.answer("Нет доступа.", show_alert=True)
         return
 
-    _, action, bid_s = (call.data or "").split("|", 2)
+    _, action, bid_s = split_callback_data(call.data or "", "|", 2)
     batch_id = int(bid_s)
 
     batch = await get_exchange_batch_by_id(batch_id)
@@ -2867,7 +2868,7 @@ async def cmd_print_win(message: Message, bot: Bot):
 async def cb_win_edit_amt(call: types.CallbackQuery):
     await call.answer()
     try:
-        _, _, aid_s, wid_s = call.data.split(":")
+        _, _, aid_s, wid_s = split_callback_data(call.data, ":")
         auction_id = int(aid_s);
         winner_id = int(wid_s)
     except Exception:
@@ -2882,7 +2883,7 @@ async def cb_win_edit_amt(call: types.CallbackQuery):
 async def cb_win_edit_user(call: types.CallbackQuery):
     await call.answer()
     try:
-        _, _, aid_s, _ = call.data.split(":")
+        _, _, aid_s, _ = split_callback_data(call.data, ":")
         auction_id = int(aid_s)
     except Exception:
         await call.message.answer("❌ Неверные данные кнопки.");
@@ -3050,7 +3051,7 @@ async def _post_rules_under_lot(bot: Bot, auction_id: int, retries: int = 5, del
 async def cb_winner_send(call: types.CallbackQuery, bot: Bot):
     await call.answer()
     try:
-        _, _, aid_s, wid_s = call.data.split(":")
+        _, _, aid_s, wid_s = split_callback_data(call.data, ":")
         auction_id = int(aid_s)
         winner_id = int(wid_s)
     except Exception:
@@ -3100,7 +3101,7 @@ async def cb_winner_send(call: types.CallbackQuery, bot: Bot):
 async def cb_winner_skip(call: types.CallbackQuery, bot: Bot):
     await call.answer("Рассылка отменена.")
     try:
-        _, _, aid_s, wid_s = call.data.split(":")
+        _, _, aid_s, wid_s = split_callback_data(call.data, ":")
         auction_id = int(aid_s);
         winner_id = int(wid_s)
     except Exception:
@@ -3599,7 +3600,7 @@ async def cb_print_win_send_winner(call: types.CallbackQuery, bot: Bot):
 async def cb_print_win_send_both(call: types.CallbackQuery, bot: Bot):
     await call.answer()
     try:
-        auction_id = int(call.data.rsplit(":", 1)[1])
+        auction_id = int(rsplit_callback_data(call.data, ":", 1)[1])
     except Exception:
         await call.answer("❌ Неверные данные", show_alert=True)
         return
@@ -3819,7 +3820,7 @@ async def build_thanks_kb(any_id: int, moderator_tag: str) -> InlineKeyboardMark
 
 @router.callback_query(F.data.startswith("win:thanks:"))
 async def cb_win_thanks(call: types.CallbackQuery) -> None:
-    parts = (call.data or "").split(":")
+    parts = split_callback_data(call.data or "", ":")
     if len(parts) < 4:
         try:
             await call.answer("Кривые данные.", show_alert=True)

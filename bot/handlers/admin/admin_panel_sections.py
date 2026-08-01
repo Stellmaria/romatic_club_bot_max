@@ -4,6 +4,7 @@ Handlers retain their relative order from the legacy ``admin_panel`` module.
 """
 
 from bot.handlers.admin.admin_panel_shared import *  # noqa: F403
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -24,7 +25,7 @@ async def show_decks_for_cards(message: Message):
 @router.callback_query(F.data.startswith("show_deck_"))
 @admin_only
 async def show_cards_in_deck(call: CallbackQuery):
-    deck_id = int(call.data.split("_")[-1])
+    deck_id = int(split_callback_data(call.data, "_")[-1])
     cards = await get_cards_by_deck_id(deck_id)
     if not cards:
         await call.message.answer("В этой колоде пока нет ни одной карты.")
@@ -149,7 +150,7 @@ async def stats_full_schedule(message: Message, state: FSMContext):
 @admin_only
 async def stats_schedule_set_month(call: CallbackQuery):
     try:
-        _, ym = (call.data or "").split("|", 1)
+        _, ym = split_callback_data(call.data or "", "|", 1)
         year_s, month_s = ym.split("-", 1)
         year = int(year_s)
         month = int(month_s)

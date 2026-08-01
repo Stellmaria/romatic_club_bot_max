@@ -63,6 +63,7 @@ from bot.handlers.admin.helper.new.card_economy_shared import (
     _safe_edit,
     _subs_word,
 )
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name="admin_card_economy_subscriptions")
 
@@ -366,7 +367,7 @@ async def subs_confirm_callback(call: types.CallbackQuery) -> None:
     """Обрабатывает подтверждение от пользователя."""
     bot = call.message.bot
     try:
-        _, action, sid = call.data.split(":")
+        _, action, sid = split_callback_data(call.data, ":")
         uid = int(sid)
     except Exception:
         await call.answer("Неверные данные.", show_alert=False)

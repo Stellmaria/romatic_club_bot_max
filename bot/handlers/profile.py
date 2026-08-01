@@ -8,6 +8,7 @@ from aiogram.filters import Command
 from db.legacy import get_user_verified_uid, is_subscribed
 
 
+from bot.telegram.boundary import escape_html
 router = Router(name="user-profile")
 
 
@@ -30,7 +31,7 @@ async def user_profile(message: types.Message) -> None:
 
     await message.answer(
         "<b>Профиль</b>\n"
-        f"👤 {message.from_user.full_name}\n"
+        f"👤 {escape_html(message.from_user.full_name)}\n"
         f"ID: <code>{message.from_user.id}</code>\n"
         f"Статус уведомлений: {notification_status}\n"
         f"Верификация: {verification}"

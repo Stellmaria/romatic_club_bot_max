@@ -1,4 +1,5 @@
 from __future__ import annotations
+from bot.telegram.callback_parser import split_callback_data
 
 """Exchange flow component extracted during refactoring phase 7."""
 
@@ -53,7 +54,7 @@ from .notifications import (
 
 @router.callback_query(ExchangeFSM.waiting_for_deck, F.data.startswith("ex_deck:"))
 async def ex_deck_selected(call: types.CallbackQuery, state: FSMContext) -> None:
-    deck_id = int(call.data.split(":", 1)[1])
+    deck_id = int(split_callback_data(call.data, ":", 1)[1])
     if deck_id not in await _get_exchange_deck_ids():
         await call.answer("Эта колода недоступна для биржи.", show_alert=True)
         return
@@ -813,7 +814,7 @@ async def addlot_craft_uid_help(call: CallbackQuery):
 
 @router.callback_query(StateFilter(UserAddLotFSM.waiting_for_craft_uid), F.data.startswith("craft_uid:"))
 async def addlot_craft_uid_answer(call: CallbackQuery, state: FSMContext):
-    raw = (call.data or "").split(":", 1)[-1].strip().lower()
+    raw = split_callback_data(call.data or "", ":", 1)[-1].strip().lower()
     craft_ok = raw in {"yes", "1", "true", "да"}
 
     await state.update_data(craft_uid_possible=craft_ok)
@@ -853,7 +854,7 @@ async def addlot_craft_uid_answer(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(ExchangeFSM.waiting_for_copies, F.data.startswith("ex_copies:"))
 async def ex_copies_selected(call: CallbackQuery, state: FSMContext) -> None:
-    payload = (call.data or "").split(":", 1)[1].strip()
+    payload = split_callback_data(call.data or "", ":", 1)[1].strip()
 
     if payload == "other":
         await call.message.answer("Введи число (например 2). Минимум 1, максимум 50.")

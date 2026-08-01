@@ -4,6 +4,7 @@ Handlers retain their relative order from the legacy ``admin_panel`` module.
 """
 
 from bot.handlers.admin.admin_panel_shared import *  # noqa: F403
+from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
 
@@ -161,7 +162,7 @@ async def cmd_print_ex(message: Message):
 @router.callback_query(F.data.startswith(f"{PEX_PREFIX}|"))
 @admin_only
 async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    _, bid_s, action = (call.data or "").split("|", 2)
+    _, bid_s, action = split_callback_data(call.data or "", "|", 2)
     batch_id = int(bid_s)
     admin_id = int(call.from_user.id)
 
@@ -445,7 +446,7 @@ async def ex_back_to_moderation(call: CallbackQuery):
 @router.callback_query(F.data.startswith(f"{EX1_APPROVE}|"))
 @admin_only
 async def ex1_approve(call: CallbackQuery):
-    batch_id = int((call.data or "").split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data or "", "|", 1)[1])
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
         await call.answer("Заявка уже не найдена.", show_alert=True)
@@ -504,7 +505,7 @@ async def ex1_approve(call: CallbackQuery):
 @router.callback_query(F.data.startswith(f"{EX1_DELETE}|"))
 @admin_only
 async def ex1_delete_ask(call: CallbackQuery):
-    batch_id = int((call.data or "").split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data or "", "|", 1)[1])
     await call.answer()
     try:
         await call.message.edit_reply_markup(reply_markup=_kb_ex1_delete_confirm(batch_id))
@@ -515,7 +516,7 @@ async def ex1_delete_ask(call: CallbackQuery):
 @router.callback_query(F.data.startswith(f"{EX1_DEL_NO}|"))
 @admin_only
 async def ex1_delete_no(call: CallbackQuery):
-    batch_id = int((call.data or "").split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data or "", "|", 1)[1])
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
         await call.answer("Заявка уже не найдена.", show_alert=True)
@@ -534,7 +535,7 @@ async def ex1_delete_no(call: CallbackQuery):
 @router.callback_query(F.data.startswith(f"{EX1_DEL_YES}|"))
 @admin_only
 async def ex1_delete_yes(call: CallbackQuery):
-    batch_id = int((call.data or "").split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data or "", "|", 1)[1])
     batch = await get_exchange_batch_by_id(batch_id)
     if not batch:
         await call.answer("Заявка уже не найдена.", show_alert=True)
@@ -597,7 +598,7 @@ async def ex1_delete_yes(call: CallbackQuery):
 @router.callback_query(F.data.startswith(f"{EX1_REJECT}|"))
 @admin_only
 async def ex1_reject_start(call: CallbackQuery, state: FSMContext):
-    batch_id = int((call.data or "").split("|", 1)[1])
+    batch_id = int(split_callback_data(call.data or "", "|", 1)[1])
     await state.update_data(
         ex1_reject_batch_id=batch_id,
         ex1_origin_chat_id=call.message.chat.id,
