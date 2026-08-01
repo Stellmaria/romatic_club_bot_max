@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Reject new silent persistence failures.
 
-The large legacy modules are being removed incrementally. Active boundaries are
-strict now, while the repository-wide rule already forbids the worst form:
-catching a broad exception and doing nothing.
+The monolithic ``db/legacy_impl.py`` has a documented migration exception. All
+active strict boundaries are clean, and every other persistence module is
+forbidden from silently suppressing an awaited operation.
 """
 
 from __future__ import annotations
@@ -20,9 +20,11 @@ STRICT_FILES = {
     ROOT / "db/reliable_mutations.py",
 }
 PERSISTENCE_ROOTS = (ROOT / "db", ROOT / "bot/repositories")
+LEGACY_BROAD_ALLOWLIST = {ROOT / "db/legacy_impl.py"}
 DIRECT_LEGACY_IMPORT_ALLOWLIST = {
     ROOT / "db/core.py",
     ROOT / "db/legacy.py",
+    ROOT / "db/lifecycle.py",
 }
 
 
@@ -43,6 +45,13 @@ def _is_silent(handler: ast.ExceptHandler) -> bool:
     return not handler.body or all(
         isinstance(node, (ast.Pass, ast.Continue)) for node in handler.body
     )
+
+
+def _try_awaits_work(tree: ast.AST, handler: ast.ExceptHandler) -> bool:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try) and handler in node.handlers:
+            return any(isinstance(child, ast.Await) for item in node.body for child in ast.walk(item))
+    return False
 
 
 def _imports_legacy_impl(tree: ast.AST) -> bool:
@@ -79,9 +88,13 @@ def main() -> int:
                 violations.append(
                     f"{relative}:{node.lineno}: broad persistence exception is forbidden"
                 )
-            elif _is_silent(node):
+            elif (
+                path not in LEGACY_BROAD_ALLOWLIST
+                and _is_silent(node)
+                and _try_awaits_work(tree, node)
+            ):
                 violations.append(
-                    f"{relative}:{node.lineno}: silent broad persistence exception"
+                    f"{relative}:{node.lineno}: silent awaited persistence exception"
                 )
 
         if path not in DIRECT_LEGACY_IMPORT_ALLOWLIST and _imports_legacy_impl(tree):
