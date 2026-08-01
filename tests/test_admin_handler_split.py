@@ -60,6 +60,19 @@ def _registered_handler_count(router: object) -> int:
     return sum(len(observer.handlers) for observer in observers.values())
 
 
+def _declared_handler_registration_count(module: str) -> int:
+    return sum(
+        1
+        for node in _tree(module).body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for decorator in node.decorator_list
+        if any(
+            isinstance(item, ast.Name) and item.id == "router"
+            for item in ast.walk(decorator)
+        )
+    )
+
+
 def test_admin_facades_compose_each_feature_once_in_priority_order() -> None:
     for facade, feature_names in SPLITS.items():
         imported = importlib.import_module(f"bot.handlers.admin.{facade}")
@@ -88,7 +101,9 @@ def test_each_feature_router_owns_handlers_and_facade_reexports_them() -> None:
             module = importlib.import_module(f"bot.handlers.admin.{feature}")
             names = _decorated_handlers(feature)
             assert names, f"{feature} has no adapter behavior"
-            assert _registered_handler_count(module.router) == len(names)
+            assert _registered_handler_count(module.router) == (
+                _declared_handler_registration_count(feature)
+            )
             all_handler_names.extend(names)
 
         assert len(all_handler_names) == len(set(all_handler_names))
