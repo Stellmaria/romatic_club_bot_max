@@ -10,14 +10,20 @@ ROOT = Path(__file__).resolve().parents[1]
 DB_MODULES = (
     "core",
     "users",
+    "user_delivery",
     "auctions",
+    "auction_lifecycle_queries",
+    "auction_mutations",
+    "auction_id_stats",
     "admin",
     "cards",
+    "schedule_queries",
     "subscriptions",
     "market",
     "exchange",
     "posts",
     "uid",
+    "legacy_logging",
 )
 
 
@@ -70,7 +76,10 @@ def test_every_in_repository_legacy_import_is_still_available() -> None:
     for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom) or node.module != "db.db":
+            if (
+                not isinstance(node, ast.ImportFrom)
+                or node.module not in {"db.db", "db.legacy"}
+            ):
                 continue
             for alias in node.names:
                 if alias.name != "*" and not hasattr(facade, alias.name):
