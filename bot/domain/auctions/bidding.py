@@ -27,7 +27,7 @@ def auction_bidding_closes_at(end_time: datetime) -> datetime:
     """Return the exclusive deadline after the displayed ending minute.
 
     A displayed end time of 18:30 accepts bids through 18:30:59.999999 and
-    closes at 18:31:00.  Stored seconds are deliberately ignored because the
+    closes at 18:31:00. Stored seconds are deliberately ignored because the
     public contract is minute-based.
     """
 
@@ -39,10 +39,14 @@ def comparison_multiplier(currency: Currency) -> int:
 
 
 def comparison_units(amount: int, currency: Currency) -> int:
+    """Convert a bid to diamond-equivalent comparison units."""
+
     return int(amount) * comparison_multiplier(currency)
 
 
 def amount_from_comparison_units(units: int, currency: Currency) -> int:
+    """Convert comparison units to the greatest valid amount in a currency."""
+
     amount = max(0, int(units)) // comparison_multiplier(currency)
     step = currency.bid_step
     return amount - amount % step
@@ -54,7 +58,13 @@ def _currency_from_marker(marker: str | None) -> Currency | None:
     value = marker.strip().lower()
     if value.startswith("алмаз") or value.startswith("diamond") or "💎" in value:
         return Currency.DIAMONDS
-    if value.startswith("ча") or value.startswith("cup") or value == "tea" or "🍵" in value or "☕" in value:
+    if (
+        value.startswith("ча")
+        or value.startswith("cup")
+        or value == "tea"
+        or "🍵" in value
+        or "☕" in value
+    ):
         return Currency.CUPS
     return None
 
@@ -98,6 +108,32 @@ def parse_bid_offer(
     return BidOffer(amount=amount, currency=selected)
 
 
+def reverse_maximum_for_currency(
+    *,
+    currency: Currency,
+    start_price: int,
+    base_currency: Currency,
+    current_best_units: int | None,
+) -> int | None:
+    """Return the next reverse-auction maximum in the selected currency.
+
+    ``None`` is returned only for legacy reverse lots created before a starting
+    ceiling existed and which do not yet have a bid.
+    """
+
+    ceiling_units = comparison_units(int(start_price), base_currency)
+    if current_best_units is None:
+        if ceiling_units <= 0:
+            return None
+        maximum_units = ceiling_units
+    else:
+        maximum_units = int(current_best_units) - comparison_units(
+            currency.bid_step,
+            currency,
+        )
+    return amount_from_comparison_units(maximum_units, currency)
+
+
 def validate_reverse_offer(
     *,
     amount: int,
@@ -113,16 +149,16 @@ def validate_reverse_offer(
     if step > 1 and amount_i % step:
         raise BidStepError(amount=amount_i, start_price=0, step=step)
 
-    ceiling_units = comparison_units(int(start_price), base_currency)
-    if ceiling_units <= 0:
-        raise BidTooHigh(maximum=0, current_best=None)
-
-    if current_best_units is None:
-        maximum_units = ceiling_units
-    else:
-        maximum_units = int(current_best_units) - comparison_units(step, currency)
-
-    maximum = amount_from_comparison_units(maximum_units, currency)
+    maximum = reverse_maximum_for_currency(
+        currency=currency,
+        start_price=start_price,
+        base_currency=base_currency,
+        current_best_units=current_best_units,
+    )
+    if maximum is None:
+        # Compatibility for already scheduled reverse lots created when the UI
+        # stored start_price=0. New reverse lots are required to have a ceiling.
+        return amount_i
     if amount_i <= 0 or maximum <= 0 or amount_i > maximum:
         raise BidTooHigh(maximum=max(0, maximum), current_best=current_best_units)
     return maximum
