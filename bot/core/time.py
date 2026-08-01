@@ -17,7 +17,7 @@ def ensure_utc(value: datetime, *, assume_tz: tzinfo = MOSCOW) -> datetime:
     """Normalize a datetime to UTC.
 
     Telegram callbacks created before Phase 5 contain naive Moscow wall-clock
-    values.  Treat those values as Moscow time during the transition; aware
+    values. Treat those values as Moscow time during the transition; aware
     values retain their actual instant.
     """
 
@@ -29,17 +29,17 @@ def ensure_utc(value: datetime, *, assume_tz: tzinfo = MOSCOW) -> datetime:
 
 
 def auction_end_at_59(start_time: datetime) -> datetime:
-    """Return the last accepted second of a 30-minute auction slot.
+    """Return the exclusive end boundary of a 30-minute auction slot.
 
-    The displayed slot ``22:00–22:30`` accepts bids through ``22:30:59``.
-    Seconds and microseconds from callback payloads must not leak into the
-    persisted deadline.
+    The historical function name is retained for compatibility. A displayed
+    slot ``22:00–22:30`` accepts bids strictly before ``22:30:00``; it does not
+    extend the public deadline to ``22:30:59``.
     """
 
     if not isinstance(start_time, datetime):
         raise TypeError("start_time must be a datetime")
     normalized_start = start_time.replace(second=0, microsecond=0)
-    return (normalized_start + timedelta(minutes=30)).replace(second=59, microsecond=0)
+    return normalized_start + timedelta(minutes=30)
 
 
 def to_moscow(value: datetime) -> datetime:
