@@ -16,6 +16,7 @@ BRANCH="${ROMATIC_DEPLOY_BRANCH:-main}"
 TARGET_OVERRIDE="${ROMATIC_DEPLOY_TARGET_SHA:-}"
 HEALTH_ATTEMPTS="${ROMATIC_HEALTH_ATTEMPTS:-60}"
 HEALTH_INTERVAL="${ROMATIC_HEALTH_INTERVAL:-3}"
+HEALTH_STABLE_POLLS="${ROMATIC_HEALTH_STABLE_POLLS:-3}"
 
 cd "$APP_DIR"
 
@@ -31,6 +32,10 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   echo "Tracked working tree changes detected; deployment aborted." >&2
   git status --short >&2
   exit 3
+fi
+if ! [[ "$HEALTH_STABLE_POLLS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ROMATIC_HEALTH_STABLE_POLLS must be a positive integer." >&2
+  exit 2
 fi
 
 data_dir="$(python3 - "$ENV_FILE" <<'PY'
@@ -110,27 +115,56 @@ git reset --hard "$target_sha"
 
 wait_service() {
   local service="$1"
-  local container_id health
+  local container_id health status restart_count
+  local stable_polls=0
+
   container_id="$("${compose[@]}" ps -q "$service")"
   if [[ -z "$container_id" ]]; then
     echo "Compose service was not created: $service" >&2
     return 1
   fi
+
   for ((attempt = 1; attempt <= HEALTH_ATTEMPTS; attempt++)); do
+    status="$(docker inspect --format '{{.State.Status}}' "$container_id")"
     health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
-    case "$health" in
-      healthy|running)
-        return 0
-        ;;
-      unhealthy|exited|dead)
-        echo "$service failed with state: $health" >&2
+    restart_count="$(docker inspect --format '{{.RestartCount}}' "$container_id")"
+
+    if [[ "$restart_count" =~ ^[0-9]+$ ]] && ((restart_count > 0)); then
+      echo "$service restarted during deployment smoke: restart_count=$restart_count" >&2
+      "${compose[@]}" logs --tail 200 "$service" >&2 || true
+      return 1
+    fi
+
+    case "$status" in
+      restarting|exited|dead|removing)
+        echo "$service failed with container state: $status" >&2
         "${compose[@]}" logs --tail 200 "$service" >&2 || true
         return 1
         ;;
     esac
+
+    case "$health" in
+      healthy|running)
+        stable_polls=$((stable_polls + 1))
+        if ((stable_polls >= HEALTH_STABLE_POLLS)); then
+          return 0
+        fi
+        ;;
+      unhealthy)
+        echo "$service failed with health state: $health" >&2
+        "${compose[@]}" logs --tail 200 "$service" >&2 || true
+        return 1
+        ;;
+      *)
+        stable_polls=0
+        ;;
+    esac
+
     sleep "$HEALTH_INTERVAL"
   done
-  echo "$service did not become healthy in time." >&2
+
+  echo "$service did not remain healthy without restarts for $HEALTH_STABLE_POLLS polls." >&2
+  "${compose[@]}" logs --tail 200 "$service" >&2 || true
   return 1
 }
 
