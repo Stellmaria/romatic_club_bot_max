@@ -28,7 +28,7 @@ def build_admin_main_keyboard(
     rows = [
         ["⚙️ Модерация", "👥 Пользователи", "🎴 Карты"],
         ["📊 Статистика", "📣 Рассылка", "🚫 Логи"],
-        ["📅 Расписание", "🛒 Биржа"],
+        ["🛒 Биржа"],
     ]
     show_system = is_owner_user(user_id) if include_system is None else include_system
     if show_system:
