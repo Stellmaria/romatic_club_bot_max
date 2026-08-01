@@ -3,44 +3,21 @@
 import sys
 import types
 
-from db import (
-    admin,
-    auctions,
-    cards,
-    core,
-    exchange,
-    market,
-    posts,
-    reliable_mutations,
-    subscriptions,
-    uid,
-    users,
-)
+from db import admin, auctions, cards, core, exchange, market, posts, subscriptions, uid, users
+from db import reliable_mutations
 
-# Strict compatibility mutations are loaded after historical modules so their
-# atomic implementations replace unsafe legacy exports with the same names.
-_MODULES = (
-    core,
-    users,
-    auctions,
-    admin,
-    cards,
-    subscriptions,
-    market,
-    exchange,
-    posts,
-    uid,
-    reliable_mutations,
-)
+# Keep one public owner for every compatibility symbol. The historical auctions
+# module still owns ``add_auction`` in the facade contract, but its implementation
+# is replaced with the strict transactional version until all callers migrate to
+# the workflow repository.
+auctions.add_auction = reliable_mutations.add_auction
+
+_MODULES = (core, users, auctions, admin, cards, subscriptions, market, exchange, posts, uid)
 for _module in _MODULES:
     globals().update({name: getattr(_module, name) for name in _module.__all__})
 
 db_pool = core.db_pool
-__all__ = list(
-    dict.fromkeys(
-        [name for _module in _MODULES for name in _module.__all__] + ["db_pool"]
-    )
-)
+__all__ = [name for _module in _MODULES for name in _module.__all__] + ["db_pool"]
 
 # Legacy scheduler contract lives in ``db.auctions``:
 # date_trunc('minute', a.start_time)
