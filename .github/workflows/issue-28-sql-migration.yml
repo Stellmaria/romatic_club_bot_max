@@ -1,0 +1,130 @@
+name: Issue 28 SQL migration
+
+on:
+  push:
+    branches:
+      - refactor/issue-28-database-runtime
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/issue-28-database-runtime
+      - name: Move review queue semantics to thematic module
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('db/auctions.py')
+          source = path.read_text(encoding='utf-8')
+          start_marker = '@require_db_pool\nasync def get_pending_auctions('
+          end_marker = '\n\n@require_db_pool\nasync def get_auctions_by_date('
+          start = source.index(start_marker)
+          end = source.index(end_marker, start)
+          replacement = '''@require_db_pool
+          async def get_pending_auctions(
+                  auction_kind: Optional[str] = None,
+                  *,
+                  limit: int = 50,
+                  offset: int = 0,
+          ) -> List[Dict[str, Any]]:
+              """Return every application that still requires moderator scheduling.
+
+              Creation and moderation paths legitimately use ``draft``,
+              ``moderation`` or ``approved`` before a slot is assigned. Keeping
+              these states in the review queue prevents valid submissions from
+              disappearing before schedule assignment.
+              """
+
+              review_statuses = ("draft", "moderation", "pending", "approved")
+              args: List[Any] = [list(review_statuses)]
+              where = ["a.status = ANY($1::text[])"]
+
+              if auction_kind:
+                  where.append("a.auction_kind=$%d" % (len(args) + 1))
+                  args.append(auction_kind)
+
+              where_sql = " AND ".join(where)
+
+              args.append(int(limit))
+              limit_i = len(args)
+              args.append(int(offset))
+              offset_i = len(args)
+
+              sql = f"""
+                  SELECT
+                      a.auction_id,
+                      a.status,
+                      a.card_name,
+                      a.hero_name,
+                      COALESCE(NULLIF(a.image_id, ''), c.image_id) AS image_id,
+                      a.start_price,
+                      a.currency,
+                      a.comment,
+                      a.created_at,
+                      a.proof_photo_id,
+                      a.craft_uid_possible,
+                      a.auction_kind,
+                      COALESCE(a.card_id, c.card_id) AS card_id,
+                      c.num AS card_num,
+                      c.deck_id,
+                      d.name AS deck_name,
+                      c.rarity,
+                      c.obtain_type,
+                      c.obtain_amount,
+                      c.story,
+                      c.quote,
+                      c.image_id AS card_image_id
+                  FROM public.auctions a
+                  LEFT JOIN LATERAL (
+                      SELECT c0.*
+                      FROM public.cards c0
+                      WHERE c0.card_id = a.card_id
+                         OR (
+                              a.card_id IS NULL
+                              AND lower(trim(c0.card_name)) = lower(trim(a.card_name))
+                              AND lower(trim(coalesce(c0.hero_name, ''))) =
+                                  lower(trim(coalesce(a.hero_name, '')))
+                            )
+                      ORDER BY (c0.card_id = a.card_id) DESC, c0.card_id
+                      LIMIT 1
+                  ) c ON TRUE
+                  LEFT JOIN public.decks d ON d.id = c.deck_id
+                  WHERE {where_sql}
+                  ORDER BY a.created_at ASC, a.auction_id ASC
+                  LIMIT ${limit_i} OFFSET ${offset_i}
+              """
+
+              async with db_pool.acquire() as conn:
+                  rows = await conn.fetch(sql, *args)
+                  return [dict(r) for r in rows]
+          '''
+          replacement = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in replacement.splitlines()
+          )
+          path.write_text(source[:start] + replacement + source[end:], encoding='utf-8')
+
+          test_path = Path('tests/test_hotfix_admin_queue_move_uid.py')
+          test_source = test_path.read_text(encoding='utf-8')
+          old = 'source = (ROOT / "db/legacy_impl.py").read_text(encoding="utf-8")'
+          new = 'source = (ROOT / "db/auctions.py").read_text(encoding="utf-8")'
+          if test_source.count(old) != 1:
+              raise SystemExit('unexpected review queue source assertion')
+          test_path.write_text(test_source.replace(old, new), encoding='utf-8')
+
+          Path('.github/workflows/issue-28-sql-migration.yml').unlink()
+          PY
+      - name: Commit migrated semantics
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add db/auctions.py tests/test_hotfix_admin_queue_move_uid.py .github/workflows/issue-28-sql-migration.yml
+          git commit -m "refactor(db): preserve moderation queue SQL semantics"
+          git push origin HEAD:refactor/issue-28-database-runtime
