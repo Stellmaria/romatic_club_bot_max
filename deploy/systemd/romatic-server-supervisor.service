@@ -6,7 +6,8 @@ Wants=network-online.target
 Before=romatic-compose.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
 User=%SERVICE_USER%
 Group=%SUPERVISOR_GROUP%
 UMask=0007
@@ -22,6 +23,7 @@ Environment=COMPOSE_BAKE=false
 ExecStart=/usr/bin/python3 %APP_DIR%/scripts/server_supervisor_entrypoint.py
 Restart=always
 RestartSec=3
+TimeoutStartSec=30
 TimeoutStopSec=30
 KillSignal=SIGTERM
 NoNewPrivileges=true
