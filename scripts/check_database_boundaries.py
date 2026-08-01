@@ -7,7 +7,13 @@ import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_ROOTS = (ROOT / "db", ROOT / "bot")
+RUNTIME_ROOTS = (
+    ROOT / "db",
+    ROOT / "database",
+    ROOT / "bot",
+    ROOT / "userbot",
+    ROOT / "scripts",
+)
 ADAPTER_ROOTS = (ROOT / "bot/handlers", ROOT / "bot/domain")
 FORBIDDEN_ADAPTER_MODULES = {
     "db.core",
