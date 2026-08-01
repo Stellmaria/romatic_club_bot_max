@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import string
-from datetime import date
+from datetime import date, datetime, timezone
 from enum import Enum
 
 import pytest
@@ -22,6 +22,7 @@ from bot.telegram.boundary import (
     validate_int,
     validate_text,
 )
+from bot.telegram.input_validation import validate_incoming_text
 
 
 class Mode(str, Enum):
@@ -35,6 +36,16 @@ def _callback(*, callback_id: str, data: str, user_id: int = 42) -> types.Callba
         from_user=types.User(id=user_id, is_bot=False, first_name="Test"),
         chat_instance="test-chat",
         data=data,
+    )
+
+
+def _message(*, text: str, user_id: int = 42) -> types.Message:
+    return types.Message(
+        message_id=1,
+        date=datetime.now(timezone.utc),
+        chat=types.Chat(id=user_id, type="private"),
+        from_user=types.User(id=user_id, is_bot=False, first_name="Test"),
+        text=text,
     )
 
 
@@ -122,6 +133,14 @@ def test_callback_payload_limit_is_measured_in_utf8_bytes() -> None:
     assert validate_callback_payload("я" * 32) == "я" * 32
     with pytest.raises(TelegramBoundaryError):
         validate_callback_payload("я" * 33)
+
+
+def test_incoming_message_limits_and_controls_are_checked() -> None:
+    validate_incoming_text("x" * 4096, field="Сообщение", maximum=4096)
+    with pytest.raises(TelegramBoundaryError, match="максимум 4096"):
+        validate_incoming_text("x" * 4097, field="Сообщение", maximum=4096)
+    with pytest.raises(TelegramBoundaryError, match="управляющие"):
+        validate_incoming_text("safe\x00unsafe", field="Сообщение", maximum=4096)
 
 
 @pytest.mark.asyncio
@@ -214,4 +233,33 @@ async def test_malformed_and_boundary_errors_are_controlled(
     assert answers == [
         "Данные кнопки превышают лимит Telegram.",
         "Неверный идентификатор.",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_message_input_and_handler_errors_are_controlled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answers: list[str] = []
+    calls = 0
+
+    async def answer(self, text, **kwargs):
+        answers.append(text)
+        return None
+
+    monkeypatch.setattr(types.Message, "answer", answer)
+    middleware = TelegramBoundaryMiddleware(clock=lambda: 40.0)
+
+    async def handler(event, data):
+        nonlocal calls
+        calls += 1
+        raise TelegramBoundaryError("Недопустимое значение.")
+
+    assert await middleware(handler, _message(text="x" * 4097), {}) is None
+    assert calls == 0
+    assert await middleware(handler, _message(text="valid"), {}) is None
+    assert calls == 1
+    assert answers == [
+        "Сообщение слишком длинный: максимум 4096 символов.",
+        "Недопустимое значение.",
     ]
