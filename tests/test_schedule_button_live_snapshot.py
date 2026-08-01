@@ -20,17 +20,17 @@ def test_schedule_button_query_uses_live_statuses_only() -> None:
 
 
 def test_active_schedule_button_renders_fresh_moscow_snapshot() -> None:
-    source = _source("bot/handlers/admin/moderation.py")
+    source = _source("bot/handlers/admin/moderation_schedule.py")
     start = source.index("async def preview_schedule_day")
-    end = source.index("\ndef split_message_by_blocks", start)
+    end = source.index("\n@router.message", start)
     block = source[start:end]
 
     assert "await get_auctions_by_date_with_owners(selected_date)" in block
     assert "to_moscow_wall(utc_now())" in block
     assert "Актуальное расписание" in block
     assert "Обновлено:" in block
-    assert "to_moscow_wall(lot['start_time'])" in block
-    assert "to_moscow_wall(lot['end_time'])" in block
+    assert "to_moscow(lot['start_time'])" in block
+    assert "to_moscow(lot['end_time'])" in block
 
 
 def test_schedule_slot_conflicts_include_all_live_states() -> None:
