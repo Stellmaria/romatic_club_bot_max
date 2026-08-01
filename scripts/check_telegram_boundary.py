@@ -8,6 +8,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HANDLERS = ROOT / "bot" / "handlers"
 CALLBACK_LIMIT_BYTES = 64
+_USER_VALUE_SUFFIXES = (
+    ".text",
+    ".caption",
+    ".first_name",
+    ".last_name",
+    ".full_name",
+    ".username",
+)
+_USER_VALUE_ROOTS = (
+    "message",
+    "call",
+    "callback",
+    "event",
+    "query",
+)
+_ESCAPERS = {"escape", "escape_html", "render_html"}
 
 
 def _segment(source: str, node: ast.AST) -> str:
@@ -39,6 +55,67 @@ def _literal_callback_bytes(node: ast.AST) -> int | None:
     return None
 
 
+def _call_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _is_escaped_expression(node: ast.AST) -> bool:
+    return isinstance(node, ast.Call) and _call_name(node.func) in _ESCAPERS
+
+
+def _contains_direct_user_value(source: str, node: ast.AST) -> bool:
+    if _is_escaped_expression(node):
+        return False
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Attribute):
+            continue
+        text = _segment(source, child).lower().replace(" ", "")
+        if not text.endswith(_USER_VALUE_SUFFIXES):
+            continue
+        root = text.split(".", 1)[0].lstrip("(")
+        if root in _USER_VALUE_ROOTS or ".from_user." in text:
+            return True
+    return False
+
+
+def _is_html_call(node: ast.Call) -> bool:
+    for keyword in node.keywords:
+        if keyword.arg != "parse_mode":
+            continue
+        if isinstance(keyword.value, ast.Constant):
+            return str(keyword.value.value).upper() == "HTML"
+        if isinstance(keyword.value, ast.Attribute):
+            return keyword.value.attr.upper() == "HTML"
+    return False
+
+
+def _message_arguments(node: ast.Call) -> list[ast.AST]:
+    arguments = list(node.args[:1])
+    arguments.extend(
+        keyword.value
+        for keyword in node.keywords
+        if keyword.arg in {"text", "caption"}
+    )
+    return arguments
+
+
+def _unsafe_html_lines(source: str, node: ast.Call) -> list[int]:
+    if not _is_html_call(node):
+        return []
+    lines: list[int] = []
+    for argument in _message_arguments(node):
+        for child in ast.walk(argument):
+            if not isinstance(child, ast.FormattedValue):
+                continue
+            if _contains_direct_user_value(source, child.value):
+                lines.append(child.lineno)
+    return lines
+
+
 def main() -> int:
     violations: list[str] = []
     for path in sorted(HANDLERS.rglob("*.py")):
@@ -67,6 +144,11 @@ def main() -> int:
                         f"{relative}:{node.lineno}: callback_data literal is "
                         f"{byte_count} bytes; Telegram limit is {CALLBACK_LIMIT_BYTES}"
                     )
+            for line in _unsafe_html_lines(source, node):
+                violations.append(
+                    f"{relative}:{line}: direct Telegram user value in HTML f-string; "
+                    "wrap it with escape_html()/html.escape() or use render_html()"
+                )
 
     if violations:
         print("Telegram boundary violations:")
