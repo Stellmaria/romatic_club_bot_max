@@ -40,11 +40,16 @@ def test_complete_admin_menu_exposes_schedule_exchange_and_legacy_sections() -> 
     assert '"universal_cancel"' in navigation
 
 
-def test_exchange_navigation_uses_supported_catalog_callbacks() -> None:
+def test_exchange_navigation_exposes_pending_and_approved_flows() -> None:
     navigation = _source("bot/handlers/admin/admin_navigation.py")
     catalog = _source("bot/handlers/auction/exchange/catalog.py")
 
     assert 'F.text == "🛒 Биржа"' in navigation
+    assert 'callback_data="admreq|pending|exchange"' in navigation
+    assert 'F.data == "admreq|pending|exchange"' in navigation
+    assert 'F.data.startswith("expend_mode|")' in navigation
+    assert "show_pending_exchange_requests(call.message)" in navigation
+    assert "show_pending_exchange_requests_all(call.message)" in navigation
     assert 'F.data == "ex_appr:root"' in navigation
     assert "_kb_exchange_approved_root()" in navigation
     assert "exinv|" not in navigation
@@ -53,7 +58,7 @@ def test_exchange_navigation_uses_supported_catalog_callbacks() -> None:
     assert '@router.callback_query(F.data.startswith("ex_appr:lot:"))' in catalog
 
 
-def test_schedule_navigation_opens_grouped_preview() -> None:
+def test_schedule_navigation_acks_and_chunks_grouped_preview() -> None:
     navigation = _source("bot/handlers/admin/admin_navigation.py")
 
     assert 'F.text == "📅 Расписание"' in navigation
@@ -62,9 +67,12 @@ def test_schedule_navigation_opens_grouped_preview() -> None:
     assert 'F.data.startswith("preview_schedule|")' in navigation
     assert 'period="day"' in navigation
     assert 'prefix="preview_schedule"' in navigation
+    assert 'await call.answer("Загружаю расписание…")' in navigation
     assert "get_auctions_by_date_with_owners(selected_date)" in navigation
-    assert "build_grouped_schedule_lines_with_prefixes(" in navigation
-    assert 'schedule_text = "\\n".join(lines)' in navigation
+    assert "_grouped_schedule_lines(auctions)" in navigation
+    assert "_schedule_message_chunks(selected_date, lines)" in navigation
+    assert 'auction.get("owners_json")' in navigation
+    assert "build_grouped_schedule_lines_with_prefixes(" not in navigation
 
 
 def test_per_lot_schedule_editor_remains_separate() -> None:

@@ -63,31 +63,30 @@ def test_bid_minimum_and_step_are_validated_from_start_price() -> None:
         )
 
 
-def test_auction_activity_handles_time_boundaries() -> None:
-    now = datetime.now()
-    active = Auction(
+def test_auction_activity_closes_at_displayed_minute_boundary() -> None:
+    boundary = datetime(2026, 8, 1, 18, 30)
+    auction = Auction(
         auction_id=1,
         status="active",
         currency=Currency.DIAMONDS,
         start_price=100,
-        start_time=now - timedelta(seconds=1),
-        end_time=now + timedelta(seconds=1),
+        start_time=boundary - timedelta(minutes=30),
+        # Legacy rows persist :59 for database compatibility. The public 18:30
+        # label must nevertheless close exactly at 18:30:00.
+        end_time=boundary.replace(second=59),
     )
-    ended = Auction(
-        auction_id=2,
-        status="active",
-        currency=Currency.CUPS,
-        start_price=2,
-        start_time=now - timedelta(minutes=2),
-        end_time=now,
-    )
-    assert active.is_active_at(now) is True
-    assert ended.is_active_at(now) is True
-    assert ended.has_ended_at(now) is False
-    closes_at = auction_bidding_closes_at(now)
-    assert ended.is_active_at(closes_at - timedelta(microseconds=1)) is True
-    assert ended.is_active_at(closes_at) is False
-    assert ended.has_ended_at(closes_at) is True
+
+    assert auction_bidding_closes_at(auction.end_time) == boundary
+    assert auction.is_active_at(boundary - timedelta(microseconds=1)) is True
+    assert auction.is_active_at(boundary) is False
+    assert auction.has_ended_at(boundary - timedelta(microseconds=1)) is False
+    assert auction.has_ended_at(boundary) is True
+
+
+def test_finalization_claim_uses_the_same_displayed_boundary() -> None:
+    source = (ROOT / "bot/repositories/auctions.py").read_text(encoding="utf-8")
+    assert "date_trunc('minute', end_time) <= $1" in source
+    assert "+ INTERVAL '1 minute' <= $1" not in source
 
 
 def test_mixed_currency_offer_requires_marker_and_uses_project_rate() -> None:

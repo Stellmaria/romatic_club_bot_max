@@ -29,11 +29,11 @@ def ensure_utc(value: datetime, *, assume_tz: tzinfo = MOSCOW) -> datetime:
 
 
 def auction_end_at_59(start_time: datetime) -> datetime:
-    """Return the last accepted second of a 30-minute auction slot.
+    """Return the persisted compatibility timestamp for a 30-minute slot.
 
-    The displayed slot ``22:00–22:30`` accepts bids through ``22:30:59``.
-    Seconds and microseconds from callback payloads must not leak into the
-    persisted deadline.
+    Existing database constraints and rows store the slot end as ``HH:30:59``.
+    Bid acceptance must not compare this raw value directly: the canonical
+    domain deadline normalizes it back to the displayed ``HH:30`` boundary.
     """
 
     if not isinstance(start_time, datetime):
