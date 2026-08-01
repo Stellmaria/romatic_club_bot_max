@@ -94,10 +94,12 @@ async def run_userbot_application(config: UserbotProcessSettings) -> None:
     userbot_settings = config.userbot
     configure_uid_crypto(userbot_settings.uid_hash_key, userbot_settings.uid_enc_key)
 
-    from db.core import close_db, init_db
+    from db.lifecycle import close_db, init_db
+    from db.pool import DatabaseRuntime
     from userbot.handlers import register_handlers, register_schedule_handlers
     from userbot.workers import autobid_watchdog, schedule_announcement_watchdog
 
+    database_runtime = DatabaseRuntime(config.database)
     telegram_client = create_userbot_client(
         userbot_settings,
         project_root=config.project_root,
@@ -107,7 +109,7 @@ async def run_userbot_application(config: UserbotProcessSettings) -> None:
     worker_tasks: list[asyncio.Task[None]] = []
 
     try:
-        await init_db(config.database)
+        await init_db(database_runtime)
         await telegram_client.connect()
         if not await telegram_client.is_user_authorized():
             phone = input("Введите телефон (+7...): ").strip()
@@ -148,7 +150,7 @@ async def run_userbot_application(config: UserbotProcessSettings) -> None:
             if telegram_client.is_connected():
                 await telegram_client.disconnect()
         finally:
-            await close_db()
+            await close_db(database_runtime)
 
 
 __all__ = [
