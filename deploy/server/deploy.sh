@@ -61,15 +61,20 @@ compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 previous_sha="$(git rev-parse HEAD)"
 backup_path="$data_dir/backups/predeploy-$(date -u +%Y%m%dT%H%M%SZ)-${previous_sha:0:12}.dump"
-deployment_started=0
+code_switched=0
+runtime_replaced=0
 
 rollback_code() {
   local exit_code="$?"
-  if [[ "$deployment_started" == "1" ]]; then
+  if [[ "$code_switched" == "1" ]]; then
     echo "Deployment failed; rolling application code back to $previous_sha" >&2
     git reset --hard "$previous_sha" >&2 || true
     "${compose[@]}" build bot userbot supervisor-proxy >&2 || true
-    "${compose[@]}" up -d postgres supervisor-proxy bot userbot >&2 || true
+    if [[ "$runtime_replaced" == "1" ]]; then
+      "${compose[@]}" up -d postgres supervisor-proxy bot userbot >&2 || true
+    else
+      echo "Running containers were not replaced; runtime left untouched." >&2
+    fi
     echo "Database was not automatically restored." >&2
     echo "Verified pre-deploy dump: $backup_path" >&2
   fi
@@ -106,12 +111,35 @@ test -s "$backup_path"
 chmod 0600 "$backup_path"
 echo "Verified dump: $backup_path"
 
-echo "Deploying $target_sha..."
-deployment_started=1
+echo "Preparing $target_sha..."
 git reset --hard "$target_sha"
+code_switched=1
 "${compose[@]}" pull postgres
 "${compose[@]}" build --pull bot userbot supervisor-proxy
+
+echo "Validating target configuration before replacing runtime..."
+"${compose[@]}" run --rm --no-deps bot python - <<'PY'
+from bot.core.settings import BotProcessSettings
+
+config = BotProcessSettings.from_env(project_root="/app")
+assert config.bot.bot_token
+assert config.database.url
+print("Bot configuration preflight OK")
+PY
+
+"${compose[@]}" run --rm --no-deps userbot python - <<'PY'
+from bot.core.settings import UserbotProcessSettings
+
+config = UserbotProcessSettings.from_env(project_root="/app")
+assert config.userbot.api_id > 0
+assert config.userbot.api_hash
+assert config.database.url
+print("Userbot configuration preflight OK")
+PY
+
+echo "Deploying $target_sha..."
 "${compose[@]}" up -d --remove-orphans postgres supervisor-proxy bot userbot
+runtime_replaced=1
 
 wait_service() {
   local service="$1"
@@ -175,12 +203,14 @@ wait_service supervisor-proxy
 "${compose[@]}" exec -T bot python - <<'PY'
 import asyncio
 import os
+
 import asyncpg
 
-from bot.core.settings import settings
+from bot.core.settings import BotProcessSettings
 
-assert settings.bot_token, "BOT_TOKEN is empty"
-assert settings.database_url, "DATABASE_URL is empty"
+config = BotProcessSettings.from_env(project_root="/app")
+assert config.bot.bot_token, "BOT_TOKEN is empty"
+assert config.database.url, "DATABASE_URL is empty"
 
 async def main() -> None:
     connection = await asyncpg.connect(os.environ["DATABASE_URL"])
@@ -200,7 +230,8 @@ if [[ "$deployed_sha" != "$target_sha" ]]; then
   false
 fi
 
-deployment_started=0
+code_switched=0
+runtime_replaced=0
 trap - ERR INT TERM
 echo "Romatic Club deployment succeeded: $deployed_sha"
 echo "Verified pre-deploy backup: $backup_path"
