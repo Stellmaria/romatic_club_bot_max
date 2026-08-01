@@ -3,6 +3,7 @@
 from aiogram import Router
 
 from bot.handlers.auction import guides, luxury_admin, submission, submission_support
+from bot.handlers.auction.guides import guides_kb
 from bot.handlers.auction.submission_support import compute_start_price_limits
 from bot.handlers.auction.winner_components.common import admin_tag
 from bot.handlers.auction.winner_components.thanks import build_thanks_kb
