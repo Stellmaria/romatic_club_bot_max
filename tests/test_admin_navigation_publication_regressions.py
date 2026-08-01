@@ -58,6 +58,13 @@ def test_exchange_navigation_exposes_pending_and_approved_flows() -> None:
     assert '@router.callback_query(F.data.startswith("ex_appr:lot:"))' in catalog
 
 
+def test_exchange_queue_uses_supported_pending_total_query() -> None:
+    exchange_queue = _source("bot/handlers/admin/presentation/exchange_queue.py")
+
+    assert "await queries.pending_total()" in exchange_queue
+    assert "await queries.pending_count()" not in exchange_queue
+
+
 def test_schedule_navigation_acks_and_chunks_grouped_preview() -> None:
     navigation = _source("bot/handlers/admin/admin_navigation.py")
 
