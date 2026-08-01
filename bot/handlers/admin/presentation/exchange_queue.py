@@ -82,7 +82,7 @@ async def show_pending_exchange_one(message: types.Message) -> None:
     """Show the oldest pending exchange request as one moderation card."""
 
     queries = await ExchangeModerationQueries.create()
-    total = await queries.pending_count()
+    total = await queries.pending_total()
     if total <= 0:
         await message.answer("Нет заявок на биржу на модерацию.")
         return
