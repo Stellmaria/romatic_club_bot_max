@@ -1,0 +1,77 @@
+name: Apply issue 29 lint fixes
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/issue-29-admin-boundaries
+          fetch-depth: 0
+      - name: Rename shadowing local values
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, count: int) -> None:
+              file = Path(path)
+              source = file.read_text(encoding="utf-8")
+              actual = source.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} occurrences, found {actual}: {old!r}")
+              file.write_text(source.replace(old, new), encoding="utf-8")
+
+          card = "bot/handlers/admin/helper/new/card_economy_mutation.py"
+          replace(card, "    deck_name = deck_name(deck, deck_id)\n", "    deck_title = deck_name(deck, deck_id)\n", 2)
+          replace(card, 'f"✅ Тип колоды обновлён: <b>{deck_name}</b>\\n"', 'f"✅ Тип колоды обновлён: <b>{deck_title}</b>\\n"', 2)
+          replace(card, 'f"ID: {deck_id} {deck_name}\\n"', 'f"ID: {deck_id} {deck_title}\\n"', 2)
+
+          for path in (
+              "bot/handlers/auction/exchange/catalog.py",
+              "bot/handlers/auction/exchange_catalog.py",
+          ):
+              replace(path, "        cur_emoji = cur_emoji(cur.lower())\n", "        currency_icon = cur_emoji(cur.lower())\n", 1)
+              replace(path, 'f"{int(price)}{cur_emoji}" if price is not None else f"—{cur_emoji}"', 'f"{int(price)}{currency_icon}" if price is not None else f"—{currency_icon}"', 1)
+
+          moderation = "bot/handlers/auction/exchange/moderation.py"
+          replace(moderation, "    cur_emoji = cur_emoji(currency.lower())\n", "    currency_icon = cur_emoji(currency.lower())\n", 1)
+          replace(moderation, 'f"{int(price)} {cur_emoji} ({html.escape(currency)})" if price is not None else f"— {cur_emoji} ({html.escape(currency)})"', 'f"{int(price)} {currency_icon} ({html.escape(currency)})" if price is not None else f"— {currency_icon} ({html.escape(currency)})"', 1)
+          replace(moderation, "    cur_emoji = cur_emoji(currency)\n", "    currency_icon = cur_emoji(currency)\n", 2)
+          replace(moderation, '{html.escape(str(price))} {cur_emoji}</b> ({html.escape(currency)})', '{html.escape(str(price))} {currency_icon}</b> ({html.escape(currency)})', 1)
+          replace(moderation, 'f"{price} {cur_emoji} ({html.escape(currency)})" if price is not None else f"— {cur_emoji} ({html.escape(currency)})"', 'f"{price} {currency_icon} ({html.escape(currency)})" if price is not None else f"— {currency_icon} ({html.escape(currency)})"', 1)
+          replace(moderation, "    cur_emoji = cur_emoji(cur)\n", "    currency_icon = cur_emoji(cur)\n", 1)
+          replace(moderation, 'f"{int(price)} {cur_emoji} ({tg_clean(cur_print)})" if price is not None else f"— {cur_emoji} ({tg_clean(cur_print)})"', 'f"{int(price)} {currency_icon} ({tg_clean(cur_print)})" if price is not None else f"— {currency_icon} ({tg_clean(cur_print)})"', 1)
+
+          submission = "bot/handlers/auction/exchange/submission.py"
+          replace(submission, "    cur_emoji = cur_emoji(cur)\n", "    currency_icon = cur_emoji(cur)\n", 1)
+          replace(submission, 'f"{int(price)} {cur_emoji} ({cur_print})" if price is not None else f"— {cur_emoji} ({cur_print})"', 'f"{int(price)} {currency_icon} ({cur_print})" if price is not None else f"— {currency_icon} ({cur_print})"', 1)
+          PY
+      - name: Validate syntax
+        run: |
+          python -m compileall -q \
+            bot/handlers/admin/helper/new/card_economy_mutation.py \
+            bot/handlers/auction/exchange/catalog.py \
+            bot/handlers/auction/exchange/moderation.py \
+            bot/handlers/auction/exchange/submission.py \
+            bot/handlers/auction/exchange_catalog.py
+          git diff --check
+      - name: Commit code fixes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            bot/handlers/admin/helper/new/card_economy_mutation.py \
+            bot/handlers/auction/exchange/catalog.py \
+            bot/handlers/auction/exchange/moderation.py \
+            bot/handlers/auction/exchange/submission.py \
+            bot/handlers/auction/exchange_catalog.py
+          git commit -m "fix(admin): avoid shadowing presentation helpers"
+          git push origin HEAD:refactor/issue-29-admin-boundaries
