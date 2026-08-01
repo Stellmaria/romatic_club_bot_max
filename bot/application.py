@@ -74,14 +74,16 @@ async def run_bot(config: BotProcessSettings) -> None:
     from bot.bootstrap import build_background_task_specs, register_all_routers
     from bot.telegram.protection import patch_bot_protect_content
     from db.admin import is_admin
-    from db.core import close_db, init_db
+    from db.lifecycle import close_db, init_db
+    from db.pool import DatabaseRuntime
 
     supervisor_client = SupervisorClient.from_settings(config.supervisor)
+    database_runtime = DatabaseRuntime(config.database)
     telegram_bot: Bot | None = None
     task_manager: BackgroundTaskManager | None = None
     primary_error: BaseException | None = None
     try:
-        await init_db(config.database)
+        await init_db(database_runtime)
         logger.info("Database startup complete")
 
         if supervisor_client is not None:
@@ -128,7 +130,9 @@ async def run_bot(config: BotProcessSettings) -> None:
             cleanup_steps.append(("Telegram bot session", telegram_bot.session.close))
         if supervisor_client is not None:
             cleanup_steps.append(("Supervisor client session", supervisor_client.close))
-        cleanup_steps.append(("database pool", close_db))
+        cleanup_steps.append(
+            ("database runtime", lambda: close_db(database_runtime))
+        )
 
         cleanup_error: BaseException | None = None
         for resource_name, cleanup in cleanup_steps:
