@@ -48,6 +48,8 @@ class AuctionKind(str, Enum):
 
     @classmethod
     def from_raw(cls, value: object) -> "AuctionKind":
+        if isinstance(value, cls):
+            return value
         normalized = str(value or cls.STANDARD.value).strip().lower()
         aliases = {
             "default": cls.STANDARD,
@@ -115,6 +117,8 @@ class Currency(str, Enum):
 
     @classmethod
     def from_raw(cls, value: object) -> "Currency":
+        if isinstance(value, cls):
+            return value
         normalized = str(value or "").strip().lower()
         aliases = {
             "💎": cls.DIAMONDS,
@@ -179,8 +183,8 @@ def normalize_currency_choices(
     """Return a stable, duplicate-free list of accepted auction currencies.
 
     PostgreSQL returns ``text[]`` as a list, while old rows only have the
-    scalar ``currency`` column.  This helper deliberately accepts both so the
-    display and workflow layers use one compatibility rule.
+    scalar ``currency`` column. This helper deliberately accepts both enum
+    values and persisted strings so every layer uses one compatibility rule.
     """
     raw_values: list[object] = []
     if values is None:
