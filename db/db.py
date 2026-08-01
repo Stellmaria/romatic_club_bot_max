@@ -2,16 +2,20 @@
 
 from db import (
     admin,
+    auction_id_stats,
     auction_lifecycle_queries,
+    auction_mutations,
     auctions,
     cards,
     core,
     exchange,
+    legacy_logging,
     market,
     posts,
     schedule_queries,
     subscriptions,
     uid,
+    user_delivery,
     users,
 )
 from db import reliable_mutations
@@ -25,8 +29,11 @@ auctions.add_auction = reliable_mutations.add_auction
 _MODULES = (
     core,
     users,
+    user_delivery,
     auctions,
     auction_lifecycle_queries,
+    auction_mutations,
+    auction_id_stats,
     admin,
     cards,
     schedule_queries,
@@ -35,6 +42,7 @@ _MODULES = (
     exchange,
     posts,
     uid,
+    legacy_logging,
 )
 for _module in _MODULES:
     globals().update({name: getattr(_module, name) for name in _module.__all__})
