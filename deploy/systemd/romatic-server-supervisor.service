@@ -11,7 +11,7 @@ User=%SERVICE_USER%
 Group=%SUPERVISOR_GROUP%
 UMask=0007
 WorkingDirectory=%APP_DIR%
-EnvironmentFile=%APP_DIR%/.env
+EnvironmentFile=%DATA_DIR%/runtime/supervisor/supervisor.env
 Environment=ROMATIC_APP_DIR=%APP_DIR%
 Environment=ROMATIC_ENV_FILE=.env
 Environment=ROMATIC_COMPOSE_FILE=compose.yaml
