@@ -15,6 +15,7 @@ from aiogram.exceptions import (
 
 from bot.core.time import moscow_date, utc_now
 from bot.handlers.admin.helper.admin_constants import (
+    MAX_TG_CAPTION_LEN,
     load_full_auction_ctx,
     render_auction_caption,
 )
@@ -45,7 +46,7 @@ def _publication_targets(
 ) -> tuple[int | str, ...]:
     """Return unique channel targets in preferred delivery order.
 
-    Production normally uses the numeric channel ID.  The username is retained
+    Production normally uses the numeric channel ID. The username is retained
     as an explicit fallback because Telegram migrations and stale environment
     values can leave a valid public channel reachable only by its username.
     """
@@ -110,7 +111,14 @@ async def _publication_context(auction: dict[str, Any]) -> tuple[dict, dict, dic
     except Exception:
         logger.exception("Could not calculate sold count for auction %s", auction_id)
 
-    for field in ("end_time", "hero_name", "card_name", "currency", "start_price", "auction_kind"):
+    for field in (
+        "end_time",
+        "hero_name",
+        "card_name",
+        "currency",
+        "start_price",
+        "auction_kind",
+    ):
         full_auction.setdefault(field, auction.get(field))
     if not full_auction.get("comment"):
         full_auction["comment"] = _without_usernames(auction.get("comment")) or "-"
@@ -126,23 +134,32 @@ async def _send_publication(
     media: str | None,
     caption: str,
 ):
-    message = None
-    if media and len(caption) <= 1000:
+    if len(caption) > MAX_TG_CAPTION_LEN:
+        raise ValueError(
+            f"auction caption is too long: {len(caption)} > {MAX_TG_CAPTION_LEN}"
+        )
+
+    if media:
         message = await bot_send_media_any(
             bot,
             chat_id=target,
             file_id=media,
             caption=caption,
             parse_mode="HTML",
+            protect_content=True,
+            raise_on_failure=True,
         )
-    if message is None:
-        message = await bot.send_message(
-            target,
-            caption,
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
-    return message
+        if message is None:
+            raise RuntimeError("Telegram did not return a message for auction media")
+        return message
+
+    return await bot.send_message(
+        target,
+        caption,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        protect_content=True,
+    )
 
 
 async def publish_auction_lot(
@@ -211,7 +228,8 @@ async def publish_auction_lot(
         stored = await service.mark_published(auction_id, message_id=message_id)
         if not stored:
             logger.critical(
-                "Auction %s was delivered as message %s but its lease was lost; manual review required",
+                "Auction %s was delivered as message %s but its lease was lost; "
+                "manual review required",
                 auction_id,
                 message_id,
             )
@@ -238,8 +256,10 @@ async def get_lot_number_for_day(auction: dict[str, Any]) -> int:
     lots = await list_auctions(["active", "scheduled", "publishing", "pending"])
     same_day = sorted(
         (
-            lot for lot in lots
-            if lot.get("start_time") and moscow_date(lot["start_time"]) == moscow_date(start_time)
+            lot
+            for lot in lots
+            if lot.get("start_time")
+            and moscow_date(lot["start_time"]) == moscow_date(start_time)
         ),
         key=lambda lot: (lot["start_time"], lot["auction_id"]),
     )
