@@ -50,3 +50,18 @@ def test_database_pool_bounds_are_normalized() -> None:
     assert value.database_pool_min_size == 8
     assert value.database_pool_max_size == 8
     assert isinstance(value.runtime_dir, Path)
+
+
+def test_telegram_command_secrets_are_not_loaded_from_environment() -> None:
+    with patch.dict(
+        os.environ,
+        {
+            "ADMIN_SECRET": "must-not-enter-runtime",
+            "AUTOBID_SET_PASSWORD": "must-not-enter-runtime-either",
+        },
+        clear=True,
+    ):
+        value = Settings.from_env()
+
+    assert value.admin_secret == ""
+    assert value.autobid_set_password == ""
