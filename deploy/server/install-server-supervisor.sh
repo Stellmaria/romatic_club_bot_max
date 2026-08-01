@@ -103,6 +103,7 @@ if len(token) < 24 or "change_me" in token.casefold():
 
 updates = {
     "ROMATIC_DATA_DIR": str(data_dir),
+    "ROMATIC_SUPERVISOR_GID": supervisor_gid,
     "SUPERVISOR_ENABLED": "true",
     "SUPERVISOR_TOKEN": "",
     "SUPERVISOR_TOKEN_FILE_HOST": str(token_path),
