@@ -48,7 +48,9 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      default: {}
+      romatic-supervisor-control:
+        aliases:
+          - supervisor-proxy
       hermes-supervisor-control:
         aliases:
           - romatic-supervisor
@@ -65,22 +67,35 @@ services:
         condition: service_healthy
       supervisor-proxy:
         condition: service_started
+    networks:
+      default: {}
+      romatic-supervisor-control: {}
 
   userbot:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      SUPERVISOR_ENABLED: "false"
+      SUPERVISOR_TOKEN: ""
+      SUPERVISOR_BASE_URL: ""
     command: ["python", "-m", "userbot.entrypoint"]
     volumes:
       - ./var:/app/var
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      default: {}
 
 volumes:
   postgres_data:
 
 networks:
+  romatic-supervisor-control:
+    name: ${ROMATIC_SUPERVISOR_NETWORK:-romatic-supervisor-control}
+    driver: bridge
+    internal: true
   hermes-supervisor-control:
     name: ${HERMES_SUPERVISOR_NETWORK:-hermes-supervisor-control}
     driver: bridge
