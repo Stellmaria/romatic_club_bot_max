@@ -24,6 +24,9 @@ from bot.domain.auctions import (
     BidderNotEligible,
     Currency,
     UnsupportedCurrency,
+    normalize_currency_choices,
+    parse_bid_offer,
+    reverse_maximum_for_currency,
 )
 from bot.domain.auctions.rules import minimum_next_bid
 from bot.services.auction_bids import AuctionBidService
@@ -37,6 +40,7 @@ from userbot.runtime import (
 from userbot.services import (
     _fetch_auction_by_root,
     _fetch_best_bid,
+    _fetch_best_bid_units,
     _fetch_max_bid,
     _get_root_id,
     _is_auction_active,
@@ -246,10 +250,11 @@ async def on_new_message(event: events.NewMessage.Event):
             cached = ACCEPTED_BIDS.get(key)
             if cached is not None:
                 cached["amount"] = int(revision.bid.amount)
+                cached["currency"] = revision.bid.currency.value
             await _send_reply_or_plain(
                 f"✅ {_mention(None, sender_id)}, ставка исправлена: "
                 f"<s>{revision.previous_amount}</s> → <b>{revision.bid.amount}</b> "
-                f"{revision.auction.currency.emoji}.",
+                f"{revision.bid.currency.emoji}.",
                 reply_to=int(revision.auction.discussion_message_id or _get_root_id(msg) or msg.reply_to_msg_id),
             )
         return
@@ -308,7 +313,18 @@ async def on_new_message(event: events.NewMessage.Event):
         return
 
     # Единые правила валюты и ставок используются и bot, и userbot.
+    accepted_currencies = normalize_currency_choices(
+        auction.get("accepted_currencies"), fallback=auction.get("currency")
+    )
     try:
+        offer = parse_bid_offer(
+            text_raw,
+            accepted_currencies=accepted_currencies,
+            fallback=Currency.from_raw(auction.get("currency")),
+        )
+        currency = offer.currency
+    except BidFormatError:
+        offer = None
         currency = Currency.from_raw(auction.get("currency"))
     except UnsupportedCurrency:
         logger.error(
@@ -321,22 +337,37 @@ async def on_new_message(event: events.NewMessage.Event):
     step = currency.bid_step
     emoji = currency.emoji
     start_price = int(auction.get("start_price") or 0)
-    best_bid = await _fetch_best_bid(
-        int(auction["auction_id"]),
-        lowest_wins=auction_kind.lowest_bid_wins,
+    amount = (
+        int(mapped["amount"])
+        if is_autobid_msg
+        else (offer.amount if offer is not None else _try_parse_bid_amount(text_raw))
     )
+
     if auction_kind.lowest_bid_wins:
-        min_required = start_price if best_bid is None else max(1, int(best_bid) - step)
+        best_bid_units = await _fetch_best_bid_units(int(auction["auction_id"]))
+        reverse_maximum = reverse_maximum_for_currency(
+            currency=currency,
+            start_price=start_price,
+            base_currency=Currency.from_raw(auction.get("currency")),
+            current_best_units=best_bid_units,
+        )
+        min_required = (
+            int(reverse_maximum)
+            if reverse_maximum is not None
+            else max(step, int(amount or step))
+        )
         bid_limit_label = "Максимум"
     else:
+        best_bid = await _fetch_best_bid(
+            int(auction["auction_id"]),
+            lowest_wins=False,
+        )
         min_required = minimum_next_bid(
             start_price=start_price,
             current_max=best_bid,
             step=step,
         )
         bid_limit_label = "Минимум"
-
-    amount = int(mapped["amount"]) if is_autobid_msg else _try_parse_bid_amount(text_raw)
     if amount is None:
         if is_admin:
             return
@@ -469,6 +500,7 @@ async def on_new_message(event: events.NewMessage.Event):
         "user_id": int(bidder_id),
         "text": text_raw,
         "auction_id": int(placement.auction.auction_id),
+        "currency": placement.bid.currency.value,
     }
 
     # -------------------------

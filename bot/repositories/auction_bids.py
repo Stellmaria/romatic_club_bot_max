@@ -13,6 +13,7 @@ _AUCTION_COLUMNS = """
     auction_id,
     status,
     currency,
+    accepted_currencies,
     start_price,
     start_time,
     end_time,
@@ -140,6 +141,29 @@ class AuctionBidTransaction:
             )
         return int(value) if value is not None else None
 
+    async def get_best_bid_units(
+        self,
+        auction_id: int,
+        *,
+        excluding_bid_id: int | None = None,
+    ) -> int | None:
+        exclusion = "" if excluding_bid_id is None else "AND bid_id <> $2"
+        parameters = (int(auction_id),) if excluding_bid_id is None else (int(auction_id), int(excluding_bid_id))
+        value = await self.connection.fetchval(
+            f"""
+            SELECT MIN(
+                CASE lower(COALESCE(currency, 'алмазы'))
+                    WHEN 'чашки' THEN amount * 10
+                    ELSE amount
+                END
+            )
+            FROM public.bids
+            WHERE auction_id = $1 {exclusion}
+            """,
+            *parameters,
+        )
+        return int(value) if value is not None else None
+
     async def get_max_bid(self, auction_id: int, *, excluding_bid_id: int | None = None) -> int | None:
         return await self.get_best_bid(
             auction_id,
@@ -153,6 +177,7 @@ class AuctionBidTransaction:
         auction_id: int,
         bidder_id: int,
         amount: int,
+        currency: str,
         discussion_message_id: int,
     ) -> Bid:
         try:
@@ -162,15 +187,17 @@ class AuctionBidTransaction:
                     auction_id,
                     bidder_id,
                     amount,
+                    currency,
                     discussion_message_id
                 )
-                VALUES ($1, $2, $3, $4)
-                RETURNING bid_id, auction_id, bidder_id, amount,
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING bid_id, auction_id, bidder_id, amount, currency,
                           discussion_message_id, placed_at, created_at
                 """,
                 int(auction_id),
                 int(bidder_id),
                 int(amount),
+                str(currency),
                 int(discussion_message_id),
             )
         except asyncpg.UniqueViolationError as exc:
@@ -181,7 +208,7 @@ class AuctionBidTransaction:
         lock = "FOR UPDATE" if for_update else ""
         row = await self.connection.fetchrow(
             f"""
-            SELECT bid_id, auction_id, bidder_id, amount,
+            SELECT bid_id, auction_id, bidder_id, amount, currency,
                    discussion_message_id, placed_at, created_at
             FROM public.bids
             WHERE discussion_message_id = $1
@@ -195,17 +222,21 @@ class AuctionBidTransaction:
             raise BidNotFound(f"bid for message {discussion_message_id} not found")
         return Bid.from_record(row)
 
-    async def update_bid_amount(self, bid_id: int, amount: int) -> Bid:
+    async def update_bid_amount(
+        self, bid_id: int, amount: int, *, currency: str | None = None
+    ) -> Bid:
         row = await self.connection.fetchrow(
             """
             UPDATE public.bids
-            SET amount = $2
+            SET amount = $2,
+                currency = COALESCE($3, currency)
             WHERE bid_id = $1
-            RETURNING bid_id, auction_id, bidder_id, amount,
+            RETURNING bid_id, auction_id, bidder_id, amount, currency,
                       discussion_message_id, placed_at, created_at
             """,
             int(bid_id),
             int(amount),
+            str(currency) if currency is not None else None,
         )
         if not row:
             raise BidNotFound(f"bid {bid_id} not found")
@@ -216,7 +247,7 @@ class AuctionBidTransaction:
             """
             DELETE FROM public.bids
             WHERE bid_id = $1
-            RETURNING bid_id, auction_id, bidder_id, amount,
+            RETURNING bid_id, auction_id, bidder_id, amount, currency,
                       discussion_message_id, placed_at, created_at
             """,
             int(bid_id),
