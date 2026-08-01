@@ -22,15 +22,18 @@ def test_priority_admin_navigation_precedes_conflicting_routers() -> None:
         assert priority < source.index(later_router)
 
 
-def test_complete_admin_menu_exposes_schedule_exchange_and_legacy_sections() -> None:
+def test_admin_root_keeps_schedule_inside_moderation() -> None:
     navigation = _source("bot/handlers/admin/admin_navigation.py")
     menu = _source("bot/handlers/admin/admin_menu.py")
+    requests = _source("bot/handlers/admin/admin_panel_requests.py")
 
     assert '@router.message(Command("admin"), F.chat.type == "private")' in navigation
     assert '@router.message(Command("admin_panel"), F.chat.type == "private")' in navigation
     assert '["⚙️ Модерация", "👥 Пользователи", "🎴 Карты"]' in menu
     assert '["📊 Статистика", "📣 Рассылка", "🚫 Логи"]' in menu
-    assert '["📅 Расписание", "🛒 Биржа"]' in menu
+    assert '["🛒 Биржа"]' in menu
+    assert '["📅 Расписание", "🛒 Биржа"]' not in menu
+    assert '["📅 Расписание", "🛒 Биржа"]' in requests
     assert 'rows.append(["🖥 Система"])' in menu
     assert (
         'F.text.lower().in_(["назад", "⬅️ назад", "отмена", "❌ отмена", "cancel"])'
@@ -72,21 +75,37 @@ def test_exchange_moderation_uses_supported_pending_total_query() -> None:
     assert "await queries.pending_count()" not in exchange_moderation
 
 
-def test_schedule_navigation_acks_and_chunks_grouped_preview() -> None:
+def test_schedule_navigation_uses_detailed_moderation_renderer() -> None:
     navigation = _source("bot/handlers/admin/admin_navigation.py")
+    schedule = _source("bot/handlers/admin/moderation_schedule.py")
 
     assert 'F.text == "📅 Расписание"' in navigation
     assert "start_preview_schedule(message, state)" in navigation
     assert "start_edit_schedule" not in navigation
-    assert 'F.data.startswith("preview_schedule|")' in navigation
-    assert 'period="day"' in navigation
-    assert 'prefix="preview_schedule"' in navigation
-    assert 'await call.answer("Загружаю расписание…")' in navigation
-    assert "get_auctions_by_date_with_owners(selected_date)" in navigation
-    assert "_grouped_schedule_lines(auctions)" in navigation
-    assert "_schedule_message_chunks(selected_date, lines)" in navigation
-    assert 'auction.get("owners_json")' in navigation
-    assert "build_grouped_schedule_lines_with_prefixes(" not in navigation
+    assert 'F.data.startswith("preview_schedule|")' not in navigation
+    assert "_grouped_schedule_lines" not in navigation
+    assert "_schedule_message_chunks" not in navigation
+
+    assert (
+        '@router.callback_query(PreviewScheduleFSM.choosing_month, '
+        'F.data.startswith("preview_schedule|"))'
+        in schedule
+    )
+    assert (
+        '@router.callback_query(PreviewScheduleFSM.choosing_day, '
+        'F.data.startswith("preview_schedule|"))'
+        in schedule
+    )
+    assert "await call.answer()" in schedule
+    assert "await get_auctions_by_date_with_owners(selected_date)" in schedule
+    assert "Актуальное расписание" in schedule
+    assert "Обновлено:" in schedule
+    assert "Auction ID:" in schedule
+    assert "Герой:" in schedule
+    assert "Владелец(ы):" in schedule
+    assert "Дата заявки:" in schedule
+    assert "Свободное время для записи:" in schedule
+    assert "split_message_by_blocks(blocks)" in schedule
 
 
 def test_per_lot_schedule_editor_remains_separate() -> None:
