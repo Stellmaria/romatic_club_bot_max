@@ -1,0 +1,43 @@
+name: Apply auction contract fix
+
+on:
+  push:
+    branches:
+      - fix/auction-deadline-multicurrency-reverse
+    paths:
+      - scripts/apply_auction_contract_fix.py
+      - .github/workflows/apply-auction-contract-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/auction-deadline-multicurrency-reverse
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Apply deterministic patch
+        run: python scripts/apply_auction_contract_fix.py
+      - name: Compile patched modules
+        run: |
+          python -m py_compile \
+            bot/domain/auctions/bidding.py \
+            bot/domain/auctions/models.py \
+            bot/domain/auctions/rules.py \
+            bot/repositories/auction_bids.py \
+            bot/services/auction_bids.py \
+            bot/handlers/auction/submission.py \
+            userbot/handlers/new_messages.py
+      - name: Commit generated fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: enforce auction deadlines and bid currencies"
+          git push origin HEAD:fix/auction-deadline-multicurrency-reverse
