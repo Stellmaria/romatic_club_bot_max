@@ -1,0 +1,31 @@
+[Unit]
+Description=Read-only Romatic Club Max Hermes incident monitor
+Requires=docker.service romatic-server-supervisor.service
+After=docker.service romatic-server-supervisor.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=velvet
+Group=velvet
+WorkingDirectory=/srv/romatic-club
+EnvironmentFile=/srv/romatic-club/.env
+EnvironmentFile=/srv/hermes-operator-control/incident.env
+Environment=ROMATIC_APP_DIR=/srv/romatic-club
+Environment=ROMATIC_ENV_FILE=.env
+Environment=ROMATIC_COMPOSE_FILE=compose.yaml
+Environment=DOCKER_CONFIG=/srv/romatic-club/server-data/runtime/docker-config
+Environment=COMPOSE_BAKE=false
+ExecStart=/usr/bin/python3 /srv/romatic-club/scripts/hermes_incident_monitor.py
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/srv/romatic-club/server-data/runtime/supervisor
+
+[Install]
+WantedBy=multi-user.target
