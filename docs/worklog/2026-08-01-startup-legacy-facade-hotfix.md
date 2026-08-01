@@ -38,11 +38,15 @@
 - `update_lot_field` ограничен фактически используемыми колонками и больше не принимает произвольное имя SQL-поля;
 - резервирование свободного auction ID выполняется транзакционно, под advisory lock и с `ON CONFLICT DO NOTHING`;
 - PM delivery markers сохраняют прежнюю SQL-семантику;
-- facade contract проверяет все импорты из `db.db` и `db.legacy`.
+- facade contract проверяет все импорты из `db.db` и `db.legacy`;
+- добавлены focused-регрессии на allow-list SQL-полей, сброс уведомлений при смене времени и race boundaries резервирования ID.
 
 ## После завершения
 
-- **Статус:** частично, ожидается полный CI текущего head.
+- **Статус:** завершено.
 - **PR:** #65.
+- **Проверки:** CI run #871 — success; production image build — success; Supervisor contract — success; compile/wheel/lint/persistence/database/Telegram/handler boundaries — success; `467 passed, 6 skipped`.
+- **Startup-контракт:** `bot.application`, `bot.bootstrap.routers` и `userbot.application` загружаются; импорт удалённого `bot.core.settings.settings` запрещён regression-тестом.
+- **Совместимость:** исправление `pending_total()` из PR #64 сохранено; миграции и схема БД этим PR не изменяются.
 - **Production:** не изменялся; остаётся на стабильном `68becc157a0ea9b65d7384385be8f5be4a550062`.
-- **Следующий шаг:** получить зелёный CI, обновить итоговые проверки и подготовить PR к review без merge/deploy.
+- **Следующий шаг:** review и отдельное разрешение владельца на merge, затем один controlled update через Supervisor с проверкой `RestartCount=0`.
