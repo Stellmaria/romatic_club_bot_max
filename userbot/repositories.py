@@ -1,6 +1,6 @@
 """Database access used by the Telethon userbot.
 
-Every query is kept in this module.  ``UserbotRepository`` accepts an explicit
+Every query is kept in this module. ``UserbotRepository`` accepts an explicit
 pool, while ``create`` is the single composition hook for the application's
 managed pool.
 """
@@ -56,11 +56,30 @@ class UserbotRepository:
             value = await connection.fetchval(query, int(auction_id))
         return int(value) if value is not None else None
 
+    async def fetch_best_bid_units(self, auction_id: int) -> int | None:
+        """Return the lowest reverse bid in diamond-equivalent units."""
+
+        async with self.pool.acquire() as connection:
+            value = await connection.fetchval(
+                """
+                SELECT MIN(
+                    CASE lower(COALESCE(currency, 'алмазы'))
+                        WHEN 'чашки' THEN amount * 10
+                        ELSE amount
+                    END
+                )
+                FROM public.bids
+                WHERE auction_id = $1
+                """,
+                int(auction_id),
+            )
+        return int(value) if value is not None else None
+
     async def get_bid_by_message_id(self, message_id: int) -> dict | None:
         async with self.pool.acquire() as connection:
             row = await connection.fetchrow(
                 """
-                SELECT bid_id, auction_id, bidder_id, amount,
+                SELECT bid_id, auction_id, bidder_id, amount, currency,
                        discussion_message_id, created_at
                 FROM public.bids
                 WHERE discussion_message_id = $1
@@ -71,12 +90,24 @@ class UserbotRepository:
             )
         return dict(row) if row else None
 
-    async def update_bid_amount(self, bid_id: int, new_amount: int) -> None:
+    async def update_bid_amount(
+        self,
+        bid_id: int,
+        new_amount: int,
+        *,
+        currency: str | None = None,
+    ) -> None:
         async with self.pool.acquire() as connection:
             await connection.execute(
-                "UPDATE public.bids SET amount=$1 WHERE bid_id=$2",
+                """
+                UPDATE public.bids
+                SET amount = $1,
+                    currency = COALESCE($3, currency)
+                WHERE bid_id = $2
+                """,
                 int(new_amount),
                 int(bid_id),
+                currency,
             )
 
     async def delete_bid(self, bid_id: int) -> None:
