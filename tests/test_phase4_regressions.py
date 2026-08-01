@@ -131,7 +131,8 @@ def test_phase4_migration_covers_statuses_indexes_and_copy_mode() -> None:
 def test_userbot_leaves_free_auction_comments_for_manual_review() -> None:
     source = (ROOT / "userbot/handlers/new_messages.py").read_text(encoding="utf-8")
     assert "if not auction_kind.is_automatic_bidding:" in source
-    assert "lowest_wins=auction_kind.lowest_bid_wins" in source
+    assert "_fetch_best_bid_units" in source
+    assert "lowest_wins=False" in source
     engine = (ROOT / "userbot/autobid_engine.py").read_text(encoding="utf-8")
     assert "if not kind.supports_autobid:" in engine
 
