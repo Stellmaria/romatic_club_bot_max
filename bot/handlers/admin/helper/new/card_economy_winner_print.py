@@ -23,7 +23,7 @@ from aiogram.types import (
 from bot.auction_notify import _kb_equal
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log as _send_admin_log
-from bot.handlers.card_subscribe import _decks_keyboard, _presets_manage_keyboard
+from bot.handlers.card_subscribe import decks_keyboard, presets_manage_keyboard
 from bot.services.card_economy import CardEconomyService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.telegram.callbacks import safe_callback_answer
@@ -50,7 +50,7 @@ from db.subscriptions import (
 from db.auctions import get_auction_winner
 from bot.telegram.states import CardSubscribeFSM, EconomyFSM
 
-from bot.handlers.admin.helper.new.card_economy_shared import _NOM
+from bot.handlers.admin.helper.new.card_economy_shared import NOM
 
 # ---------------------------------------------------------------------------
 # Router / constants
@@ -131,7 +131,7 @@ def _price_phrase(cur: str | None, amount: int | float | None, cash_code: str | 
     if cur_l in ("cash", "money", "fiat"):
         code = (cash_code or "").strip()
         return f"{int(amount) if float(amount).is_integer() else amount} {code}".strip()
-    unit = _NOM.get(cur_l, cur or "")
+    unit = NOM.get(cur_l, cur or "")
     val = int(amount) if isinstance(amount, (int, float)) and float(amount).is_integer() else amount
     return f"{val} {unit}".strip()
 

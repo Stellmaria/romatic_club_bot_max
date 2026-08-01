@@ -7,7 +7,7 @@ from datetime import datetime
 from aiogram import F, Router
 from aiogram.types import Message
 
-from bot.handlers.admin.action_support.compat import _safe_user_mention
+from bot.handlers.admin.action_support.compat import safe_user_mention
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.exchange_diagnostics import ExchangeDiagnosticsService
 
@@ -31,7 +31,7 @@ async def cmd_ex_lot(message: Message):
 
     # безопасный mention (если где-то уже есть _safe_user_mention)
     try:
-        owner_txt = _safe_user_mention(owner_id, owner_un)  # type: ignore[name-defined]
+        owner_txt = safe_user_mention(owner_id, owner_un)  # type: ignore[name-defined]
     except Exception:
         uname = f"@{html.escape(owner_un)}" if owner_un else str(owner_id)
         owner_txt = f"<a href='tg://user?id={owner_id}'>{uname}</a>"
@@ -189,7 +189,7 @@ async def cmd_ex_user(message: Message):
             f"  🎴 {items_txt}"
         )
 
-    who = _safe_user_mention(uid, uname)
+    who = safe_user_mention(uid, uname)
 
     text = (
             f"🛒 <b>Биржа: пользователь</b>\n"
@@ -287,7 +287,7 @@ async def cmd_ex_dump(message: Message):
 
         lots_ranges = _compress_ranges([int(x) for x in batch_ids])
         proof_label = _short_proof(proof)
-        who = _safe_user_mention(user_id, username)
+        who = safe_user_mention(user_id, username)
 
         lines = [
             "",

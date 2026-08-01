@@ -5,12 +5,12 @@ This module remains solely for third-party compatibility.
 """
 
 from bot.handlers.admin.action_support import exchange, forms, moderation, roles, scheduled_edits, transport
-from bot.handlers.admin.action_support.exchange import *  # noqa: F403
-from bot.handlers.admin.action_support.forms import *  # noqa: F403
-from bot.handlers.admin.action_support.moderation import *  # noqa: F403
-from bot.handlers.admin.action_support.roles import *  # noqa: F403
-from bot.handlers.admin.action_support.scheduled_edits import *  # noqa: F403
-from bot.handlers.admin.action_support.transport import *  # noqa: F403
+for _module in (exchange, forms, moderation, roles, scheduled_edits, transport):
+    for _name in _module.__all__:
+        globals()[_name] = getattr(_module, _name)
+
+del _module, _name
+
 from bot.handlers.admin.helper.new.formatting import (
     format_admin_action_log,
     format_pending_lot,

@@ -10,9 +10,9 @@ from aiogram.types import Message, User
 
 from bot.core.legacy_config import legacy_config
 from bot.handlers.admin.action_support.transport import (
-    _ensure_sender,
-    _resolve_bot_from_message,
-    _safe_strip,
+    ensure_sender,
+    resolve_bot_from_message,
+    safe_strip,
     notify_owners,
     require_bot,
 )
@@ -65,7 +65,7 @@ async def remove_admin_role(
 def _parse_admin_command_args(
         message: Message, is_owner: bool
 ) -> Tuple[Optional[str], Optional[str]]:
-    text = _safe_strip(getattr(message, "text", None))
+    text = safe_strip(getattr(message, "text", None))
     parts = text.split()
     if parts and parts[0].startswith("/"):
         parts = parts[1:]
@@ -344,13 +344,13 @@ def _trusted_result_text(grant: bool, user: Mapping[str, Any]) -> str:
 async def _actor_and_bot_or_fail(
         message: Message, state: Optional[FSMContext], bot: Optional[Bot]
 ) -> Optional[Tuple[int, Optional[str], Bot]]:
-    by_admin_id, admin_username = _ensure_sender(message)
+    by_admin_id, admin_username = ensure_sender(message)
     if by_admin_id is None:
         await message.answer("Не могу определить отправителя команды.")
         if state:
             await state.clear()
         return None
-    bot_resolved = _resolve_bot_from_message(message, bot)
+    bot_resolved = resolve_bot_from_message(message, bot)
     if bot_resolved is None:
         await message.answer(
             "Техническая пауза: бот недоступен. Повторите позже."
@@ -404,22 +404,8 @@ async def _do_trusted_action(
         await state.clear()
 
 
-__all__ = (
-    'add_admin_role',
-    'remove_admin_role',
-    '_parse_admin_command_args',
-    '_ensure_bot_or_fail',
-    '_admin_link_text',
-    '_remove_admin_flow',
-    '_add_admin_flow',
-    'do_admin_add_remove',
-    'admin_add_remove',
-    'give_trusted_status',
-    'remove_trusted_status',
-    '_resolve_user_or_error',
-    '_extract_who_text',
-    '_trusted_result_text',
-    '_actor_and_bot_or_fail',
-    '_do_trusted_action',
-)
 
+# Public compatibility aliases. Cross-feature imports must use these names.
+do_trusted_action = _do_trusted_action
+
+__all__ = ['add_admin_role', 'remove_admin_role', '_parse_admin_command_args', '_ensure_bot_or_fail', '_admin_link_text', '_remove_admin_flow', '_add_admin_flow', 'do_admin_add_remove', 'admin_add_remove', 'give_trusted_status', 'remove_trusted_status', '_resolve_user_or_error', '_extract_who_text', '_trusted_result_text', '_actor_and_bot_or_fail', '_do_trusted_action', 'do_trusted_action']

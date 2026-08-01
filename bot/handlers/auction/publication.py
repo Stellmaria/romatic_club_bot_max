@@ -20,7 +20,7 @@ from bot.handlers.admin.helper.admin_constants import (
     render_auction_caption,
 )
 from bot.handlers.admin.helper.user_helpers import get_owner_refs
-from bot.handlers.auction.winner import _post_rules_under_lot
+from bot.handlers.auction.winner import post_rules_under_lot
 from bot.services.auction_workflows import AuctionPublicationService
 from bot.telegram.media import bot_send_media_any
 from bot.core.legacy_config import legacy_config
@@ -246,7 +246,7 @@ async def publish_auction_lot(
             )
             return message_id
 
-        asyncio.create_task(_post_rules_under_lot(bot, auction_id))
+        asyncio.create_task(post_rules_under_lot(bot, auction_id))
         logger.info("Published auction %s as message %s", auction_id, message_id)
         return message_id
     except asyncio.CancelledError:

@@ -7,8 +7,8 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
-from bot.handlers.admin.uid_admin_presentation import _render_whois, _render_whois_by_uid
-from bot.handlers.admin.uid_admin_resolvers import _extract_user_id_from_message
+from bot.handlers.admin.uid_admin_presentation import render_whois, render_whois_by_uid
+from bot.handlers.admin.uid_admin_resolvers import extract_user_id_from_message
 from bot.handlers.admin.uid_admin_shared import UID_HEX_RE, USERNAME_RE
 from bot.services.uid_verification import get_user_basic_info_by_username
 from bot.telegram.states import ModActionFSM
@@ -23,7 +23,7 @@ async def cmd_whois(message: types.Message, state: FSMContext):
     await state.clear()
 
     # 1) reply/forward
-    user_id = _extract_user_id_from_message(message)
+    user_id = extract_user_id_from_message(message)
 
     # 2) аргумент
     arg = None
@@ -34,7 +34,7 @@ async def cmd_whois(message: types.Message, state: FSMContext):
 
     # если передан UID hex — отдельный режим
     if not user_id and arg and UID_HEX_RE.fullmatch(arg):
-        await _render_whois_by_uid(message, arg.lower())
+        await render_whois_by_uid(message, arg.lower())
         return
 
     # обычный поиск по id / username
@@ -51,7 +51,7 @@ async def cmd_whois(message: types.Message, state: FSMContext):
                     user_id = int(info["user_id"])
 
     if user_id:
-        await _render_whois(message, user_id)
+        await render_whois(message, user_id)
         return
 
     await state.set_state(ModActionFSM.waiting_for_whois_target)
@@ -70,12 +70,12 @@ async def whois_waiting_target(message: types.Message, state: FSMContext):
         await message.answer("Ок, отменено.")
         return
 
-    user_id = _extract_user_id_from_message(message)
+    user_id = extract_user_id_from_message(message)
 
     # UID hex
     if not user_id and UID_HEX_RE.fullmatch(txt):
         await state.clear()
-        await _render_whois_by_uid(message, txt.lower())
+        await render_whois_by_uid(message, txt.lower())
         return
 
     if not user_id and txt:
@@ -99,7 +99,7 @@ async def whois_waiting_target(message: types.Message, state: FSMContext):
         return
 
     await state.clear()
-    await _render_whois(message, user_id)
+    await render_whois(message, user_id)
 
 
 __all__ = ["router","cmd_whois","whois_waiting_target"]

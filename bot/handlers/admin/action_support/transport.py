@@ -347,24 +347,12 @@ async def send_lot_card_safe(message: Message, lot: Mapping[str, Any], text: str
                 )
 
 
-__all__ = (
-    '_safe_strip',
-    'parse_datetime_field',
-    '_to_msk',
-    '_human_wait',
-    '_resolve_bot_from_message',
-    '_ensure_sender',
-    'as_message',
-    'require_bot',
-    '_call_maybe_await',
-    'format_date_time_block',
-    'owner_or_secret_required',
-    'safe_edit_message',
-    'notify_owners',
-    'send_log_to_chats',
-    'verify_log_chats',
-    'get_cancel_text',
-    'process_universal_cancel_text',
-    'process_universal_cancel_callback',
-    'send_lot_card_safe',
-)
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+ensure_sender = _ensure_sender
+human_wait = _human_wait
+resolve_bot_from_message = _resolve_bot_from_message
+safe_strip = _safe_strip
+to_msk = _to_msk
+
+__all__ = ['_safe_strip', 'parse_datetime_field', '_to_msk', '_human_wait', '_resolve_bot_from_message', '_ensure_sender', 'as_message', 'require_bot', '_call_maybe_await', 'format_date_time_block', 'owner_or_secret_required', 'safe_edit_message', 'notify_owners', 'send_log_to_chats', 'verify_log_chats', 'get_cancel_text', 'process_universal_cancel_text', 'process_universal_cancel_callback', 'send_lot_card_safe', 'ensure_sender', 'human_wait', 'resolve_bot_from_message', 'safe_strip', 'to_msk']

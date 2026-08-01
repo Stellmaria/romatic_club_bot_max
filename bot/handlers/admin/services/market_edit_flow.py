@@ -9,7 +9,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 
-from bot.handlers.admin.services.market_constants import CB_KIND, CB_PREFIX, _EXTRAS_TAIL_RE, _EXTRAS_HEAD_RE, \
+from bot.handlers.admin.services.market_constants import CB_KIND, CB_PREFIX, EXTRAS_TAIL_RE, EXTRAS_HEAD_RE, \
     STAR_DB_CODE, PAGE_CARDS, CB_PAGE, CB_SEL, CB_BACK
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_diamonds_flow import start_diamonds_currency_flow
@@ -17,18 +17,18 @@ from bot.handlers.admin.services.market_fsm import MarketAddFSM, MarketEditFSM, 
 from bot.handlers.admin.services.market_keyboards import market_kind_kb, market_decks_kb, currency_multi_keyboard, \
     cash_multi_keyboard, kb_deck_mode, kb_custom_qty_choice, confirm_publish_kb, prices_menu_kb, prices_cash_menu_kb, \
     sold_confirm_kb, kb_proof_choice, kb_proof_single_skip, market_cards_kb
-from bot.handlers.admin.services.market_render import build_card_preview_caption, _reload_listing_inplace, \
-    _format_extra_for_summary
+from bot.handlers.admin.services.market_render import build_card_preview_caption, reload_listing_inplace, \
+    format_extra_for_summary
 from bot.handlers.admin.services.market_sales import (
-    _MY,
-    _my_sales_enter,
-    _my_sales_render,
-    _my_sales_set_filter_and_show,
+    MY,
+    my_sales_enter,
+    my_sales_render,
+    my_sales_set_filter_and_show,
 )
-from bot.handlers.admin.services.market_service import _kb_proof_each_skip, _send_prompt
-from bot.handlers.admin.services.market_utils import get_selected_ids, safe_delete, _normalize_pay_type, parse_tiers, \
-    _distinct_cards_count, safe_edit_text, remove_selected_id, add_selected_id, currency_emoji, \
-    validate_price_by_currency, _card_title
+from bot.handlers.admin.services.market_service import kb_proof_each_skip, send_prompt
+from bot.handlers.admin.services.market_utils import get_selected_ids, safe_delete, normalize_pay_type, parse_tiers, \
+    distinct_cards_count, safe_edit_text, remove_selected_id, add_selected_id, currency_emoji, \
+    validate_price_by_currency, card_title
 from bot.services.market import (
     get_all_decks,
     get_cards_by_deck,
@@ -118,7 +118,7 @@ async def edit_action(call: CallbackQuery, state: FSMContext):
     if action == "clearprices":
         await _delete_all_prices(lid)
         await call.answer("Цены сброшены")
-        await _reload_listing_inplace(call, lid)
+        await reload_listing_inplace(call, lid)
         return
 
     if action == "price":
@@ -261,7 +261,7 @@ async def do_soldqty(call: CallbackQuery, state: FSMContext):
         await call.message.delete()
     except Exception:
         pass
-    await _reload_listing_inplace(call, lid)
+    await reload_listing_inplace(call, lid)
 
 
 async def _delete_all_prices(lid: int) -> None:
@@ -269,11 +269,10 @@ async def _delete_all_prices(lid: int) -> None:
 
 
 async def _upsert_price(lid: int, pay_type: str, price: float | None, cash_code: str | None = None) -> None:
-    pay_type, cash_code = _normalize_pay_type(pay_type, cash_code)
+    pay_type, cash_code = normalize_pay_type(pay_type, cash_code)
     await market_replace_price(
         lid,
         pay_type=pay_type,
         cash_code=cash_code,
         price=price,
     )
-

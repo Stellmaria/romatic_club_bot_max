@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from bot.handlers.helper.helpers_users import _emoji_by_currency
+from bot.handlers.helper.helpers_users import emoji_by_currency
 from bot.services.auction_media import resolve_media_file_id
 from bot.services.exchange_submission import ExchangeSubmissionQueries
 from db.legacy import get_all_decks, get_card_by_id, get_exchange_cards_for_deck
@@ -255,7 +255,7 @@ def currency_to_emoji(currency: str | None) -> str:
     cur = (currency or "").strip()
     e = ""
     try:
-        e = _emoji_by_currency(cur)  # noqa: SLF001 (да, protected, зато работает)
+        e = emoji_by_currency(cur)  # noqa: SLF001 (да, protected, зато работает)
     except Exception:
         e = ""
     return e or CURRENCY_EMOJI.get(_norm_currency(cur) or cur.lower(), "💎")
@@ -984,3 +984,30 @@ def _tg_clean(text: str) -> str:
 def _user_link(user_id: int, username: Optional[str]) -> str:
     label = f"@{username}" if username else f"id:{user_id}"
     return f'<a href="tg://user?id={user_id}">{html.escape(label)}</a>'
+
+# Public feature contracts. Private names remain temporary local aliases.
+cur_emoji = _cur_emoji
+currency_emoji = _currency_emoji
+currency_label = _currency_label
+deck_id_from_row = _deck_id_from_row
+deck_price_for_deck = _deck_price_for_deck
+digits_int = _digits_int
+exchange_cards_kb = _exchange_cards_kb
+exchange_deck_cover_id = _exchange_deck_cover_id
+exchange_gain_for_card = _exchange_gain_for_card
+exchange_gift_for_card = _exchange_gift_for_card
+exchange_key_for_card = _exchange_key_for_card
+exchange_price_for_card = _exchange_price_for_card
+fmt_dt_msk = _fmt_dt_msk
+format_gain_line = _format_gain_line
+get_exchange_deck_ids = _get_exchange_deck_ids
+get_exchange_decks_for_menu = _get_exchange_decks_for_menu
+gift_emoji = _gift_emoji
+escape_html = _h
+load_full_cards_for_deck = _load_full_cards_for_deck
+normalize_card_ids = _normalize_card_ids
+rarity_badge = _rarity_badge
+rarity_norm = _rarity_norm
+sum_gains = _sum_gains
+clean_telegram_text = _tg_clean
+user_link = _user_link

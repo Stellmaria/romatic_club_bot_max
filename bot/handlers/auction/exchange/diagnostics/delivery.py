@@ -5,12 +5,12 @@ from collections import defaultdict
 from aiogram import Router, types
 from aiogram.filters import Command
 
-from bot.handlers.admin.action_support.compat import _safe_user_mention
+from bot.handlers.admin.action_support.compat import safe_user_mention
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.admin_thanks import admin_tag, build_thanks_kb
 from bot.services.exchange_diagnostics import ExchangeDiagnosticsService
 from ..common import currency_to_emoji
-from .common import _cards_preview, _ex_mode_label, _parse_batch_ids
+from .common import cards_preview, exchange_mode_label, parse_batch_ids
 
 router = Router(name="auction_exchange_diagnostics_delivery")
 
@@ -65,7 +65,7 @@ async def cmd_print_ex_multi(message: types.Message):
     else:
         batch_tokens = args
 
-    batch_ids = _parse_batch_ids(batch_tokens)
+    batch_ids = parse_batch_ids(batch_tokens)
     if not batch_ids:
         await message.answer("Не вижу batch-id. Пример: /print_ex_multi 123456 149 143 122")
         return
@@ -75,7 +75,7 @@ async def cmd_print_ex_multi(message: types.Message):
         u = await diagnostics.user_by_id(winner_id)
         winner_un = (u.get("username") or u.get("full_name")) if u else str(winner_id)
 
-    winner_mention = _safe_user_mention(winner_id, winner_un or str(winner_id))
+    winner_mention = safe_user_mention(winner_id, winner_un or str(winner_id))
     moderator = admin_tag(message.from_user)
     thanks_kb = await build_thanks_kb(batch_ids[0], moderator)
 
@@ -112,14 +112,14 @@ async def cmd_print_ex_multi(message: types.Message):
             {
                 "batch_id": bid,
                 "owner_id": owner_id,
-                "owner_mention": _safe_user_mention(owner_id, owner_un),
+                "owner_mention": safe_user_mention(owner_id, owner_un),
                 "deck_name": deck_name,
                 "mode": mode,
-                "mode_label": _ex_mode_label(mode),
+                "mode_label": exchange_mode_label(mode),
                 "currency": cur,
                 "price": price,
                 "items": items,
-                "cards_preview": _cards_preview(items),
+                "cards_preview": cards_preview(items),
                 "card_count": card_count,
             }
         )
@@ -140,7 +140,7 @@ async def cmd_print_ex_multi(message: types.Message):
     # платежи победителю
     pay_lines: list[str] = []
     for (oid, cur), amount in sorted(pay_map.items(), key=lambda x: (-x[1], x[0][0])):
-        om = _safe_user_mention(oid, owner_username.get(oid, str(oid)))
+        om = safe_user_mention(oid, owner_username.get(oid, str(oid)))
         pay_lines.append(f"• {om}: <b>{amount}</b> {currency_to_emoji(cur)}")
 
     # состав по лотам

@@ -3,8 +3,219 @@
 Handlers retain their relative order from the legacy ``moderation`` module.
 """
 
-from bot.handlers.admin.moderation_shared import *  # noqa: F403
+import html
+from bot.handlers.admin.helper.admin_constants import (
+    ADMIN_MESSAGES,
+    CANCEL_TEXTS,
+)
+from typing import Any
+from bot.telegram.states import ApproveLotFSM
+from bot.services.auction_workflows import AuctionModerationService
+from aiogram import (
+    F,
+    Router,
+    types,
+)
+from aiogram.fsm.context import FSMContext
+from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.services.admin_thanks import (
+    admin_tag,
+    build_thanks_kb,
+)
+from bot.handlers.admin.helper.new.keyboards import (
+    back_keyboard,
+    build_lot_keyboard,
+    menu_keyboard,
+)
+from bot.handlers.admin.helper.new.formatting import (
+    format_admin_action_log,
+    format_pending_lot,
+    get_lot_owners_with_levels,
+)
+from db.auctions import (
+    get_lot_by_id,
+    get_lot_owners,
+)
+from bot.services.admin_owners import get_lot_owners_text
+from db.admin import log_audit_action
+from bot.services.admin_auction_notifications import notify_owners_lot_changed
+from bot.handlers.admin.presentation.media import extract_media_file_id
+from bot.handlers.admin.action_support.transport import process_universal_cancel_text
+from bot.handlers.admin.action_support.exchange import (
+    safe_answer_photo,
+    tg_clean,
+)
+from bot.services.admin_logging import send_admin_log
+from bot.handlers.admin.logs_admin import short_media_id
+
+
 from bot.telegram.callback_parser import split_callback_data
+
+async def _update_auction_field(auction_id: int, field: str, value: Any) -> dict[str, Any]:
+    service = await AuctionModerationService.create()
+    return await service.update_field(auction_id, field=field, value=value)
+
+def _pretty(v: Any) -> str:
+    if v is None:
+        return "—"
+    s = str(v).strip()
+    return s if s else "—"
+
+async def notify_owners_pending_changed(
+    bot,
+    *,
+    auction_id: int,
+    admin_user: types.User,
+    changes: list[tuple[str, object, object]],
+) -> None:
+    lot = await get_lot_by_id(int(auction_id))
+    owners = await get_lot_owners(int(auction_id))
+    if not lot or not owners:
+        return
+
+    moderator_tag = admin_tag(admin_user)
+    kb = await build_thanks_kb(int(auction_id), moderator_tag)
+
+    def _v(x: object) -> str:
+        if x is None:
+            return "—"
+        s = str(x).strip()
+        return s if s else "—"
+
+    ch = "\n".join([f"• <b>{t}:</b> <code>{_v(o)}</code> → <code>{_v(n)}</code>" for t, o, n in changes])
+
+    caption = (
+        "🧩 <b>Изменения в вашей заявке (модерация)</b>\n\n"
+        f"Лот: <b>{lot.get('card_name') or '—'}</b> — <i>{lot.get('hero_name') or '—'}</i>\n"
+        f"ID: <code>{auction_id}</code>\n\n"
+        f"<b>Что изменили:</b>\n{ch}\n\n"
+        f"👤 <b>Кто изменил:</b> {moderator_tag}\n"
+        f"Если хочешь, можешь сказать спасибо ниже ❤️\n"
+    )
+
+    media_id = lot.get("image_id") or lot.get("photo_id")
+    sent: set[int] = set()
+    for o in owners:
+        try:
+            uid = int(o["user_id"])
+        except Exception:
+            continue
+        if uid in sent:
+            continue
+        sent.add(uid)
+        try:
+            # pending тоже отправим с текущим медиа
+            try:
+                await bot.send_photo(uid, media_id, caption=caption, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                await bot.send_message(uid, caption, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+
+async def _log_pending_change(
+        bot,
+        *,
+        admin_user: types.User,
+        auction_id: int,
+        action_type: str,
+        field_title: str,
+        old_value: Any,
+        new_value: Any,
+) -> None:
+    new_lot = await get_lot_by_id(int(auction_id))
+    owners_text = await get_lot_owners_text(int(auction_id))
+
+    log_text = format_admin_action_log(
+        action="edit_pending",
+        admin={
+            "id": admin_user.id,
+            "user_id": admin_user.id,  # на всякий случай под твою структуру
+            "username": admin_user.username or "",
+            "full_name": admin_user.full_name or "",
+        },
+        lot=new_lot,
+        owners_text=owners_text,
+    )
+    log_text += _field_log_block(field_title, old_value, new_value)
+
+    await send_admin_log(bot, log_text)
+    await log_audit_action(
+        user_id=admin_user.id,
+        action_type=action_type,
+        auction_id=int(auction_id),
+        details=f"{field_title}: {_pretty(old_value)} -> {_pretty(new_value)}",
+    )
+
+def _pretty_bool(v: Any) -> str:
+    if v is None:
+        return "—"
+    return "✅ Да" if bool(v) else "❌ Нет"
+
+def _pretty_value(field: str, v: Any) -> str:
+    if v is None or v == "":
+        return "—"
+    if field in ("craft_uid_possible",):
+        return _pretty_bool(v)
+    return str(v)
+
+def _field_log_block(field_title: str, old_value: Any, new_value: Any) -> str:
+    return (
+        "\n\n🧩 <b>Изменение поля</b>"
+        f"\n📝 <b>Поле:</b> {html.escape(field_title)}"
+        f"\n📎 <b>Было:</b> {html.escape(_pretty_value(field_title, old_value))}"
+        f"\n✅ <b>Стало:</b> {html.escape(_pretty_value(field_title, new_value))}"
+    )
+
+async def _send_pending_lot_card(message: types.Message, bot, auction_id: int) -> None:
+    lot = await get_lot_by_id(int(auction_id))
+    owners = await get_lot_owners_with_levels(bot, int(auction_id))
+    text = format_pending_lot(lot, owners)
+    kb = build_lot_keyboard(lot, role="admin")
+
+    media_id = (lot or {}).get("image_id") or (lot or {}).get("card_image_id")
+    if media_id:
+        # safe_answer_photo(msg, image_id, ...) — никаких photo_id=
+        await safe_answer_photo(message, media_id, caption=text, reply_markup=kb, parse_mode="HTML")
+    else:
+        await message.answer(text, reply_markup=kb, parse_mode="HTML")
+
+async def _log_pending_field_change(
+        bot,
+        *,
+        admin_user: types.User,
+        auction_id: int,
+        field_title: str,
+        old_value,
+        new_value,
+        action_type: str,
+        lot_override: dict | None = None,
+) -> None:
+    lot = await get_lot_by_id(int(auction_id))
+    owners_text = await get_lot_owners_text(int(auction_id))
+
+    merged_lot = dict(lot or {})
+    if lot_override:
+        merged_lot.update(lot_override)
+
+    log_text = format_admin_action_log(
+        action="edit_lot",
+        admin={"id": admin_user.id, "username": admin_user.username or admin_user.full_name},
+        lot=merged_lot,
+        owners_text=owners_text,
+    )
+    log_text += (
+        "\n\n🧩 <b>Изменение в модерации (редактор заявки)</b>"
+        f"\n✏️ <b>Поле:</b> {tg_clean(field_title)}"
+        f"\n🔁 <b>Было:</b> {tg_clean(_pretty(old_value))}"
+        f"\n✅ <b>Стало:</b> {tg_clean(_pretty(new_value))}"
+    )
+    await send_admin_log(bot, log_text)
+    await log_audit_action(
+        user_id=admin_user.id,
+        action_type=action_type,
+        auction_id=int(auction_id),
+        details=f"{field_title}: {_pretty(old_value)} -> {_pretty(new_value)}",
+    )
 
 router = Router(name=__name__)
 
@@ -278,7 +489,7 @@ async def handle_uploaded_lot_photo(message: types.Message, state: FSMContext):
         return
     old_lot = await get_lot_by_id(auction_id)
     old_media = (old_lot or {}).get("image_id")
-    media_id = _extract_media_file_id(message)
+    media_id = extract_media_file_id(message)
     if not media_id:
         await message.answer("Пожалуйста, пришли фото/видео для лота (или нажми 'Назад').")
         return

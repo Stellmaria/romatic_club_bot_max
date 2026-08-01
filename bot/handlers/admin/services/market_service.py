@@ -324,3 +324,7 @@ async def confirm_listing(message: Message, state: FSMContext, bot: Bot):
 
     await state.clear()
     await message.answer(f"Готово. Создано объявлений: {created}.")
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+kb_proof_each_skip = _kb_proof_each_skip
+send_prompt = _send_prompt

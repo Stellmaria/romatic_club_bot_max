@@ -208,3 +208,9 @@ def fiat_flag(code: str) -> str:
 
 def currency_emoji(cur: str) -> str:
     return {"diamonds": "💎", "cups": "☕", "treasures": "🏴‍☠️", "cash": "💵"}.get(cur, "💵")
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+card_title = _card_title
+distinct_cards_count = _distinct_cards_count
+normalize_pay_type = _normalize_pay_type
+upsert_price = _upsert_price

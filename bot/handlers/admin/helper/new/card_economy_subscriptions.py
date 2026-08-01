@@ -23,7 +23,7 @@ from aiogram.types import (
 from bot.auction_notify import _kb_equal
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log as _send_admin_log
-from bot.handlers.card_subscribe import _decks_keyboard, _presets_manage_keyboard
+from bot.handlers.card_subscribe import decks_keyboard, presets_manage_keyboard
 from bot.services.card_economy import CardEconomyService
 from bot.services.card_subscriptions import CardSubscriptionsService
 from bot.telegram.callbacks import safe_callback_answer
@@ -60,8 +60,8 @@ from bot.handlers.admin.helper.new.card_economy_shared import (
     SEND_HTML_KW,
     SUBS_CONFIRM_CB,
     UNSUB_CB_PREFIX,
-    _safe_edit,
-    _subs_word,
+    safe_edit,
+    subs_word,
 )
 from bot.telegram.callback_parser import split_callback_data
 
@@ -84,7 +84,7 @@ def _build_text(subs: list[dict]) -> str:
     total = len(subs)
     lines: list[str] = []
     lines.append("🔔 <b>Ваши активные подписки</b>")
-    lines.append(f"Всего: <b>{total}</b> {_subs_word(total)}")
+    lines.append(f"Всего: <b>{total}</b> {subs_word(total)}")
     lines.append("")
     lines.append(
         "Нажмите на название, чтобы отметить подписку подтверждённой, "
@@ -323,7 +323,7 @@ def _normalize_sub_rows(rows) -> list[dict]:
 @router.callback_query(CardSubscribeFSM.waiting_for_deck, F.data.in_({"sub:presets_open", "sub:preset:any_card"}))
 async def open_presets_manager_from_decks(call: types.CallbackQuery, state: FSMContext):
     await state.update_data(presets_back="decks")
-    kb = await _presets_manage_keyboard(call.from_user.id, back="decks")
+    kb = await presets_manage_keyboard(call.from_user.id, back="decks")
     await _safe_edit_msg(call.message, "Пресеты уведомлений по расписанию:", kb)
     await call.answer()
 
@@ -335,7 +335,7 @@ async def open_subscribe_from_broadcast(call: types.CallbackQuery, state: FSMCon
         await call.message.answer("Пока нет доступных колод.")
         await call.answer()
         return
-    await call.message.answer("Выбери колоду для подписки:", reply_markup=_decks_keyboard(decks))
+    await call.message.answer("Выбери колоду для подписки:", reply_markup=decks_keyboard(decks))
     await state.set_state(CardSubscribeFSM.waiting_for_deck)
     await call.answer()
 
@@ -357,7 +357,7 @@ async def open_subscribe_from_button(call: types.CallbackQuery, state: FSMContex
         await call.message.answer("Пока нет доступных колод.")
         await call.answer()
         return
-    await call.message.answer("Выбери колоду для подписки:", reply_markup=_decks_keyboard(decks))
+    await call.message.answer("Выбери колоду для подписки:", reply_markup=decks_keyboard(decks))
     await state.set_state(CardSubscribeFSM.waiting_for_deck)
     await call.answer()
 
@@ -524,7 +524,7 @@ async def sc_confirm_all(call: types.CallbackQuery) -> None:
         new_kb = InlineKeyboardMarkup(inline_keyboard=new_rows)
         if not _kb_equal(call.message.reply_markup, new_kb):
             current_text = call.message.html_text or call.message.text or ""
-            await _safe_edit(call, current_text, new_kb)
+            await safe_edit(call, current_text, new_kb)
 
     await call.answer(f"Подтверждено: {count}")
 
@@ -589,7 +589,7 @@ async def sc_confirm(call: types.CallbackQuery) -> None:
 
     # Безопасное редактирование (не свалимся на 'message is not modified')
     current_text = call.message.html_text or call.message.text or ""
-    await _safe_edit(call, current_text, new_kb)
+    await safe_edit(call, current_text, new_kb)
     await call.answer("Отмечено")
 
 
@@ -686,6 +686,5 @@ async def sc_unsubscribe(call: types.CallbackQuery) -> None:
         return
 
     current_text = call.message.html_text or call.message.text or ""
-    await _safe_edit(call, current_text, new_kb)
+    await safe_edit(call, current_text, new_kb)
     await safe_callback_answer(call, "Отписано")
-

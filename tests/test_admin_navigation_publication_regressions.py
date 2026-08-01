@@ -46,7 +46,7 @@ def test_exchange_navigation_uses_supported_catalog_callbacks() -> None:
 
     assert 'F.text == "🛒 Биржа"' in navigation
     assert 'F.data == "ex_appr:root"' in navigation
-    assert "_kb_exchange_approved_root()" in navigation
+    assert "kb_exchange_approved_root()" in navigation
     assert "exinv|" not in navigation
     assert '@router.callback_query(F.data == "ex_appr:decks")' in catalog
     assert '@router.callback_query(F.data.startswith("ex_appr:list:all:"))' in catalog

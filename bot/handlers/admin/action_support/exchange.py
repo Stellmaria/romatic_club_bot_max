@@ -454,24 +454,10 @@ def _cur_emoji(currency: str | None) -> str:
     }.get(c, "💰")
 
 
-__all__ = (
-    'MAX_TG_LEN',
-    'SAFE_SPLIT',
-    'BR_RE',
-    'DT_FMT',
-    '_safe_user_mention',
-    '_as_str',
-    '_admin_link_html',
-    'format_exchange_moderation_log',
-    'notify_exchange_user_moderation',
-    'format_exchange_new_request_log',
-    '_looks_like_file_id',
-    'safe_answer_photo',
-    'tg_clean',
-    '_get_exchange_cover_media_admin',
-    '_media_kind_from_error_admin',
-    '_send_exchange_batch_card_admin',
-    'build_exchange_pending_keyboard',
-    '_cur_emoji',
-)
 
+# Public compatibility aliases. Cross-feature imports must use these names.
+safe_user_mention = _safe_user_mention
+cur_emoji = _cur_emoji
+send_exchange_batch_card_admin = _send_exchange_batch_card_admin
+
+__all__ = ['MAX_TG_LEN', 'SAFE_SPLIT', 'BR_RE', 'DT_FMT', '_safe_user_mention', '_as_str', '_admin_link_html', 'format_exchange_moderation_log', 'notify_exchange_user_moderation', 'format_exchange_new_request_log', '_looks_like_file_id', 'safe_answer_photo', 'tg_clean', '_get_exchange_cover_media_admin', '_media_kind_from_error_admin', '_send_exchange_batch_card_admin', 'build_exchange_pending_keyboard', '_cur_emoji', 'safe_user_mention', 'cur_emoji', 'send_exchange_batch_card_admin']

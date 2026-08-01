@@ -492,3 +492,6 @@ _BR_RE = re.compile(r"(?i)<br\s*/?>")
 
 def _tg_clean(text: str) -> str:
     return _BR_RE.sub("\n", text or "")
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+chunks = _chunks

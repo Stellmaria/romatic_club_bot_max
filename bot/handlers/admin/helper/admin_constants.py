@@ -3,7 +3,7 @@ from typing import Set
 
 from bot.handlers.admin.helper.new.utils import auction_kind_label
 from bot.domain.auctions import currency_choices_label
-from bot.handlers.helper.helpers_users import _emoji_by_currency
+from bot.handlers.helper.helpers_users import emoji_by_currency
 from bot.presentation.warnings import WARN_TEXTS
 from bot.services.admin_auctions import AdminAuctionContextService
 
@@ -368,7 +368,7 @@ def render_auction_caption(
         hero_line = f"{html.escape(hero_name or card_name)}\n"
 
     start_price = int(auction.get("start_price") or 0)
-    emoji = _emoji_by_currency(auction.get("currency"))
+    emoji = emoji_by_currency(auction.get("currency"))
     end_time_str = auction.get("end_time_str") or _fmt_time_hhmm_msk(auction.get("end_time"))
     owners_count = int(owners_count or auction.get("owners_count") or auction.get("cards_count") or 1)
 

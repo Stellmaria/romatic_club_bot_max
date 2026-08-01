@@ -17,8 +17,8 @@ from bot.handlers.admin.helper.user_helpers import (
     build_grouped_schedule_lines_with_prefixes,
 )
 from bot.handlers.auction.exchange.catalog import (
-    _kb_exchange_approved_root,
-    _safe_edit_text_or_caption,
+    kb_exchange_approved_root,
+    safe_edit_text_or_caption,
 )
 from bot.telegram.states import PreviewScheduleFSM
 from db.auctions import get_auctions_by_date_with_owners
@@ -158,7 +158,7 @@ async def exchange_menu_button(message: Message, state: FSMContext) -> None:
     await message.answer(
         "🛒 <b>Биржа</b>\n\nВыберите способ просмотра принятых лотов:",
         parse_mode="HTML",
-        reply_markup=_kb_exchange_approved_root(),
+        reply_markup=kb_exchange_approved_root(),
     )
 
 
@@ -166,10 +166,10 @@ async def exchange_menu_button(message: Message, state: FSMContext) -> None:
 @admin_only
 async def exchange_approved_root(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await _safe_edit_text_or_caption(
+    await safe_edit_text_or_caption(
         call.message,
         text="🛒 <b>Биржа</b>\n\nВыберите способ просмотра принятых лотов:",
-        reply_markup=_kb_exchange_approved_root(),
+        reply_markup=kb_exchange_approved_root(),
     )
     await call.answer()
 

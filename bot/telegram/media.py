@@ -164,3 +164,14 @@ async def safe_send_media(
         protect_content=protect_content,
     )
     return False
+
+
+def media_kind_from_error(error: Exception) -> str | None:
+    """Infer the Telegram media method suggested by a type mismatch error."""
+
+    message = str(error).lower()
+    if "video as photo" in message or "type video" in message:
+        return "video"
+    if "animation as photo" in message or "gif as photo" in message:
+        return "animation"
+    return None

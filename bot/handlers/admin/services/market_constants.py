@@ -55,3 +55,8 @@ TIER_RE = re.compile(
     r"(?P<pay>(?:cups?|чашки|diamonds?|💎|treasures?)|[A-Z]{3})?\s*$",
     re.IGNORECASE,
 )
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+EXTRAS_HEAD_RE = _EXTRAS_HEAD_RE
+EXTRAS_TAIL_RE = _EXTRAS_TAIL_RE
+RU_WORD = _RU_WORD

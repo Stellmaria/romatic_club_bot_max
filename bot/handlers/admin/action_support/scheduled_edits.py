@@ -9,7 +9,7 @@ from aiogram import Bot, types
 from aiogram.exceptions import TelegramBadRequest
 
 from bot.core.time import to_moscow
-from bot.handlers.admin.action_support.exchange import _cur_emoji
+from bot.handlers.admin.action_support.exchange import cur_emoji
 from bot.handlers.admin.helper.admin_constants import RARITY_EMOJI
 from bot.services.admin_logging import send_admin_log
 from bot.services.admin_owners import get_lot_owners_text, get_lot_owners_with_levels
@@ -142,7 +142,7 @@ def _format_change_lines(lot_before: dict, changes: list[tuple[str, Any, Any]]) 
 
         if f in {"start_price", "price"}:
             cur = lot_before.get("currency")
-            ce = _cur_emoji(cur)
+            ce = cur_emoji(cur)
             old_s = "—" if old is None else f"{old} {ce}"
             new_s = "—" if new is None else f"{new} {ce}"
             lines.append(f"💰 <b>Цена:</b> {old_s} → {new_s}")
@@ -534,4 +534,3 @@ __all__ = (
     'apply_scheduled_auction_kind_change',
     'apply_scheduled_craft_uid_change',
 )
-

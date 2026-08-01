@@ -7,7 +7,7 @@ from typing import Iterable
 
 from aiogram import Bot
 
-from bot.handlers.admin.services.market_constants import STAR_DB_CODE, _EXTRAS_HEAD_RE, _EXTRAS_TAIL_RE, _RU_WORD
+from bot.handlers.admin.services.market_constants import STAR_DB_CODE, EXTRAS_HEAD_RE, EXTRAS_TAIL_RE, RU_WORD
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_keyboards import my_listing_actions
 from bot.handlers.admin.services.market_utils import fiat_flag
@@ -331,10 +331,10 @@ async def send_listing_preview(bot: Bot, chat_id: int, listing_id: int):
 
 def _format_extra_for_summary(item: str) -> str:
     s = (item or "").strip()
-    m = _EXTRAS_HEAD_RE.match(s)
+    m = EXTRAS_HEAD_RE.match(s)
     if m:
         return f"• {html.escape(m.group(2).strip())} ×{int(m.group(1))}"
-    m = _EXTRAS_TAIL_RE.match(s)
+    m = EXTRAS_TAIL_RE.match(s)
     if m:
         return f"• {html.escape(m.group(1).strip())} ×{int(m.group(2))}"
     return f"• {html.escape(s)}"
@@ -347,7 +347,7 @@ def _title_like(src: str, dst: str) -> str:
 
 
 def _inflect_word_acc(word: str) -> str:
-    if not _RU_WORD.match(word):
+    if not RU_WORD.match(word):
         return word
 
     if _MORPH:
@@ -367,10 +367,10 @@ def inflect_phrase_accusative(text: str) -> str:
     i = 0
     while i < len(tokens):
         t = tokens[i]
-        if not changed_head and _RU_WORD.match(t):
+        if not changed_head and RU_WORD.match(t):
             j = i
             buf = []
-            while j < len(tokens) and _RU_WORD.match(tokens[j]):
+            while j < len(tokens) and RU_WORD.match(tokens[j]):
                 buf.append(tokens[j])
                 j += 1
             buf = [_inflect_word_acc(w) for w in buf]
@@ -546,3 +546,7 @@ def _fallback_inflect_word_acc(word: str) -> str:
         if lw.endswith(a):
             return _title_like(w, lw[: -len(a)] + b)
     return w
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+format_extra_for_summary = _format_extra_for_summary
+reload_listing_inplace = _reload_listing_inplace

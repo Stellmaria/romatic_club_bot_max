@@ -10,10 +10,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.uid_admin_presentation import (
-    _REV_ALLOWED,
-    _kb_uidv_revision,
-    _rev_flags_to_lines,
-    _sort_rev_flags,
+    REV_ALLOWED,
+    kb_uidv_revision,
+    rev_flags_to_lines,
+    sort_rev_flags,
 )
 from bot.services.admin_thanks import admin_tag
 from bot.services.uid_verification import (
@@ -49,9 +49,9 @@ async def uidv_revision_start(call: types.CallbackQuery, state: FSMContext) -> N
         f"Отметь, что нужно исправить, добавь причину, затем отправь пользователю."
     )
     try:
-        await call.message.edit_text(txt, reply_markup=_kb_uidv_revision(req_id, [], ""))
+        await call.message.edit_text(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
     except Exception:
-        await call.message.answer(txt, reply_markup=_kb_uidv_revision(req_id, [], ""))
+        await call.message.answer(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
 
 
 @router.callback_query(F.data.startswith("uidv|rev_toggle|"))
@@ -78,13 +78,13 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
     chosen = set(data.get("uidv_rev_flags") or [])
     reason = str(data.get("uidv_rev_reason") or "")
 
-    if flag in _REV_ALLOWED:
+    if flag in REV_ALLOWED:
         if flag in chosen:
             chosen.remove(flag)
         else:
             chosen.add(flag)
 
-    chosen_list = _sort_rev_flags(chosen)
+    chosen_list = sort_rev_flags(chosen)
     await state.update_data(uidv_rev_flags=chosen_list)
 
     try:
@@ -93,7 +93,7 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
         pass
 
     try:
-        await call.message.edit_reply_markup(reply_markup=_kb_uidv_revision(req_id, chosen_list, reason))
+        await call.message.edit_reply_markup(reply_markup=kb_uidv_revision(req_id, chosen_list, reason))
     except Exception:
         # если вдруг Telegram не дал редактировать markup, не падаем
         pass
@@ -128,13 +128,13 @@ async def uidv_revision_reason_msg(message: types.Message, state: FSMContext) ->
     reason = (message.text or "").strip()
     data = await state.get_data()
     req_id = int(data.get("uidv_rev_req_id") or 0)
-    chosen = _sort_rev_flags(data.get("uidv_rev_flags") or [])
+    chosen = sort_rev_flags(data.get("uidv_rev_flags") or [])
 
     await state.set_state(UIDVerificationRevisionFSM.choosing_flags)
     await state.update_data(uidv_rev_reason=reason)
 
     txt = f"🔧 <b>На доработку</b> (заявка <b>#{req_id}</b>)\n\nПричина сохранена."
-    await message.answer(txt, reply_markup=_kb_uidv_revision(req_id, chosen, reason))
+    await message.answer(txt, reply_markup=kb_uidv_revision(req_id, chosen, reason))
 
 
 @router.callback_query(F.data.startswith("uidv|rev_send|"))
@@ -147,7 +147,7 @@ async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: 
 
     req_id = int(parts[2] or 0)
     data = await state.get_data()
-    chosen = _sort_rev_flags(data.get("uidv_rev_flags") or [])
+    chosen = sort_rev_flags(data.get("uidv_rev_flags") or [])
     reason = (data.get("uidv_rev_reason") or "").strip()
 
     if not chosen:
@@ -181,7 +181,7 @@ async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: 
 
     user_id = int(req.get("user_id") or 0)
     moderator = admin_tag(admin_u)
-    lines = "\n".join(_rev_flags_to_lines(chosen))
+    lines = "\n".join(rev_flags_to_lines(chosen))
 
     kb = InlineKeyboardBuilder()
     kb.button(text="🔧 Исправить заявку", callback_data=f"uidv_fix|{req_id}")

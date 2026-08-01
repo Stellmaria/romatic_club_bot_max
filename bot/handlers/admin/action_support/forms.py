@@ -9,7 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, User
 
 from bot.core.legacy_config import legacy_config
-from bot.handlers.admin.action_support.transport import _safe_strip
+from bot.handlers.admin.action_support.transport import safe_strip
 from bot.handlers.admin.helper.new.keyboards import back_keyboard, decks_keyboard, period_keyboard
 from bot.presentation.admin import format_owner_html
 from db.auctions import get_lot_by_message_id
@@ -62,7 +62,7 @@ async def add_deck_fsm_entry(message: Message, state: FSMContext) -> None:
     fu = getattr(message, "from_user", None)
     is_owner = isinstance(fu, User) and (fu.id in legacy_config.ADMINS_OWNERS)
 
-    text = _safe_strip(getattr(message, "text", None))
+    text = safe_strip(getattr(message, "text", None))
     parts = text.split(maxsplit=1)
 
     if is_owner and text.startswith("/add_deck") and len(parts) == 2:
@@ -143,4 +143,3 @@ __all__ = (
     'owners_to_links_text',
     'get_lot_by_channel_message_id',
 )
-

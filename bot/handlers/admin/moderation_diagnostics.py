@@ -3,9 +3,59 @@
 Handlers retain their relative order from the legacy ``moderation`` module.
 """
 
-from bot.handlers.admin.moderation_shared import *  # noqa: F403
+import html as _html
+import logging
+from aiogram.filters import (
+    Command,
+    CommandObject,
+)
+from bot.services.exchanges import ExchangeService
+from aiogram import (
+    F,
+    Router,
+    types,
+)
+from aiogram.fsm.context import FSMContext
+from bot.domain.auctions import InvalidExchangeTransition
+from bot.handlers.admin.helper.admin_constants import (
+    MSG_PHOTO_CONFIRM,
+    MSG_PHOTO_NOT_FOUND,
+)
+from bot.telegram.states import ModActionFSM
+from aiogram.exceptions import TelegramAPIError
+from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.handlers.admin.helper.new.keyboards import build_back_keyboard
+from datetime import datetime
+from db.exchange import get_exchange_batch
+from db.auctions import get_lot_by_id
+from db.users import (
+    get_user_by_username,
+    is_luxury_user,
+)
+from db.admin import (
+    is_admin,
+    log_audit_action,
+)
+from db.uid import is_user_banned
+from bot.core.legacy_config import legacy_config
+from bot.services.admin_logging import send_admin_log
+from bot.handlers.auction.exchange_moderation import show_pending_exchange_requests
+from bot.handlers.admin.action_support.moderation import show_pendinglots
+from dateutil import tz
+from bot.core.time import utc_now
+
+
 from bot.services.admin_diagnostics import AdminDiagnosticsQueries
 from bot.telegram.callback_parser import split_callback_data
+
+MSK = tz.gettz("Europe/Moscow")
+
+def _to_msk(dt):
+    if dt is None:
+        return None
+    if getattr(dt, "tzinfo", None) is None:
+        return dt.replace(tzinfo=MSK)
+    return dt.astimezone(MSK)
 
 router = Router(name=__name__)
 

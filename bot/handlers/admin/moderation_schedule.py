@@ -3,10 +3,60 @@
 Handlers retain their relative order from the legacy ``moderation`` module.
 """
 
-from bot.handlers.admin.moderation_shared import *  # noqa: F403
+import html
+from aiogram import (
+    F,
+    Router,
+    types,
+)
+from aiogram.fsm.context import FSMContext
+from bot.telegram.states import PreviewScheduleFSM
+from aiogram.exceptions import TelegramBadRequest
+from bot.handlers.admin.helper.new.wrapper import admin_only
+from datetime import (
+    date,
+    timedelta,
+)
+from bot.handlers.admin.helper.admin_keyboards import days_keyboard
+from collections import defaultdict
+from bot.utils import generate_free_slots_for_date
+from db.auctions import (
+    get_auctions_by_date_with_owners,
+    get_lot_by_id,
+)
+from bot.core.legacy_config import legacy_config
+from bot.handlers.admin.action_support.forms import (
+    owners_to_links_text,
+    start_edit_schedule,
+    start_preview_schedule,
+)
+from bot.handlers.auction.publication import publish_auction_lot
+from bot.handlers.admin.action_support.exchange import tg_clean
+from bot.core.time import (
+    to_moscow,
+    to_moscow_wall,
+    utc_now,
+)
+
+
 from bot.domain.auctions import currency_choices_label
 from bot.handlers.admin.helper.new.utils import auction_kind_label
 from bot.telegram.callback_parser import split_callback_data
+
+def split_message_by_blocks(blocks, chunk_size=4096):
+    chunks = []
+    current = ""
+    for block in blocks:
+        if len(current) + len(block) > chunk_size:
+            chunks.append(current)
+            current = ""
+        current += block
+    if current:
+        chunks.append(current)
+    return chunks
+
+def safe_html(text):
+    return html.escape(str(text)) if text else ""
 
 router = Router(name=__name__)
 

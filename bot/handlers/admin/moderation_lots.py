@@ -3,8 +3,107 @@
 Handlers retain their relative order from the legacy ``moderation`` module.
 """
 
-from bot.handlers.admin.moderation_shared import *  # noqa: F403
+import html as _html
+import html
+from bot.handlers.admin.helper.admin_constants import (
+    ADMIN_MESSAGES,
+    BUTTONS,
+    CALLBACK_CONFIRM_LOT,
+    MSG_CONFIRM_PUBLICATION,
+    MSG_PHOTO_CONFIRM,
+    MSG_PHOTO_NOT_FOUND,
+    MSG_REASON_REJECT_ADD,
+    MSG_REASON_REJECT_DELETE,
+    REJECT_DELETE_ADMIN_LOG,
+    REJECT_LOT_ADMIN_LOG,
+)
+from bot.telegram.states import (
+    ApproveLotFSM,
+    ModActionFSM,
+    RejectDeleteFSM,
+)
+from bot.services.auction_workflows import AuctionModerationService
+from bot.domain.auctions import (
+    AuctionSlotConflict,
+    InvalidAuctionTransition,
+)
+from aiogram import (
+    F,
+    Router,
+    types,
+)
+from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramAPIError
+from bot.telegram.media import bot_send_media_any as _bot_send_media_any
+from bot.handlers.admin.action_support.forms import add_deck_fsm_entry
+from bot.handlers.admin.action_support.roles import admin_add_remove
+from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.services.admin_thanks import (
+    admin_tag,
+    build_thanks_kb,
+)
+from bot.core.time import (
+    auction_end_at_59,
+    to_moscow,
+)
+from bot.handlers.admin.helper.new.keyboards import (
+    build_back_button,
+    build_back_keyboard,
+    build_lot_keyboard,
+    time_slots_keyboard,
+)
+from bot.handlers.admin.helper.user_helpers import (
+    build_schedule_lines,
+    filter_slots_by_user_type,
+    find_free_slots,
+    get_owner_refs,
+    get_pretty_owners_for_log,
+)
+from datetime import (
+    date,
+    datetime,
+)
+from bot.handlers.admin.helper.admin_keyboards import (
+    days_keyboard,
+    months_keyboard,
+)
+from bot.handlers.admin.helper.new.formatting import (
+    format_admin_action_log,
+    format_pending_lot,
+    get_lot_owners_with_levels,
+)
+from db.auctions import (
+    get_auctions_by_date,
+    get_auctions_by_date_with_owners,
+    get_delete_request,
+    get_lot_by_id,
+    get_lot_owners,
+    update_delete_request_status,
+)
+from bot.handlers.admin.helper.admin_service import get_free_slots_and_schedule_for_lot
+from bot.services.admin_owners import get_lot_owners_text
+from db.users import (
+    get_user,
+    is_luxury_user,
+)
+from db.admin import log_audit_action
+from bot.handlers.helper.helpers_users import notify_lot_owner
+from bot.handlers.admin.action_support.transport import (
+    owner_or_secret_required,
+    safe_edit_message,
+)
+from bot.handlers.admin.action_support.moderation import (
+    process_reject_action,
+    show_delete_requests_for_moderation,
+)
+from bot.handlers.admin.action_support.exchange import safe_answer_photo
+from bot.services.admin_logging import send_admin_log
+from bot.handlers.admin.helper.new.helper import split_message
+
+
 from bot.telegram.callback_parser import split_callback_data
+
+
 
 router = Router(name=__name__)
 

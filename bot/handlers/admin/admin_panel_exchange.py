@@ -3,8 +3,370 @@
 Handlers retain their relative order from the legacy ``admin_panel`` module.
 """
 
-from bot.handlers.admin.admin_panel_shared import *  # noqa: F403
+import html
+from aiogram import (
+    Bot,
+    F,
+    Router,
+    types,
+)
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    User,
+)
+from aiogram.filters import Command
+from bot.services.exchanges import ExchangeService
+from aiogram.fsm.context import FSMContext
+from bot.domain.auctions import InvalidExchangeTransition
+from aiogram.fsm.state import (
+    State,
+    StatesGroup,
+)
+from aiogram.exceptions import TelegramBadRequest
+from zoneinfo import ZoneInfo
+from html import escape as _h
+from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.services.admin_thanks import build_thanks_kb
+from bot.handlers.auction.exchange import currency_to_emoji
+from datetime import datetime
+from db.cards import (
+    get_card_by_id,
+    get_deck_by_id,
+    set_card_video_by_id,
+)
+from db.exchange import (
+    get_exchange_batch_by_id,
+    get_exchange_items_by_batch_id,
+    mark_exchange_manual_sent,
+    reset_exchange_manual,
+    set_exchange_manual_link,
+    set_exchange_manual_price,
+    set_exchange_manual_winner,
+)
+from db.users import (
+    get_user,
+    get_user_by_username,
+)
+from db.admin import (
+    is_admin,
+    log_audit_action,
+)
+from bot.handlers.admin.helper.new.keyboards import menu_keyboard
+from bot.services.admin_logging import send_admin_log
+from bot.handlers.admin.logs_admin import short_media_id
+
+
 from bot.telegram.callback_parser import split_callback_data
+from bot.handlers.admin.presentation.exchange_queue import (
+    EX1_APPROVE,
+    EX1_DELETE,
+    EX1_DEL_NO,
+    EX1_DEL_YES,
+    EX1_REJECT,
+    ExchangeOneRejectFSM,
+    build_exchange_one_delete_confirmation,
+    build_exchange_one_keyboard,
+    show_pending_exchange_one,
+)
+from bot.handlers.admin.presentation.media import extract_media_file_id
+from bot.services.admin_thanks import admin_tag
+
+def _short_media(v: object) -> str:
+    # чтобы file_id не раздувал логи
+    return short_media_id(v) if "short_media_id" in globals() else (str(v)[:12] + "…" if v else "—")
+
+async def _log_exchange_batch_action(
+        bot: Bot,
+        *,
+        action_type: str,
+        admin_user: types.User,
+        batch_id: int,
+        status: str,
+) -> None:
+    batch = await get_exchange_batch_by_id(int(batch_id))
+
+    # fallback, если заявка исчезла
+    if not batch:
+        title = {"approved": "одобрено", "rejected": "отклонено", "deleted": "удалено"}.get(status, status)
+        log_text = (
+            f"🛒 <b>Биржа: {title}</b>\n"
+            f"🕒 {datetime.now(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S')} (МСК)\n"
+            f"Админ: <b>{admin_tag(admin_user)}</b>\n"
+            f"Batch: <code>{int(batch_id)}</code>\n"
+            f"⚠️ Заявка не найдена в БД\n"
+            f"Действие: <code>{_h(action_type)}</code>"
+        )
+        await send_admin_log(bot, log_text)
+        await log_audit_action(
+            user_id=admin_user.id,
+            action_type=action_type,
+            auction_id=None,
+            details=f"batch_id={batch_id} status={status} batch_not_found",
+        )
+        return
+
+    # владелец
+    owner_id = int(batch.get("user_id") or 0)
+    owner = await get_user(owner_id)
+    owner_un = (owner.get("username") if owner else None) or None
+    owner_txt = _safe_user_mention(owner_id, owner_un)
+
+    # колода
+    deck_id = int(batch.get("deck_id") or 0)
+    deck_name = ""
+    try:
+        d = await get_deck_by_id(deck_id)
+        deck_name = (d.get("name") or "").strip() if d else ""
+    except Exception:
+        deck_name = ""
+
+    deck_line = f"{deck_id} колода"
+    if deck_name:
+        deck_line = f"{deck_id} колода — {deck_name}"
+
+    # режим по-русски
+    mode = (batch.get("mode") or "card").strip()
+    mode_ru = {
+        "card": "Одна карта",
+        "deck": "Колода целиком",
+        "deck_split": "Колода по картам (сплит)",
+    }.get(mode, mode)
+
+    # цена/валюта
+    cur = (batch.get("currency") or "алмазы").strip()
+    cur_emoji = currency_to_emoji(cur) or "💎"
+    price = int(batch.get("price") or 0)
+
+    # пруф
+    proof_id = (batch.get("proof_photo_id") or "").strip()
+    has_proof = bool(proof_id) and proof_id.upper() != "NO_PROOF"
+    proof_line = "✅ Есть" if has_proof else "❌ Нет"
+
+    # карты в заявке
+    items = []
+    try:
+        items = await get_exchange_items_by_batch_id(int(batch_id))
+    except Exception:
+        items = []
+    cards_lines = []
+    if items:
+        # коротко: первые 6, чтобы лог не превращался в роман
+        for i, it in enumerate(items[:6], start=1):
+            cn = (it.get("card_name") or "—").strip()
+            hn = (it.get("hero_name") or "—").strip()
+            cards_lines.append(f"{i}. {hn} — {cn}")
+        if len(items) > 6:
+            cards_lines.append(f"…и ещё {len(items) - 6}")
+
+    cards_block = "\n".join(cards_lines) if cards_lines else "—"
+
+    created_at = batch.get("created_at")
+    try:
+        if isinstance(created_at, datetime):
+            created_msk = created_at.astimezone(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y %H:%M")
+        else:
+            created_msk = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y %H:%M")
+    except Exception:
+        created_msk = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y %H:%M")
+
+    comment = (batch.get("comment") or "").strip()
+    comment_line = _h(comment) if comment else "—"
+
+    log_text = (
+        f"🛒 <b>Биржа: {'одобрено' if status == 'approved' else 'отклонено'}</b>\n"
+        f"🕒 {created_msk} (МСК)\n"
+        f"Админ: <b>{admin_tag(admin_user)}</b> (id: {admin_user.id})\n"
+        f"Batch: <code>{int(batch_id)}</code>\n"
+        f"Пользователь: {owner_txt}\n\n"
+        f"Колода: <b>{_h(deck_line)}</b>\n"
+        f"Режим: <b>{_h(mode_ru)}</b>\n"
+        f"Карт: <b>{len(items) if items else 0}</b>\n"
+        f"Цена: <b>{price}</b> {cur_emoji}\n"
+        f"Пруф: <b>{proof_line}</b>\n"
+        f"Комментарий: <b>{comment_line}</b>\n\n"
+        f"Состав:\n{_h(cards_block)}\n\n"
+        f"Действие: <code>{_h(action_type)}</code>"
+    )
+
+    await send_admin_log(bot, log_text)
+    await log_audit_action(
+        user_id=admin_user.id,
+        action_type=action_type,
+        auction_id=None,
+        details=(
+            f"batch_id={batch_id} status={status} mode={mode} currency={cur} "
+            f"price={price} owner={owner_id} deck_id={deck_id} has_proof={has_proof}"
+        ),
+    )
+
+def _extract_video_from_message(msg: Message) -> tuple[str, str | None, str | None] | None:
+    """
+    Возвращает (file_id, unique_id, thumb_file_id) для video/animation/video-document.
+    """
+    if msg.video:
+        thumb = msg.video.thumbnail.file_id if msg.video.thumbnail else None
+        return (msg.video.file_id, msg.video.file_unique_id, thumb)
+
+    if msg.animation:
+        thumb = msg.animation.thumbnail.file_id if msg.animation.thumbnail else None
+        return (msg.animation.file_id, msg.animation.file_unique_id, thumb)
+
+    if msg.document and (msg.document.mime_type or "").startswith("video/"):
+        return (msg.document.file_id, msg.document.file_unique_id, None)
+
+    return None
+
+PEX_PREFIX = "pex"  # callback: pex|<batch_id>|<action>
+
+class PrintExFSM(StatesGroup):
+    winner = State()
+    price = State()
+    link = State()
+
+def _pex_cb(batch_id: int, action: str) -> str:
+    return f"{PEX_PREFIX}|{int(batch_id)}|{action}"
+
+def _safe_user_mention(user_id: int | None, username: str | None, *, title: str | None = None) -> str:
+    """
+    Формирует упоминание для parse_mode=HTML:
+    - если есть username -> возвращает @username (ровно один @)
+    - иначе -> кликабельная ссылка по id
+    """
+    un = (username or "").strip()
+    if un.startswith("@"):
+        un = un[1:]
+
+    if un:
+        return f"@{html.escape(un)}"
+
+    uid = int(user_id or 0)
+    if uid > 0:
+        label = html.escape(title) if title else f"id{uid}"
+        return f'<a href="tg://user?id={uid}">{label}</a>'
+
+    return "—"
+
+async def _build_print_ex_view(batch_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    batch = await get_exchange_batch_by_id(int(batch_id))
+    if not batch:
+        return (f"⚠️ Заявка биржи не найдена: <code>{batch_id}</code>", InlineKeyboardMarkup(inline_keyboard=[]))
+
+    items = await get_exchange_items_by_batch_id(int(batch_id))
+
+    owner = await get_user(int(batch["user_id"]))
+    owner_username = (owner.get("username") if owner else None) or None
+    owner_txt = _safe_user_mention(int(batch["user_id"]), owner_username)
+
+    manual_winner_id = batch.get("manual_winner_id")
+    manual_winner_username = (batch.get("manual_winner_username") or "").strip() or None
+
+    winner_txt = "—"
+    if manual_winner_id:
+        winner_txt = _safe_user_mention(int(manual_winner_id), manual_winner_username)
+
+    price = batch.get("manual_price")
+    if price is None:
+        price = batch.get("price")
+
+    link = (batch.get("manual_link") or "").strip() or "—"
+    sent = "✅ да" if batch.get("manual_sent_at") else "❌ нет"
+
+    lines = [
+        f"🛒 <b>PRINT_EX</b> • заявка <code>{batch_id}</code>",
+        f"Статус: <b>{batch.get('status')}</b>",
+        f"Владелец: {owner_txt}",
+        f"Режим: <b>{batch.get('mode')}</b>",
+        f"Цена: <b>{int(price or 0)}</b> {batch.get('currency')}",
+        f"Комментарий: {(batch.get('comment') or '').strip() or '—'}",
+        "",
+        "📦 <b>Состав:</b>",
+    ]
+
+    if items:
+        for it in items:
+            nm = f"{(it.get('hero_name') or '').strip()} — {(it.get('card_name') or '').strip()}".strip(" —")
+            qty = int(it.get("qty") or 1)
+            lines.append(f"• {nm} ×{qty}  (<code>card_id={it.get('card_id')}</code>)")
+    else:
+        lines.append("—")
+
+    lines += [
+        "",
+        "🧾 <b>Ручной итог:</b>",
+        f"Победитель: {winner_txt}",
+        f"Ссылка: {link}",
+        f"Отправлено: {sent}",
+    ]
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📨 Отправить обоим", callback_data=_pex_cb(batch_id, "send_both")),
+        ],
+        [
+            InlineKeyboardButton(text="👤 Сменить победителя", callback_data=_pex_cb(batch_id, "set_winner")),
+            InlineKeyboardButton(text="💰 Сменить цену", callback_data=_pex_cb(batch_id, "set_price")),
+        ],
+        [
+            InlineKeyboardButton(text="🔗 Сменить ссылку", callback_data=_pex_cb(batch_id, "set_link")),
+            InlineKeyboardButton(text="♻️ Сброс", callback_data=_pex_cb(batch_id, "reset")),
+        ],
+        [
+            InlineKeyboardButton(text="🧙 Мастер", callback_data=_pex_cb(batch_id, "wizard")),
+            InlineKeyboardButton(text="🔄 Обновить", callback_data=_pex_cb(batch_id, "refresh")),
+        ],
+    ])
+    return ("\n".join(lines), kb)
+
+async def _safe_edit(message: Message, text: str, reply_markup: InlineKeyboardMarkup) -> None:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest as e:
+        if "message is not modified" in str(e).lower():
+            return
+        raise
+
+HOWMAX_TEXT = (
+    "Регистрируетесь в боте <b>@RomanticClubBot</b>, нажимаете кнопку <b>Старт</b> и ждёте результат.\n"
+    "Вам придут данные владельца/покупателя.\n"
+    "Если возникнет ошибка, с вами свяжется админ.\n"
+    "Обычно срок ожидания <b>одни сутки</b>."
+)
+
+def _pick_media_file(message: types.Message):
+    """
+    Возвращает (kind, file) где file имеет .file_id и .file_unique_id
+    Поддержка: photo, video, animation, document, audio, voice, sticker
+    """
+    # Фото: берём самое большое
+    if message.photo:
+        return "photo", message.photo[-1]
+
+    if message.video:
+        return "video", message.video
+
+    if message.animation:
+        return "animation", message.animation
+
+    # Часто mp4 присылают "как файл"
+    if message.document:
+        mt = (message.document.mime_type or "").lower()
+        if mt.startswith("video/"):
+            return "document(video)", message.document
+        return "document", message.document
+
+    if message.audio:
+        return "audio", message.audio
+
+    if message.voice:
+        return "voice", message.voice
+
+    if message.sticker:
+        return "sticker", message.sticker
+
+    return None, None
 
 router = Router(name=__name__)
 
@@ -113,7 +475,7 @@ async def cmd_card_video(message: Message):
 @admin_only
 async def cmd_fileid(message: types.Message):
     src = message.reply_to_message or message
-    fid = _extract_media_file_id(src)
+    fid = extract_media_file_id(src)
     if not fid:
         await message.answer("Нет медиа в сообщении (пришли/перешли видео или ответь /fileid на видео).")
         return
@@ -508,7 +870,7 @@ async def ex1_delete_ask(call: CallbackQuery):
     batch_id = int(split_callback_data(call.data or "", "|", 1)[1])
     await call.answer()
     try:
-        await call.message.edit_reply_markup(reply_markup=_kb_ex1_delete_confirm(batch_id))
+        await call.message.edit_reply_markup(reply_markup=build_exchange_one_delete_confirmation(batch_id))
     except Exception:
         pass
 
@@ -527,7 +889,7 @@ async def ex1_delete_no(call: CallbackQuery):
 
     await call.answer("Ок, не удаляем")
     try:
-        await call.message.edit_reply_markup(reply_markup=_kb_exchange_one(batch_id, has_proof=has_proof))
+        await call.message.edit_reply_markup(reply_markup=build_exchange_one_keyboard(batch_id, has_proof=has_proof))
     except Exception:
         pass
 

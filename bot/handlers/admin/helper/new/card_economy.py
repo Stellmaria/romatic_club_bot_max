@@ -9,11 +9,6 @@ from bot.handlers.admin.helper.new import (
     card_economy_subscriptions,
     card_economy_winner_print,
 )
-from bot.handlers.admin.helper.new.card_economy_shared import *  # noqa: F401,F403
-from bot.handlers.admin.helper.new.card_economy_mutation import *  # noqa: F401,F403
-from bot.handlers.admin.helper.new.card_economy_luxury import *  # noqa: F401,F403
-from bot.handlers.admin.helper.new.card_economy_subscriptions import *  # noqa: F401,F403
-from bot.handlers.admin.helper.new.card_economy_winner_print import *  # noqa: F401,F403
 
 for _module in (
     card_economy_shared,

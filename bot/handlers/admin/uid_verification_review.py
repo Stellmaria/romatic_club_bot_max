@@ -14,18 +14,18 @@ from aiogram.fsm.context import FSMContext
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log
 from bot.handlers.admin.uid_admin_presentation import (
-    _kb_req_list,
-    _kb_verif_menu,
-    _render_req,
-    _render_uid_verif_view,
-    _send_media_any,
+    kb_req_list,
+    kb_verif_menu,
+    render_req,
+    render_uid_verif_view,
+    send_media_any,
     safe_call_answer,
     safe_edit,
 )
 from bot.handlers.admin.uid_admin_shared import (
     REQUIRED_CONFIRMS,
-    _uidv_counts,
-    _uidv_user_line,
+    uidv_counts,
+    uidv_user_line,
 )
 from bot.services.admin_thanks import admin_tag, build_thanks_kb
 from bot.services.uid_verification import (
@@ -45,19 +45,19 @@ late_router = Router(name=f"{__name__}.approve_blocked")
 @router.message(Command("verif"), F.chat.type == "private")
 @admin_only
 async def verif_menu_cmd(message: types.Message) -> None:
-    await message.answer("🧾 Меню UID-верификаций:", reply_markup=_kb_verif_menu())
+    await message.answer("🧾 Меню UID-верификаций:", reply_markup=kb_verif_menu())
 
 
 @router.message(F.text == "🧾 Верификация", F.chat.type == "private")
 @admin_only
 async def verif_menu_button(message: types.Message) -> None:
-    await message.answer("🧾 Меню UID-верификаций:", reply_markup=_kb_verif_menu())
+    await message.answer("🧾 Меню UID-верификаций:", reply_markup=kb_verif_menu())
 
 
 @router.callback_query(F.data == "uidv|menu")
 @admin_only
 async def verif_menu_cb(call: types.CallbackQuery) -> None:
-    await safe_edit(call, "🧾 Меню UID-верификаций:", reply_markup=_kb_verif_menu())
+    await safe_edit(call, "🧾 Меню UID-верификаций:", reply_markup=kb_verif_menu())
     await call.answer()
 
 
@@ -107,14 +107,14 @@ async def verif_list(call: types.CallbackQuery) -> None:
         has_more = len(items) == limit
 
     if not items:
-        await safe_edit(call, f"Пусто: <b>{title}</b>.", reply_markup=_kb_verif_menu())
+        await safe_edit(call, f"Пусто: <b>{title}</b>.", reply_markup=kb_verif_menu())
         await call.answer()
         return
 
     await safe_edit(
         call,
         f"🧾 Заявки: <b>{title}</b>\nВыбери заявку:",
-        reply_markup=_kb_req_list(items, status=status, page=page, has_more=has_more),
+        reply_markup=kb_req_list(items, status=status, page=page, has_more=has_more),
     )
     await call.answer()
 
@@ -133,7 +133,7 @@ async def verif_view(call: types.CallbackQuery) -> None:
         await call.answer("Заявка не найдена.", show_alert=True)
         return
 
-    await _render_req(call, req_id, req)
+    await render_req(call, req_id, req)
     await call.answer()
 
 
@@ -177,7 +177,7 @@ async def verif_send_proof(call: types.CallbackQuery, bot: Bot) -> None:
 
     for title, packed in proofs:
         try:
-            await _send_media_any(
+            await send_media_any(
                 bot,
                 to_chat,
                 packed,
@@ -260,7 +260,7 @@ async def verif_send_deals(call: types.CallbackQuery, bot: Bot) -> None:
         uname = names[i - 1] if i - 1 < len(names) else "—"
         uname_disp = f"@{str(uname).lstrip('@')}" if uname and uname != "—" else "—"
         try:
-            await _send_media_any(
+            await send_media_any(
                 bot,
                 to_chat,
                 packed,
@@ -321,12 +321,12 @@ async def verif_approve(call: types.CallbackQuery, bot: Bot):
         await call.answer("Заявка не найдена.", show_alert=True)
         return
 
-    confirmed, rejected, pending = _uidv_counts(req)
+    confirmed, rejected, pending = uidv_counts(req)
 
     if confirmed < REQUIRED_CONFIRMS:
         await call.answer(f"Нельзя одобрить: подтверждений {confirmed}/{REQUIRED_CONFIRMS}.", show_alert=True)
         try:
-            await _render_uid_verif_view(call, req_id)
+            await render_uid_verif_view(call, req_id)
         except Exception:
             pass
         return
@@ -369,8 +369,8 @@ async def verif_approve(call: types.CallbackQuery, bot: Bot):
     except Exception:
         pass
 
-    c2, r2, p2 = _uidv_counts(req_after)
-    user_line = _uidv_user_line(req_after)
+    c2, r2, p2 = uidv_counts(req_after)
+    user_line = uidv_user_line(req_after)
 
     # Логи: БЕЗ кнопки спасибо
     await send_admin_log(
@@ -386,7 +386,7 @@ async def verif_approve(call: types.CallbackQuery, bot: Bot):
     await call.answer("✅ Одобрено")
 
     try:
-        await _render_uid_verif_view(call, req_id)
+        await render_uid_verif_view(call, req_id)
     except Exception:
         pass
 
@@ -463,8 +463,8 @@ async def verif_reject_reason(message: types.Message, state: FSMContext, bot: Bo
     except Exception:
         pass
 
-    confirmed, rejected, pending = _uidv_counts(req_after)
-    user_line = _uidv_user_line(req_after)
+    confirmed, rejected, pending = uidv_counts(req_after)
+    user_line = uidv_user_line(req_after)
 
     # Логи: БЕЗ кнопки спасибо
     await send_admin_log(
@@ -495,7 +495,7 @@ async def verif_approve_blocked(call: types.CallbackQuery) -> None:
         await call.answer("Заявка не найдена.", show_alert=True)
         return
 
-    confirmed, rejected, pending = _uidv_counts(req)
+    confirmed, rejected, pending = uidv_counts(req)
 
     await call.answer(
         f"Нельзя одобрить: подтверждений {confirmed}/{REQUIRED_CONFIRMS}.",

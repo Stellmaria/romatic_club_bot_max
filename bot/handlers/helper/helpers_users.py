@@ -397,3 +397,7 @@ async def notify_lot_owner(bot, user_id, lot, text):
             await bot.send_message(user_id, text, parse_mode="HTML")
         except TelegramAPIError as e:
             print(f"ERROR send_message to {user_id}: {e}")
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+deck_tag = _deck_tag
+emoji_by_currency = _emoji_by_currency

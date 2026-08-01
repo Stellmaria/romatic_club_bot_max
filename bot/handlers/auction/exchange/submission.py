@@ -12,7 +12,7 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, KeyboardButton, Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from bot.handlers.admin.action_support.compat import _safe_user_mention, send_admin_log
+from bot.handlers.admin.action_support.compat import safe_user_mention, send_admin_log
 from bot.handlers.admin.services.market_utils import safe_edit_text
 from bot.services.exchanges import ExchangeService
 from bot.services.exchange_submission import ExchangeSubmissionQueries
@@ -25,21 +25,21 @@ router = Router(name="auction_exchange_submission")
 from .common import (
     GUIDE_UID_CRAFT_PHOTO_ID,
     GUIDE_UID_CRAFT_TEXT,
-    _cur_emoji,
-    _deck_price_for_deck,
-    _digits_int,
-    _exchange_cards_kb,
-    _exchange_deck_cover_id,
-    _exchange_gain_for_card,
-    _exchange_key_for_card,
-    _exchange_price_for_card,
-    _fmt_dt_msk,
-    _format_gain_line,
-    _get_exchange_deck_ids,
-    _gift_emoji,
-    _load_full_cards_for_deck,
-    _normalize_card_ids,
-    _sum_gains,
+    cur_emoji,
+    deck_price_for_deck,
+    digits_int,
+    exchange_cards_kb,
+    exchange_deck_cover_id,
+    exchange_gain_for_card,
+    exchange_key_for_card,
+    exchange_price_for_card,
+    fmt_dt_msk,
+    format_gain_line,
+    get_exchange_deck_ids,
+    gift_emoji,
+    load_full_cards_for_deck,
+    normalize_card_ids,
+    sum_gains,
     compute_start_price_limits,
     exchange_copies_keyboard,
     exchange_mode_keyboard,
@@ -47,15 +47,15 @@ from .common import (
 )
 
 from .notifications import (
-    _send_user_exchange_confirmation,
-    _send_user_exchange_confirmation_copies,
-    _send_user_exchange_confirmation_deck_split,
+    send_user_exchange_confirmation,
+    send_user_exchange_confirmation_copies,
+    send_user_exchange_confirmation_deck_split,
 )
 
 @router.callback_query(ExchangeFSM.waiting_for_deck, F.data.startswith("ex_deck:"))
 async def ex_deck_selected(call: types.CallbackQuery, state: FSMContext) -> None:
     deck_id = int(split_callback_data(call.data, ":", 1)[1])
-    if deck_id not in await _get_exchange_deck_ids():
+    if deck_id not in await get_exchange_deck_ids():
         await call.answer("Эта колода недоступна для биржи.", show_alert=True)
         return
 
@@ -129,7 +129,7 @@ async def ex_mode_selected(call: CallbackQuery, state: FSMContext):
     if mode == "card":
         await state.update_data(exchange_kind="card", mode="card")
 
-        cards = await _load_full_cards_for_deck(deck_id_i)
+        cards = await load_full_cards_for_deck(deck_id_i)
         if not cards:
             await state.clear()
             await safe_edit_text(call.message, "⚠️ В этой колоде нет карт. Попробуй заново.")
@@ -139,7 +139,7 @@ async def ex_mode_selected(call: CallbackQuery, state: FSMContext):
         await state.update_data(ex_cards_cache=cards)
         await state.set_state(ExchangeFSM.waiting_for_card)
 
-        kb = _exchange_cards_kb(cards, deck_id=deck_id_i)
+        kb = exchange_cards_kb(cards, deck_id=deck_id_i)
         await safe_edit_text(
             call.message,
             "Выберите карту или «Вся колода»:",
@@ -150,7 +150,7 @@ async def ex_mode_selected(call: CallbackQuery, state: FSMContext):
 
     # 2) Колода / Сплит (берём все карты колоды)
     try:
-        full_cards = await _load_full_cards_for_deck(deck_id_i)
+        full_cards = await load_full_cards_for_deck(deck_id_i)
         if not full_cards:
             await state.clear()
             await safe_edit_text(call.message, "⚠️ Не нашёл карты этой колоды. Попробуй заново.")
@@ -165,15 +165,15 @@ async def ex_mode_selected(call: CallbackQuery, state: FSMContext):
 
         # фикс. цена: считаем детерминированно
         if mode == "deck":
-            price_i = int(await _deck_price_for_deck(deck_id_i))  # ВАЖНО: await
+            price_i = int(await deck_price_for_deck(deck_id_i))  # ВАЖНО: await
             title = "🛒 Биржа"
         else:  # deck_split
-            price_i = int(sum(_exchange_price_for_card(c) for c in full_cards))
+            price_i = int(sum(exchange_price_for_card(c) for c in full_cards))
             title = "🛒 Биржа (Сплит)"
 
         # ✅ правильный профит (по всем картам и с учётом типа валют)
-        diamonds_sum, cups_sum, treasures_sum = _sum_gains(full_cards)
-        gain_line = _format_gain_line(diamonds_sum, cups_sum, treasures_sum)
+        diamonds_sum, cups_sum, treasures_sum = sum_gains(full_cards)
+        gain_line = format_gain_line(diamonds_sum, cups_sum, treasures_sum)
 
         await state.update_data(
             exchange_kind=mode,
@@ -207,7 +207,7 @@ async def ex_mode_selected(call: CallbackQuery, state: FSMContext):
         )
 
         # ✅ заставка по колоде 16/18/20
-        cover_id = await _exchange_deck_cover_id(deck_id_i)
+        cover_id = await exchange_deck_cover_id(deck_id_i)
 
         sent = None
         if cover_id:
@@ -253,8 +253,8 @@ async def ex_card_selected(call: CallbackQuery, state: FSMContext):
         return
 
     try:
-        price = int(_exchange_price_for_card(card))
-        _t, amt = _exchange_gain_for_card(card)
+        price = int(exchange_price_for_card(card))
+        _t, amt = exchange_gain_for_card(card)
         gift = int(amt or 0)
     except Exception:
         await state.clear()
@@ -303,9 +303,9 @@ async def ex_card_by_number(message: Message, state: FSMContext):
         await message.answer("⚠️ Карта не найдена. Выбери кнопкой из списка.")
         return
 
-    price = _exchange_price_for_card(card)
-    gain_type, gain_amount = _exchange_gain_for_card(card)
-    emoji = _gift_emoji(gain_type)
+    price = exchange_price_for_card(card)
+    gain_type, gain_amount = exchange_gain_for_card(card)
+    emoji = gift_emoji(gain_type)
 
     await state.update_data(
         mode="card",
@@ -327,7 +327,7 @@ async def ex_card_by_number(message: Message, state: FSMContext):
         "🛒 <b>Биржа</b>\n"
         f"Карта: <b>{hero} — {name}</b>\n"
         f"Стоимость (фикс.): <b>{int(price)}</b> 💎\n"
-        f"Карта даёт: <b>+{int(gain_amount)}</b> {_gift_emoji(gain_type)}\n\n"
+        f"Карта даёт: <b>+{int(gain_amount)}</b> {gift_emoji(gain_type)}\n\n"
         "Сколько таких карт выставляем?",
         parse_mode="HTML",
         reply_markup=exchange_copies_keyboard(),
@@ -463,7 +463,7 @@ async def _finalize_exchange_request(
 
     proof_photo_id = (proof_photo_id or "").strip() or "NO_PROOF"
 
-    card_ids = _normalize_card_ids(data.get("ex_card_ids") or data.get("card_ids"))
+    card_ids = normalize_card_ids(data.get("ex_card_ids") or data.get("card_ids"))
     if not card_ids and data.get("ex_card_id"):
         card_ids = [int(data["ex_card_id"])]
 
@@ -488,7 +488,7 @@ async def _finalize_exchange_request(
         except Exception:
             deck_name = None
 
-        created_at_msk = _fmt_dt_msk(datetime.now(timezone.utc))
+        created_at_msk = fmt_dt_msk(datetime.now(timezone.utc))
         log_text = format_exchange_new_request_log(
             batch_id=int(batch_id),
             created_at_msk=created_at_msk,
@@ -517,7 +517,7 @@ async def _finalize_exchange_request(
             if not c:
                 continue
 
-            price_one = int(_exchange_price_for_card(c) or 0)
+            price_one = int(exchange_price_for_card(c) or 0)
 
             batch_id = await _db_create_exchange_batch(
                 user_id=user_id,
@@ -535,7 +535,7 @@ async def _finalize_exchange_request(
             # ✅ лог на каждый созданный batch
             await _send_exchange_log_one(batch_id, items_count=1, price=price_one)
 
-        await _send_user_exchange_confirmation_deck_split(
+        await send_user_exchange_confirmation_deck_split(
             message,
             created=created,
             user_id=user_id,
@@ -554,7 +554,7 @@ async def _finalize_exchange_request(
             await message.answer("⚠️ Карта не найдена. Попробуй заново.")
             return
 
-        price_one = int(_exchange_price_for_card(c) or 0)
+        price_one = int(exchange_price_for_card(c) or 0)
         batch_ids: list[int] = []
 
         for _ in range(copies):
@@ -574,7 +574,7 @@ async def _finalize_exchange_request(
             # ✅ лог на каждый batch
             await _send_exchange_log_one(batch_id, items_count=1, price=price_one)
 
-        await _send_user_exchange_confirmation_copies(
+        await send_user_exchange_confirmation_copies(
             message,
             batch_ids=batch_ids,
             user_id=user_id,
@@ -589,12 +589,12 @@ async def _finalize_exchange_request(
         return
 
     # 3) обычный режим: одна заявка
-    price_i = _digits_int(data.get("ex_price") or data.get("ex_price_diamonds") or 0)
+    price_i = digits_int(data.get("ex_price") or data.get("ex_price_diamonds") or 0)
     if not price_i:
         if mode == "card":
-            price_i = int(_exchange_price_for_card(full_cards[0]) if full_cards else 0)
+            price_i = int(exchange_price_for_card(full_cards[0]) if full_cards else 0)
         else:
-            price_i = await _deck_price_for_deck(deck_id_i)
+            price_i = await deck_price_for_deck(deck_id_i)
 
     batch_id = await _db_create_exchange_batch(
         user_id=user_id,
@@ -608,7 +608,7 @@ async def _finalize_exchange_request(
         proof_photo_id=proof_photo_id,
     )
 
-    await _send_user_exchange_confirmation(
+    await send_user_exchange_confirmation(
         message,
         batch_id=batch_id,
         user_id=user_id,
@@ -640,7 +640,7 @@ def format_exchange_new_request_log(*,
                                     comment: str | None) -> str:
     # отправитель
     if sender_id:
-        sender = _safe_user_mention(sender_id, sender_username)
+        sender = safe_user_mention(sender_id, sender_username)
     else:
         sender = f"@{sender_username}" if sender_username else "—"
 
@@ -649,7 +649,7 @@ def format_exchange_new_request_log(*,
 
     cur_print = (currency or "алмазы").strip()
     cur = cur_print.lower()
-    cur_emoji = _cur_emoji(cur)
+    cur_emoji = cur_emoji(cur)
 
     mode_key = (mode or "").strip().lower()
     mode_lbl = {
@@ -782,12 +782,12 @@ def _sum_exchange_prices(cards: list[dict]) -> tuple[int, list[tuple[tuple[str, 
     missing: list[tuple[tuple[str, str, int], int, str, str]] = []
 
     for card in cards or []:
-        price = int(_exchange_price_for_card(card) or 0)
+        price = int(exchange_price_for_card(card) or 0)
         if price > 0:
             total += price
             continue
 
-        key = _exchange_key_for_card(card)
+        key = exchange_key_for_card(card)
         cid = int(card.get("card_id") or 0)
         hero = str(card.get("hero_name") or "").strip()
         name = str(card.get("card_name") or "").strip()
@@ -827,7 +827,7 @@ async def addlot_craft_uid_answer(call: CallbackQuery, state: FSMContext):
 
     d = await state.get_data()
     currency = d.get("currency", "алмазы")
-    emoji = _cur_emoji(currency)
+    emoji = cur_emoji(currency)
 
     craft_text = "✅ Да" if craft_ok else "❌ Нет"
     comment = (d.get("comment") or "").strip()

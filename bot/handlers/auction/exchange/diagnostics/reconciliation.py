@@ -8,15 +8,15 @@ from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from bot.handlers.admin.action_support.compat import _safe_user_mention
+from bot.handlers.admin.action_support.compat import safe_user_mention
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.exchange_diagnostics import ExchangeDiagnosticsService
 from bot.core.legacy_config import legacy_config
 from .common import (
-    _chunk,
-    _chunk_lines,
-    _extract_usernames_from_text,
-    _parse_expected_from_text,
+    chunk,
+    chunk_lines,
+    extract_usernames_from_text,
+    parse_expected_from_text,
 )
 
 router = Router(name="auction_exchange_diagnostics_reconciliation")
@@ -82,7 +82,7 @@ async def cmd_dup_user_cards(message: Message):
 
         if cur_uid != uid:
             cur_uid = uid
-            who = _safe_user_mention(uid, uname)
+            who = safe_user_mention(uid, uname)
             block = f"\n\n👤 {who} (id:<code>{uid}</code>)\n"
             if len(out) + len(block) > 3500:
                 await message.answer(out, parse_mode="HTML", disable_web_page_preview=True)
@@ -140,7 +140,7 @@ async def cmd_ex_not_sent(message: Message):
         )
         return
 
-    usernames = _extract_usernames_from_text(raw)
+    usernames = extract_usernames_from_text(raw)
     if not usernames:
         await message.answer("В тексте не нашёл ни одного @username.", parse_mode="HTML")
         return
@@ -170,7 +170,7 @@ async def cmd_ex_not_sent(message: Message):
             lines.append("")
             lines.append("⚠️ <b>Не нашёл в БД ни одного лота по:</b>")
             lines.extend([f"• {u}" for u in not_found[:50]])
-        for chunk in _chunk_lines(lines):
+        for chunk in chunk_lines(lines):
             await message.answer(chunk, parse_mode="HTML")
         return
 
@@ -214,7 +214,7 @@ async def cmd_ex_not_sent(message: Message):
         if len(not_found) > 60:
             lines.append(f"• …и ещё {len(not_found) - 60}")
 
-    for chunk in _chunk_lines(lines):
+    for chunk in chunk_lines(lines):
         await message.answer(chunk, parse_mode="HTML")
 
 @router.message(Command("ex_unsent"))
@@ -322,7 +322,7 @@ async def cmd_ex_check_list(message: types.Message) -> None:
         )
         return
 
-    expected = _parse_expected_from_text(raw)
+    expected = parse_expected_from_text(raw)
     if not expected:
         await message.answer("Не смог распарсить список (не вижу строк вида @username ...).")
         return
@@ -376,7 +376,7 @@ async def cmd_ex_check_list(message: types.Message) -> None:
 
     if not missing_by_user:
         lines.append("✅ По этой сверке всё закрыто: по списку нет недоотправленного (по данным БД).")
-        for part in _chunk("\n".join(lines)):
+        for part in chunk("\n".join(lines)):
             await message.answer(part, parse_mode="HTML")
         return
 
@@ -389,5 +389,5 @@ async def cmd_ex_check_list(message: types.Message) -> None:
         lines.extend(missing_by_user[uname])
         lines.append("")
 
-    for part in _chunk("\n".join(lines)):
+    for part in chunk("\n".join(lines)):
         await message.answer(part, parse_mode="HTML")

@@ -9,9 +9,9 @@ from bot.handlers.admin.services.market_constants import CB_BUMP, CB_PREFIX
 from bot.handlers.admin.services.market_db_helpers import fetch_card
 from bot.handlers.admin.services.market_keyboards import edit_listing_kb, my_listing_actions, listing_public_kb, \
     market_reply_kb
-from bot.handlers.admin.services.market_render import _reload_listing_inplace
-from bot.handlers.admin.services.market_sales import _my_sales_set_filter_and_show
-from bot.handlers.admin.services.market_utils import ensure_owner, can_bump_now, _upsert_price, safe_delete
+from bot.handlers.admin.services.market_render import reload_listing_inplace
+from bot.handlers.admin.services.market_sales import my_sales_set_filter_and_show
+from bot.handlers.admin.services.market_utils import ensure_owner, can_bump_now, upsert_price, safe_delete
 from bot.services.market import (
     market_bump,
     market_dec_item_qty,
@@ -76,7 +76,7 @@ async def ask_action(call: CallbackQuery, state: FSMContext, bot: Bot):
             new_left = await market_dec_item_qty(lid, 1)
             if new_left <= 0:
                 await market_set_status(lid, "sold")
-            await _reload_listing_inplace(call, lid)
+            await reload_listing_inplace(call, lid)
             await call.answer("Продано 1.")
             return
 
@@ -124,10 +124,10 @@ async def set_price_value(message: Message, state: FSMContext):
     raw = (message.text or "").strip()
 
     if raw in {"-", "—", "–"}:
-        await _upsert_price(lid, pay_type, None, cash_code)
+        await upsert_price(lid, pay_type, None, cash_code)
         await message.answer("Цена удалена.")
         await state.clear()
-        await _reload_listing_inplace(message, lid)
+        await reload_listing_inplace(message, lid)
         return
 
     def bad():
@@ -149,10 +149,10 @@ async def set_price_value(message: Message, state: FSMContext):
         await message.answer(bad())
         return
 
-    await _upsert_price(lid, pay_type, val, cash_code)
+    await upsert_price(lid, pay_type, val, cash_code)
     await message.answer("Цена обновлена.")
     await state.clear()
-    await _reload_listing_inplace(message, lid)
+    await reload_listing_inplace(message, lid)
 
 
 @router.callback_query(F.data.startswith("mkt:del:"))
@@ -255,27 +255,27 @@ async def cb_toggle_actual(call: CallbackQuery):
 # --- Смена фильтра нижними кнопками ------------------------------------------
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Активные$"))
 async def ms_f_active(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "active")
+    await my_sales_set_filter_and_show(message, state, "active")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Скрытые$"))
 async def ms_f_hidden(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "hidden")
+    await my_sales_set_filter_and_show(message, state, "hidden")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Проданные$"))
 async def ms_f_sold(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "sold")
+    await my_sales_set_filter_and_show(message, state, "sold")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Архив$"))
 async def ms_f_archived(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "archived")
+    await my_sales_set_filter_and_show(message, state, "archived")
 
 
 @router.message(F.chat.type == "private", F.text.regexp(r"^(?:[▪▫]\s)?Все$"))
 async def ms_f_all(message: Message, state: FSMContext):
-    await _my_sales_set_filter_and_show(message, state, "all")
+    await my_sales_set_filter_and_show(message, state, "all")
 
 
 @router.message(F.chat.type == "private", F.text == "⬅️ Назад")

@@ -153,12 +153,13 @@ async def _resolve_master_user(text: str) -> tuple[int | None, str | None, str |
     return int(user_id), uname, None
 
 
-__all__ = [
-    "_extract_uid_anywhere",
-    "_extract_user_anywhere",
-    "_extract_user_id_from_message",
-    "_resolve_master_user",
-    "_resolve_uid_from_text",
-    "_resolve_user_id_from_text",
-    "_resolve_whois_target_from_text_or_message",
-]
+
+# Public compatibility aliases. Cross-feature imports must use these names.
+extract_uid_anywhere = _extract_uid_anywhere
+extract_user_anywhere = _extract_user_anywhere
+extract_user_id_from_message = _extract_user_id_from_message
+resolve_master_user = _resolve_master_user
+resolve_uid_from_text = _resolve_uid_from_text
+resolve_user_id_from_text = _resolve_user_id_from_text
+
+__all__ = ['_extract_uid_anywhere', '_extract_user_anywhere', '_extract_user_id_from_message', '_resolve_master_user', '_resolve_uid_from_text', '_resolve_user_id_from_text', '_resolve_whois_target_from_text_or_message', 'extract_uid_anywhere', 'extract_user_anywhere', 'extract_user_id_from_message', 'resolve_master_user', 'resolve_uid_from_text', 'resolve_user_id_from_text']
