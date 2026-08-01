@@ -31,3 +31,10 @@ def test_preflight_failure_leaves_running_containers_untouched() -> None:
     assert "runtime_replaced=0" in script
     assert 'if [[ "$runtime_replaced" == "1" ]]' in script
     assert "Running containers were not replaced; runtime left untouched." in script
+
+
+def test_deploy_does_not_claim_to_guard_resident_supervisor_code() -> None:
+    script = DEPLOY.read_text(encoding="utf-8")
+
+    assert "BASH_SOURCE" not in script
+    assert "Running deploy script does not match target commit" not in script

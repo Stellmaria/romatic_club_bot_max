@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -43,6 +44,16 @@ LOG_PATH = STATE_DIR / "operations.log"
 SOCKET_MODE = 0o660
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,64}$")
 _ACTOR_RE = re.compile(r"^[A-Za-z0-9@._:-]{3,64}$")
+
+
+def _git_blob_sha(path: Path) -> str:
+    content = path.read_bytes()
+    header = f"blob {len(content)}\0".encode("ascii")
+    return hashlib.sha1(header + content).hexdigest()
+
+
+# Capture bytes before any deployment can replace the checkout on disk.
+RESIDENT_SOURCE_SHA = _git_blob_sha(Path(__file__).resolve())
 
 
 @dataclass(slots=True)
@@ -250,6 +261,30 @@ def _git(*args: str, check: bool = True) -> CommandResult:
     return _run(["git", *args], check=check)
 
 
+def _deployment_target_sha() -> str:
+    remote = os.getenv("ROMATIC_DEPLOY_REMOTE", "origin")
+    branch = os.getenv("ROMATIC_DEPLOY_BRANCH", "main")
+    override = os.getenv("ROMATIC_DEPLOY_TARGET_SHA", "").strip()
+    _git("fetch", "--prune", remote, branch)
+    remote_sha = _git("rev-parse", f"{remote}/{branch}").stdout.strip()
+    if not override:
+        return remote_sha
+    target_sha = _git("rev-parse", "--verify", f"{override}^{{commit}}").stdout.strip()
+    if _git("merge-base", "--is-ancestor", target_sha, remote_sha, check=False).returncode != 0:
+        raise RuntimeError(f"Requested target is not an ancestor of {remote}/{branch}: {target_sha}")
+    return target_sha
+
+
+def _guard_resident_supervisor(target_sha: str) -> None:
+    target_source_sha = _git("rev-parse", f"{target_sha}:scripts/server_supervisor.py").stdout.strip()
+    if RESIDENT_SOURCE_SHA != target_source_sha:
+        raise RuntimeError(
+            "Host Server Supervisor is running stale code; deployment aborted. "
+            "Restart romatic-server-supervisor.service once from a trusted host "
+            "after this version is installed, then retry deployment."
+        )
+
+
 def _container_status(service: str) -> dict[str, Any]:
     container_id = _compose("ps", "-q", service, check=False).stdout.strip()
     if not container_id:
@@ -338,7 +373,12 @@ def _restart_userbot() -> str:
 
 def _deploy_main() -> str:
     previous_sha = _git("rev-parse", "HEAD").stdout.strip()
-    result = _run(["bash", "deploy/server/deploy.sh"])
+    target_sha = _deployment_target_sha()
+    _guard_resident_supervisor(target_sha)
+    result = _run(
+        ["bash", "deploy/server/deploy.sh"],
+        env=_command_env({"ROMATIC_DEPLOY_TARGET_SHA": target_sha}),
+    )
     if previous_sha != _git("rev-parse", "HEAD").stdout.strip():
         state.set_rollback_sha(previous_sha)
     return result.combined or "Update completed."
@@ -349,6 +389,7 @@ def _rollback() -> str:
     if not rollback_sha:
         raise RuntimeError("Нет сохранённого commit для отката.")
     current_sha = _git("rev-parse", "HEAD").stdout.strip()
+    _guard_resident_supervisor(rollback_sha)
     result = _run(
         ["bash", "deploy/server/deploy.sh"],
         env=_command_env({"ROMATIC_DEPLOY_TARGET_SHA": rollback_sha}),
