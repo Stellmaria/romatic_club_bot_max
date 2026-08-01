@@ -8,39 +8,6 @@ permissions:
   contents: read
 
 jobs:
-  html-escape-migration:
-    if: github.event_name == 'pull_request' && github.head_ref == 'fix/issue-26-telegram-boundary'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: fix/issue-26-telegram-boundary
-          fetch-depth: 0
-      - name: Escape audited user values
-        run: python3 scripts/migrate_html_user_values.py --write
-      - name: Validate migration
-        run: |
-          python3 -m compileall -q bot/handlers
-          python3 scripts/check_telegram_boundary.py
-          git diff --check
-      - name: Commit migration
-        run: |
-          if git diff --quiet -- bot/handlers; then
-            echo "HTML user values are already escaped."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- \
-            bot/handlers/auction/warnings.py \
-            bot/handlers/profile.py \
-            bot/handlers/users.py
-          git commit -m "fix(security): escape Telegram user values in HTML"
-          git push origin HEAD:fix/issue-26-telegram-boundary
-
   deployment-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 20
