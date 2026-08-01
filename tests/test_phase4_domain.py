@@ -35,7 +35,40 @@ def test_auction_kind_access_policy_is_canonical() -> None:
         assert_kind_access(AuctionKind.FREE, 1)
 
 
-def test_reverse_auction_has_no_fixed_first_bid_ceiling() -> None:
+def test_reverse_auction_uses_starting_ceiling_and_descends() -> None:
+    assert validate_bid_for_kind(
+        amount=5000,
+        currency=Currency.DIAMONDS,
+        start_price=5000,
+        current_best=None,
+        auction_kind=AuctionKind.REVERSE,
+    ) == 5000
+    with pytest.raises(BidTooHigh):
+        validate_bid_for_kind(
+            amount=5010,
+            currency=Currency.DIAMONDS,
+            start_price=5000,
+            current_best=None,
+            auction_kind=AuctionKind.REVERSE,
+        )
+    assert validate_bid_for_kind(
+        amount=4990,
+        currency=Currency.DIAMONDS,
+        start_price=5000,
+        current_best=5000,
+        auction_kind=AuctionKind.REVERSE,
+    ) == 4990
+    with pytest.raises(BidTooHigh):
+        validate_bid_for_kind(
+            amount=5000,
+            currency=Currency.DIAMONDS,
+            start_price=5000,
+            current_best=5000,
+            auction_kind=AuctionKind.REVERSE,
+        )
+
+
+def test_legacy_reverse_without_ceiling_accepts_only_its_first_bid_compatibly() -> None:
     assert validate_bid_for_kind(
         amount=5000,
         currency=Currency.DIAMONDS,
@@ -43,13 +76,6 @@ def test_reverse_auction_has_no_fixed_first_bid_ceiling() -> None:
         current_best=None,
         auction_kind=AuctionKind.REVERSE,
     ) == 5000
-    assert validate_bid_for_kind(
-        amount=4990,
-        currency=Currency.DIAMONDS,
-        start_price=0,
-        current_best=5000,
-        auction_kind=AuctionKind.REVERSE,
-    ) == 4990
     with pytest.raises(BidTooHigh):
         validate_bid_for_kind(
             amount=5000,
@@ -91,4 +117,3 @@ def test_phase4_python_sources_parse() -> None:
         "bot/telegram/media.py",
     ):
         ast.parse((ROOT / relative).read_text(encoding="utf-8"), filename=relative)
-
