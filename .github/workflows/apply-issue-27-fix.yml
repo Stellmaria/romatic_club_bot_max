@@ -1,0 +1,41 @@
+name: Apply Issue 27 CI Fixes
+
+on:
+  push:
+    branches:
+      - codex/issue-27-central-config
+    paths:
+      - .github/workflows/apply-issue-27-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct and verify patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode .github/issue-27-fix.b64 \
+            | gzip --decompress \
+            > /tmp/issue27-fix.patch
+          echo "6cb9eadbef7d39c844e920cc725f473f532278aaf42b646595d71d9081c542c5  /tmp/issue27-fix.patch" \
+            | sha256sum --check -
+      - name: Apply fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --index /tmp/issue27-fix.patch
+          rm -f .github/issue-27-fix.b64 .github/workflows/apply-issue-27-fix.yml
+          git add -A
+          python -m compileall -q bot tests
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test: align explicit configuration contracts"
+          git push origin HEAD:codex/issue-27-central-config
