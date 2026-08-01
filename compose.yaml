@@ -59,6 +59,11 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      SUPERVISOR_TOKEN: ""
+      SUPERVISOR_TOKEN_FILE: /run/secrets/supervisor_token
+    secrets:
+      - supervisor_token
     command: ["python", "main.py"]
     volumes:
       - ./var:/app/var
@@ -78,6 +83,7 @@ services:
     environment:
       SUPERVISOR_ENABLED: "false"
       SUPERVISOR_TOKEN: ""
+      SUPERVISOR_TOKEN_FILE: ""
       SUPERVISOR_BASE_URL: ""
     command: ["python", "-m", "userbot.entrypoint"]
     volumes:
@@ -90,6 +96,10 @@ services:
 
 volumes:
   postgres_data:
+
+secrets:
+  supervisor_token:
+    file: ${SUPERVISOR_TOKEN_FILE_HOST:-./server-data/runtime/supervisor/token}
 
 networks:
   romatic-supervisor-control:
