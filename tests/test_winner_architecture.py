@@ -4,6 +4,7 @@ import ast
 import importlib
 from pathlib import Path
 
+from bot.bootstrap.routers import get_router_registry
 from bot.services.winner import get_winner
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -119,13 +120,13 @@ def test_winner_facade_preserves_compatibility_router_and_hooks() -> None:
 def test_winner_handler_decorators_keep_the_original_dispatch_order() -> None:
     actual = tuple(name for relative in HANDLER_MODULES for name in _decorated_functions(relative))
     assert actual == EXPECTED_HANDLER_ORDER
-    bootstrap = _source("bot/bootstrap/routers.py")
+    names = [feature.name for feature in get_router_registry().ordered_features]
     registrations = (
-        "dispatcher.include_router(auction_winner_manual_router)",
-        "dispatcher.include_router(auction_winner_exchange_router)",
-        "dispatcher.include_router(auction_winner_print_router)",
+        "auctions.winner-manual",
+        "auctions.winner-exchange",
+        "auctions.winner-print",
     )
-    offsets = [bootstrap.index(item) for item in registrations]
+    offsets = [names.index(item) for item in registrations]
     assert offsets == sorted(offsets)
 
 
