@@ -10,6 +10,7 @@ from aiogram.types import (
 
 USER_MENU_ADD_LOT = "🎴 Подать лот"
 USER_MENU_MY_LOTS = "📦 Мои лоты"
+# Retained only to reject buttons from already-sent keyboards.
 USER_MENU_SCHEDULE = "📆 Расписание"
 USER_MENU_EXCHANGE = "🛍 Биржа"
 USER_MENU_NOTIFICATIONS = "🔔 Уведомления"
@@ -22,7 +23,6 @@ USER_MENU_HOME = "🏠 Меню"
 
 USER_MENU_LAYOUT: tuple[tuple[str, ...], ...] = (
     (USER_MENU_ADD_LOT, USER_MENU_MY_LOTS),
-    (USER_MENU_SCHEDULE, USER_MENU_EXCHANGE),
     (USER_MENU_NOTIFICATIONS, USER_MENU_SUBSCRIPTIONS),
     (USER_MENU_PROFILE, USER_MENU_LUXURY),
     (USER_MENU_SUPPORT, USER_MENU_HELP),
