@@ -9,7 +9,7 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     versions = [migration.version for migration in migrations]
 
     assert len(versions) == len(set(versions))
-    assert filenames[-1] == "012_bid_currency_and_deadline_contract.sql"
+    assert filenames[-1] == "013_schedule_temporary_emoji_marks.sql"
 
     schedule_migration = next(
         migration
@@ -23,6 +23,14 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     assert "schedule_preview_target" in schedule_migration.sql
     assert "schedule_publication_reviews" in schedule_migration.sql
 
-    bid_contract = migrations[-1]
+    bid_contract = next(
+        migration
+        for migration in migrations
+        if migration.filename == "012_bid_currency_and_deadline_contract.sql"
+    )
     assert "ADD COLUMN IF NOT EXISTS currency TEXT" in bid_contract.sql
     assert "CREATE TRIGGER trg_fill_bid_currency" in bid_contract.sql
+
+    temporary_emoji_contract = migrations[-1]
+    assert "schedule_temporary_emoji_marks" in temporary_emoji_contract.sql
+    assert "PRIMARY KEY (scope, entity_key)" in temporary_emoji_contract.sql

@@ -14,6 +14,9 @@ from bot.handlers.admin.media_assets import router as media_assets_router
 from bot.handlers.admin.moderation import router as moderation_router
 from bot.handlers.admin.outbox import router as outbox_admin_router
 from bot.handlers.admin.schedule_setup import router as schedule_setup_router
+from bot.handlers.admin.schedule_setup_fields import router as schedule_setup_fields_router
+from bot.handlers.admin.schedule_setup_restart import router as schedule_setup_restart_router
+from bot.handlers.admin.schedule_setup_temp import router as schedule_setup_temp_router
 from bot.handlers.admin.services.market_add_flow import router as market_flow
 from bot.handlers.admin.services.market_diamonds_flow import router as market_diamonds
 from bot.handlers.admin.services.market_manage_flow import router as market_manage
@@ -47,19 +50,10 @@ from bot.middlewares.user_sync import UserSyncMiddleware
 from bot.telegram.user_entrypoints import configure_user_entrypoints
 
 
-def register_all_routers(
-    dispatcher: Dispatcher,
-    *,
-    debug_messages: bool = False,
-) -> None:
+def register_all_routers(dispatcher: Dispatcher, *, debug_messages: bool = False) -> None:
     """Attach every middleware and router exactly once."""
 
-    # Dynamic registrations append handlers to their owning routers. Configure
-    # them before the routers are attached to a dispatcher.
-    configure_user_entrypoints(
-        add_lot=addlot_start,
-        card_subscription=start_subscribe_card,
-    )
+    configure_user_entrypoints(add_lot=addlot_start, card_subscription=start_subscribe_card)
     admin_panel_router.include_router(card_economy_router)
     register_card_subscribe_handlers(auctions_router)
     register_broadcast_handlers(auctions_router)
@@ -68,21 +62,19 @@ def register_all_routers(
     if debug_messages:
         dispatcher.message.outer_middleware(DebugAllMessages())
 
-    # Complete admin navigation must precede the legacy system router and every
-    # broad FSM router, otherwise /admin and Back expose the stale keyboard.
     dispatcher.include_router(admin_navigation_router)
     dispatcher.include_router(admin_panel_system_router)
-    # The setup master consumes active private setup sessions and the /set
-    # schedule target command, so it must precede broad legacy FSM handlers.
+    # Extended setup stages must precede the broad base setup session handler.
+    dispatcher.include_router(schedule_setup_fields_router)
+    dispatcher.include_router(schedule_setup_restart_router)
+    dispatcher.include_router(schedule_setup_temp_router)
     dispatcher.include_router(schedule_setup_router)
 
-    # Focused command routers go before broad legacy/FSM routers.
     dispatcher.include_router(auction_schedule_router)
     dispatcher.include_router(profile_router)
     dispatcher.include_router(users_router)
     dispatcher.include_router(submission_recovery_router)
     dispatcher.include_router(auctions_router)
-    # The package router owns submission, moderation, catalog and diagnostics.
     dispatcher.include_router(auction_exchange_router)
     dispatcher.include_router(emoji_setup_router)
 
@@ -94,8 +86,6 @@ def register_all_routers(
     dispatcher.include_router(auction_autobid_router)
     dispatcher.include_router(auction_admin_lifecycle_router)
     dispatcher.include_router(auction_warnings_router)
-    # Preserve the former winner.py handler order.  In particular the exact
-    # /print_win_missed command must precede the broad /print_win prefix.
     dispatcher.include_router(auction_winner_manual_router)
     dispatcher.include_router(auction_winner_exchange_router)
     dispatcher.include_router(auction_winner_print_router)
