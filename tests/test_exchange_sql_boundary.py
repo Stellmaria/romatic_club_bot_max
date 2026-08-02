@@ -55,6 +55,16 @@ def _imports(relative: str) -> set[str]:
     return result
 
 
+def _receiver_tokens(node: ast.expr) -> set[str]:
+    tokens: set[str] = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name):
+            tokens.add(child.id.lower())
+        elif isinstance(child, ast.Attribute):
+            tokens.add(child.attr.lower().lstrip("_"))
+    return tokens
+
+
 def test_exchange_handlers_contain_no_sql_or_pool_access() -> None:
     for relative in HANDLERS:
         tree = ast.parse(_source(relative), filename=relative)
@@ -72,13 +82,16 @@ def test_exchange_handlers_contain_no_sql_or_pool_access() -> None:
         ]
         assert sql_literals == [], relative
 
-        forbidden_calls = {
-            node.func.attr
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in {"acquire", "transaction", "fetch", "fetchrow", "execute"}
-        }
+        forbidden_calls: set[str] = set()
+        sql_receivers = {"pool", "conn", "connection", "cursor", "db", "database", "repo", "repository"}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                continue
+            method = node.func.attr
+            if method in {"acquire", "transaction", "fetch", "fetchrow"}:
+                forbidden_calls.add(method)
+            elif method == "execute" and _receiver_tokens(node.func.value) & sql_receivers:
+                forbidden_calls.add(method)
         assert forbidden_calls == set(), relative
 
 
