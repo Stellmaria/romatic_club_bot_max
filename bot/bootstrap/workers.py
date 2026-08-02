@@ -5,7 +5,6 @@ from __future__ import annotations
 from aiogram import Bot
 
 from bot.auction_notify import (
-    auction_notifications_loop,
     card_subscriptions_watch_loop,
     daily_loop,
 )
@@ -15,6 +14,7 @@ from bot.handlers.auction.publication import auction_publisher_loop
 from bot.handlers.auction.winner import announce_winner
 from bot.handlers.uid_verification import uid_verification_watch_loop
 from bot.services.auction_finalization import auction_finalization_loop
+from bot.services.auction_notifications import auction_notifications_loop
 from bot.telegram.outbox import telegram_outbox_loop
 
 
