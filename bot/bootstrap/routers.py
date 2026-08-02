@@ -42,7 +42,6 @@ from bot.handlers.emoji_setup import router as emoji_setup_router
 from bot.handlers.helper.appeals import router as admin_appeals_router
 from bot.handlers.profile import router as profile_router
 from bot.handlers.uid_verification import router as uid_verification_router
-from bot.handlers.uid_verification_admin import router as uid_verification_admin_router
 from bot.handlers.user_menu import router as user_menu_router
 from bot.handlers.users import router as users_router
 from bot.middlewares.debug import DebugAllMessages
