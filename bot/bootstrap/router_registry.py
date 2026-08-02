@@ -240,6 +240,7 @@ class RouterRegistry:
         features: Sequence[FeatureRegistration],
     ) -> dict[str, FeatureRegistration]:
         by_name: dict[str, FeatureRegistration] = {}
+        router_owners: dict[str, str] = {}
         command_owners: dict[str, str] = {}
         namespace_owners: dict[str, str] = {}
         middleware_owners: dict[str, str] = {}
@@ -252,6 +253,18 @@ class RouterRegistry:
             if name in by_name:
                 raise RouteCollisionError(f"duplicate feature name: {name!r}")
             by_name[name] = feature
+
+            if feature.router is not None:
+                router_name = feature.router.name.strip()
+                if not router_name:
+                    raise RouterRegistryError(
+                        f"feature {name!r} has a router without a stable name"
+                    )
+                owner = router_owners.setdefault(router_name, name)
+                if owner != name:
+                    raise RouteCollisionError(
+                        f"router name {router_name!r} belongs to {owner!r} and {name!r}"
+                    )
 
             for command in feature.commands:
                 normalized = _normalize_command(command)
@@ -360,6 +373,7 @@ class RouterRegistry:
             payload.append(
                 {
                     "name": feature.name,
+                    "router_name": feature.router.name if feature.router is not None else None,
                     "priority": int(feature.priority),
                     "parent": feature.parent,
                     "dependencies": feature.dependencies,
