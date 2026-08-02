@@ -77,11 +77,11 @@ async def run_bot(config: BotProcessSettings) -> None:
     task_manager: BackgroundTaskManager | None = None
     primary_error: BaseException | None = None
     try:
-        pool = await init_db(database_runtime)
+        await init_db(database_runtime)
         logger.info("Database startup complete")
 
         container = ApplicationContainer.build(
-            pool=pool,
+            pool=database_runtime.require_pool(),
             storage_root=config.runtime_dir / "files",
         )
 
