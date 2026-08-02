@@ -62,7 +62,7 @@ def test_exchange_routers_are_registered_once_in_handler_order() -> None:
     assert len(matches) == 1
     exchange = matches[0]
     assert exchange.router is not None
-    assert exchange.router.name == "bot.handlers.auction.exchange"
+    assert exchange.router.name == "auction_exchange"
     assert exchange.callback_namespaces == ("exchange", "ex_view")
 
 
