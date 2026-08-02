@@ -29,10 +29,19 @@ from bot.handlers.admin.uid_admin_shared import (
 )
 from bot.services.admin_thanks import admin_tag, build_thanks_kb
 from bot.services.uid_verification import (
-    approve_uid_verification_request,
+    UIDVerificationService,
     get_uid_verification_request,
     list_uid_verification_requests,
-    reject_uid_verification_request,
+)
+from bot.use_cases.common import (
+    ApplicationConflict,
+    ApplicationInvalidState,
+    ApplicationNotFound,
+)
+from bot.use_cases.uid_moderation import (
+    ApproveUidVerificationUseCase,
+    ModerateUidCommand,
+    RejectUidVerificationUseCase,
 )
 from bot.telegram.states import ModActionFSM
 from bot.telegram.callback_parser import split_callback_data
@@ -307,6 +316,23 @@ async def verif_send_deals(call: types.CallbackQuery, bot: Bot) -> None:
         )
 
 
+async def _approve_uid_use_case() -> ApproveUidVerificationUseCase:
+    service = await UIDVerificationService.create()
+    return ApproveUidVerificationUseCase(
+        get_request=service.get_request,
+        decide=service.approve_request,
+        required_confirmations=REQUIRED_CONFIRMS,
+    )
+
+
+async def _reject_uid_use_case() -> RejectUidVerificationUseCase:
+    service = await UIDVerificationService.create()
+    return RejectUidVerificationUseCase(
+        get_request=service.get_request,
+        decide=service.reject_request,
+    )
+
+
 @router.callback_query(F.data.startswith("uidv|approve|"))
 @admin_only
 async def verif_approve(call: types.CallbackQuery, bot: Bot):
@@ -314,45 +340,43 @@ async def verif_approve(call: types.CallbackQuery, bot: Bot):
     if len(parts) < 3:
         await call.answer("Кривые данные.", show_alert=True)
         return
-
     req_id = int(parts[2])
-    req = await get_uid_verification_request(request_id=req_id)
-    if not req:
-        await call.answer("Заявка не найдена.", show_alert=True)
-        return
-
-    confirmed, rejected, pending = uidv_counts(req)
-
-    if confirmed < REQUIRED_CONFIRMS:
-        await call.answer(f"Нельзя одобрить: подтверждений {confirmed}/{REQUIRED_CONFIRMS}.", show_alert=True)
+    try:
+        result = await (await _approve_uid_use_case()).execute(
+            ModerateUidCommand(
+                request_id=req_id,
+                admin_id=call.from_user.id,
+                admin_username=call.from_user.username or call.from_user.full_name,
+            )
+        )
+    except ApplicationConflict as exc:
+        confirmed = int(exc.details.get("confirmed") or 0)
+        required = int(exc.details.get("required") or REQUIRED_CONFIRMS)
+        await call.answer(
+            f"Нельзя одобрить: подтверждений {confirmed}/{required}.",
+            show_alert=True,
+        )
         try:
             await render_uid_verif_view(call, req_id)
         except Exception:
             pass
         return
-
-    moderator = admin_tag(call.from_user)
-
-    # Кнопка "Спасибо" нужна только в ЛС пользователю
-    thanks_kb = None
-    try:
-        thanks_kb = await build_thanks_kb(int(req_id), moderator)
-    except Exception:
-        thanks_kb = None
-
-    res = await approve_uid_verification_request(request_id=req_id, admin_id=call.from_user.id)
-    if isinstance(res, tuple):
-        ok, reason = bool(res[0]), res[1]
-    else:
-        ok, reason = bool(res), None
-
-    if not ok:
-        await call.answer(f"Не удалось: {reason or 'уже обработано/не найдено'}", show_alert=True)
+    except ApplicationNotFound:
+        await call.answer("Заявка не найдена.", show_alert=True)
+        return
+    except ApplicationInvalidState as exc:
+        await call.answer(
+            f"Не удалось: {exc.details.get('reason') or 'уже обработано'}",
+            show_alert=True,
+        )
         return
 
-    req_after = await get_uid_verification_request(request_id=req_id) or req
-
-    # ЛС пользователю: добавляем модератора + кнопка спасибо
+    req_after = result.request
+    moderator = admin_tag(call.from_user)
+    try:
+        thanks_kb = await build_thanks_kb(req_id, moderator)
+    except Exception:
+        thanks_kb = None
     try:
         await bot.send_message(
             chat_id=int(req_after["user_id"]),
@@ -369,22 +393,22 @@ async def verif_approve(call: types.CallbackQuery, bot: Bot):
     except Exception:
         pass
 
-    c2, r2, p2 = uidv_counts(req_after)
-    user_line = uidv_user_line(req_after)
-
-    # Логи: БЕЗ кнопки спасибо
-    await send_admin_log(
-        bot,
-        "uidv",
-        "✅ <b>UID-верификация одобрена</b>\n"
-        f"Заявка: <code>#{req_id}</code>\n"
-        f"Пользователь: {user_line} (id=<code>{req_after.get('user_id')}</code>)\n"
-        f"Подтверждения: <b>{c2}/{REQUIRED_CONFIRMS}</b> (pending={p2}, rejected={r2})\n"
-        f"Админ: {moderator}",
-    )
-
+    confirmed, rejected, pending = uidv_counts(req_after)
+    try:
+        await send_admin_log(
+            bot,
+            "uidv",
+            "✅ <b>UID-верификация одобрена</b>\n"
+            f"Заявка: <code>#{req_id}</code>\n"
+            f"Пользователь: {uidv_user_line(req_after)} "
+            f"(id=<code>{req_after.get('user_id')}</code>)\n"
+            f"Подтверждения: <b>{confirmed}/{REQUIRED_CONFIRMS}</b> "
+            f"(pending={pending}, rejected={rejected})\n"
+            f"Админ: {moderator}",
+        )
+    except Exception:
+        pass
     await call.answer("✅ Одобрено")
-
     try:
         await render_uid_verif_view(call, req_id)
     except Exception:
@@ -407,45 +431,39 @@ async def verif_reject_reason(message: types.Message, state: FSMContext, bot: Bo
     data = await state.get_data()
     req_id = int(data.get("uidv_reject_req_id") or 0)
     reason = (message.text or "").strip()
-
     if not req_id or not reason:
         await message.answer("Нужна причина текстом.")
         return
 
-    await state.clear()
-
-    req = await get_uid_verification_request(request_id=req_id)
-    if not req:
+    try:
+        result = await (await _reject_uid_use_case()).execute(
+            ModerateUidCommand(
+                request_id=req_id,
+                admin_id=message.from_user.id,
+                admin_username=(
+                    message.from_user.username or message.from_user.full_name
+                ),
+                reason=reason,
+            )
+        )
+    except ApplicationNotFound:
         await message.answer("Заявка не найдена.")
+        await state.clear()
+        return
+    except ApplicationInvalidState as exc:
+        await message.answer(
+            f"Не удалось отклонить: {exc.details.get('reason') or 'уже обработано'}."
+        )
+        await state.clear()
         return
 
+    await state.clear()
+    req_after = result.request
     moderator = admin_tag(message.from_user)
-
-    # Кнопка "Спасибо" нужна только в ЛС пользователю
-    thanks_kb = None
     try:
-        thanks_kb = await build_thanks_kb(int(req_id), moderator)
+        thanks_kb = await build_thanks_kb(req_id, moderator)
     except Exception:
         thanks_kb = None
-
-    # ВАЖНО: db.py ждёт admin_comment, не reason
-    res = await reject_uid_verification_request(
-        request_id=req_id,
-        admin_id=message.from_user.id,
-        admin_comment=reason,
-    )
-    if isinstance(res, tuple):
-        ok, db_reason = bool(res[0]), res[1]
-    else:
-        ok, db_reason = bool(res), None
-
-    if not ok:
-        await message.answer(f"Не удалось отклонить: {db_reason or 'ошибка'}.")
-        return
-
-    req_after = await get_uid_verification_request(request_id=req_id) or req
-
-    # ЛС пользователю: добавляем модератора + кнопка спасибо
     try:
         await bot.send_message(
             chat_id=int(req_after["user_id"]),
@@ -464,20 +482,21 @@ async def verif_reject_reason(message: types.Message, state: FSMContext, bot: Bo
         pass
 
     confirmed, rejected, pending = uidv_counts(req_after)
-    user_line = uidv_user_line(req_after)
-
-    # Логи: БЕЗ кнопки спасибо
-    await send_admin_log(
-        bot,
-        "uidv",
-        "❌ <b>UID-верификация отклонена</b>\n"
-        f"Заявка: <code>#{req_id}</code>\n"
-        f"Пользователь: {user_line} (id=<code>{req_after.get('user_id')}</code>)\n"
-        f"Подтверждения: <b>{confirmed}/{REQUIRED_CONFIRMS}</b> (pending={pending}, rejected={rejected})\n"
-        f"Причина: {reason}\n"
-        f"Админ: {moderator}",
-    )
-
+    try:
+        await send_admin_log(
+            bot,
+            "uidv",
+            "❌ <b>UID-верификация отклонена</b>\n"
+            f"Заявка: <code>#{req_id}</code>\n"
+            f"Пользователь: {uidv_user_line(req_after)} "
+            f"(id=<code>{req_after.get('user_id')}</code>)\n"
+            f"Подтверждения: <b>{confirmed}/{REQUIRED_CONFIRMS}</b> "
+            f"(pending={pending}, rejected={rejected})\n"
+            f"Причина: {reason}\n"
+            f"Админ: {moderator}",
+        )
+    except Exception:
+        pass
     await message.answer(f"Отклонено ❌\nПричина: {reason}")
 
 

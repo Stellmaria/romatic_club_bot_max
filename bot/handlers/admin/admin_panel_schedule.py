@@ -8,6 +8,17 @@ from typing import (
     Optional,
 )
 from bot.services.auction_workflows import AuctionModerationService
+from bot.use_cases.auction_cancellation import CancelAuctionCommand, CancelAuctionUseCase
+from bot.use_cases.auction_moderation import (
+    RescheduleAuctionUseCase,
+    ScheduleAuctionCommand,
+)
+from bot.use_cases.common import (
+    ApplicationConflict,
+    ApplicationInvalidState,
+    ApplicationNotFound,
+    ApplicationTimeout,
+)
 from bot.domain.auctions import (
     AuctionSlotConflict,
     InvalidAuctionTransition,
@@ -41,21 +52,19 @@ from bot.handlers.admin.helper.admin_keyboards import (
     months_keyboard,
 )
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
-from db.auctions import (
+from bot.services.handler_persistence import (
     get_auctions_by_date_with_owners,
     get_lot_by_id,
     get_lot_owners,
+    get_user,
+    is_luxury_user,
+    log_audit_action,
 )
 from bot.handlers.admin.helper.admin_service import (
     get_free_slots_and_schedule_for_lot,
     parse_auction_and_date_from_callback,
 )
 from bot.services.admin_owners import get_lot_owners_text
-from db.users import (
-    get_user,
-    is_luxury_user,
-)
-from db.admin import log_audit_action
 from bot.handlers.admin.action_support.exchange import safe_answer_photo
 from bot.services.admin_logging import send_admin_log
 from bot.handlers.admin.logs_admin import (
@@ -78,6 +87,17 @@ from bot.telegram.callbacks import safe_callback_answer
 from bot.handlers.admin.presentation.exchange_queue import show_pending_exchange_one
 from bot.services.admin_auction_notifications import notify_owners_lot_changed
 logger = logging.getLogger(__name__)
+
+
+async def _reschedule_auction_use_case() -> RescheduleAuctionUseCase:
+    service = await AuctionModerationService.create()
+    return RescheduleAuctionUseCase(
+        get_lot=get_lot_by_id,
+        mutate=service.reschedule,
+        get_owners=get_lot_owners,
+        get_user=get_user,
+        is_luxury=is_luxury_user,
+    )
 
 ADMIN_AUK_KIND_LABELS: dict[str, str] = {
     "standard": "⭐ Стандартный",
@@ -682,15 +702,23 @@ async def delete_lot_confirm(call: CallbackQuery, state: FSMContext):
 @admin_only
 async def delete_lot_final(call: CallbackQuery, state: FSMContext):
     auction_id = int(split_callback_data(call.data, "|")[1])
-    lot = await get_lot_by_id(auction_id)
-    if not lot:
-        await call.message.answer("Лот не найден.")
+    moderation_service = await AuctionModerationService.create()
+    use_case = CancelAuctionUseCase(
+        get_lot=get_lot_by_id,
+        cancel=moderation_service.cancel,
+        get_owners=get_lot_owners,
+        get_owners_text=get_lot_owners_text,
+    )
+    try:
+        result = await use_case.execute(
+            CancelAuctionCommand(auction_id=auction_id, moderator_id=call.from_user.id)
+        )
+    except (ApplicationNotFound, ApplicationInvalidState) as exc:
+        await call.message.answer(str(exc))
         await call.answer()
         return
-    moderation_service = await AuctionModerationService.create()
-    await moderation_service.cancel(auction_id)
-    owners = await get_lot_owners(auction_id)
-    for o in owners:
+    lot = result.lot
+    for o in result.owners:
         try:
             await call.bot.send_message(
                 o['user_id'],
@@ -699,7 +727,7 @@ async def delete_lot_final(call: CallbackQuery, state: FSMContext):
             )
         except Exception:
             logger.exception("Could not notify owner about cancelled auction %s", auction_id)
-    owners_text = await get_lot_owners_text(auction_id)
+    owners_text = result.owners_text
     log_text = (
         f"🚫 <b>Лот отменён админом</b>\n"
         f"🎴 Лот №{lot['auction_id']}: {lot['card_name']}\n"
@@ -710,13 +738,16 @@ async def delete_lot_final(call: CallbackQuery, state: FSMContext):
         f"⏰ Время: {to_moscow(lot['start_time']).strftime('%H:%M')}–{to_moscow(lot['end_time']).strftime('%H:%M')} (МСК)\n"
         f"🛠️ Действие: отмена через панель расписания"
     )
-    await send_admin_log(call.bot, log_text)
-    await log_audit_action(
-        user_id=call.from_user.id,
-        action_type="admin_cancel_lot",
-        auction_id=auction_id,
-        details="Лот отменён через редактор расписания"
-    )
+    try:
+        await send_admin_log(call.bot, log_text)
+        await log_audit_action(
+            user_id=call.from_user.id,
+            action_type="admin_cancel_lot",
+            auction_id=auction_id,
+            details="Лот отменён через редактор расписания"
+        )
+    except Exception:
+        logger.exception("Could not deliver cancellation audit for auction %s", auction_id)
     await call.message.answer("✅ Лот отменён; история сохранена.", parse_mode="HTML")
     await call.answer()
 @router.callback_query(F.data.startswith("edit_time_slot|"))
@@ -739,6 +770,102 @@ async def edit_time_slot_confirm(call: CallbackQuery, state: FSMContext):
     ])
     await call.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await call.answer()
+async def _deliver_reschedule_effects(
+    call: CallbackQuery,
+    state: FSMContext,
+    result,
+) -> None:
+    auction_id = int(result.lot["auction_id"])
+    old_start = to_moscow(result.old_start_time)
+    old_end = to_moscow(result.old_end_time)
+    new_start = to_moscow(result.start_time)
+    new_end = to_moscow(result.end_time)
+    await call.message.answer(
+        "✅ <b>Лот перенесён</b>\n"
+        f"{old_start.strftime('%d.%m %H:%M')}–{old_end.strftime('%H:%M')} → "
+        f"{new_start.strftime('%d.%m %H:%M')}–{new_end.strftime('%H:%M')} (МСК)",
+        parse_mode="HTML",
+    )
+
+    try:
+        card_refresh_status = await asyncio.wait_for(
+            refresh_schedule_card_origin(
+                call.bot,
+                state,
+                auction_id,
+                lot=result.lot,
+                owners_text=result.owners_text,
+            ),
+            timeout=6,
+        )
+    except Exception:
+        card_refresh_status = False
+        logger.exception("Schedule card refresh failed auction_id=%s", auction_id)
+
+    admin = {
+        "id": call.from_user.id,
+        "username": call.from_user.username or call.from_user.full_name,
+    }
+    log_text = format_admin_action_log(
+        action="move_lot",
+        admin=admin,
+        lot={**result.lot, "start_time": new_start, "end_time": new_end},
+        owners_text=result.owners_text,
+    )
+    log_text += (
+        f"\n🏷️ <b>Тип владельца:</b> {result.owner_flags}"
+        f"\n📅 <b>Старое время:</b> "
+        f"{old_start.strftime('%d.%m %H:%M')}–{old_end.strftime('%H:%M')} (МСК)"
+        f"\n➡️ <b>Новое время:</b> "
+        f"{new_start.strftime('%d.%m %H:%M')}–{new_end.strftime('%H:%M')} (МСК)"
+    )
+    try:
+        await asyncio.wait_for(send_admin_log(call.bot, log_text), timeout=6)
+    except Exception:
+        logger.exception("Could not send reschedule admin log auction_id=%s", auction_id)
+    try:
+        await log_audit_action(
+            user_id=call.from_user.id,
+            action_type="move_lot",
+            auction_id=auction_id,
+            details=(
+                f"Перенос с {old_start:%d.%m %H:%M}–{old_end:%H:%M} "
+                f"на {new_start:%d.%m %H:%M}–{new_end:%H:%M} | "
+                f"Тип владельца: {result.owner_flags} | "
+                f"Карточка обновлена: {card_refresh_status}"
+            ),
+        )
+    except Exception:
+        logger.exception("Could not write reschedule audit auction_id=%s", auction_id)
+
+    for owner in result.owners:
+        try:
+            await asyncio.wait_for(
+                call.bot.send_message(
+                    owner.user_id,
+                    f"⏳ <b>Ваша карта <u>{result.lot.get('card_name') or '—'}</u> "
+                    "была перенесена!</b>\n\n"
+                    f"<b>Новое время аукциона:</b> "
+                    f"{new_start:%d.%m %H:%M}–{new_end:%H:%M} (МСК)\n"
+                    f"Ранее стояло: {old_start:%d.%m %H:%M}–{old_end:%H:%M}\n"
+                    f"<b>Ваш статус:</b> {result.owner_flags}",
+                    parse_mode="HTML",
+                ),
+                timeout=5,
+            )
+        except Exception:
+            logger.exception(
+                "Could not notify owner about rescheduled auction_id=%s user_id=%s",
+                auction_id,
+                owner.user_id,
+            )
+    if card_refresh_status is False:
+        await call.message.answer(
+            "⚠️ Время в базе изменено, но старую карточку Telegram не обновил. "
+            "После повторного открытия расписания будет показано новое время."
+        )
+
+
 @router.callback_query(F.data.startswith("edit_time_save|"))
 @admin_only
 async def save_edited_time(call: CallbackQuery, state: FSMContext):
@@ -753,46 +880,45 @@ async def save_edited_time(call: CallbackQuery, state: FSMContext):
     auction_id = int(split_callback_data(call.data, "|")[1])
     start_time = to_moscow(data["new_start_time"])
     end_time = auction_end_at_59(start_time)
-    # Telegram keeps the loading spinner until answerCallbackQuery is called.
-    # A reschedule also sends logs, refreshes an old card and notifies owners,
-    # so answering only at the very end made a successful move look frozen.
     await safe_callback_answer(call, "⏳ Переношу лот…")
     try:
         await call.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    lot = await get_lot_by_id(auction_id)
-    if not lot:
-        await call.message.answer("❌ Лот не найден. Обновите расписание.")
-        return
-    old_start = to_moscow(lot["start_time"])
-    old_end = to_moscow(lot["end_time"])
+
     try:
-        moderation_service = await AuctionModerationService.create()
-        persisted_lot = await asyncio.wait_for(
-            moderation_service.reschedule(
-                auction_id,
+        result = await (await _reschedule_auction_use_case()).execute(
+            ScheduleAuctionCommand(
+                auction_id=auction_id,
                 start_time=start_time,
                 end_time=end_time,
-            ),
-            timeout=12,
+            )
         )
-    except asyncio.TimeoutError:
-        logger.error("Timed out while rescheduling auction_id=%s", auction_id)
+    except ApplicationConflict:
+        await call.message.answer("❌ Этот слот уже занят. Выберите другое время.")
+        return
+    except ApplicationNotFound:
+        await call.message.answer("❌ Лот не найден. Обновите расписание.")
+        return
+    except ApplicationTimeout:
         await call.message.answer(
             "❌ База слишком долго отвечала. Перенос отменён транзакцией. "
             "Откройте расписание заново и повторите попытку."
         )
         return
-    except AuctionSlotConflict:
-        await call.message.answer("❌ Этот слот уже занят. Выберите другое время.")
-        return
-    except InvalidAuctionTransition as exc:
-        await call.message.answer(
-            f"❌ Лот нельзя перенести из статуса <code>{exc.current}</code>. "
-            "Обновите расписание.",
-            parse_mode="HTML",
-        )
+    except ApplicationInvalidState as exc:
+        current = exc.details.get("current")
+        if current:
+            await call.message.answer(
+                f"❌ Лот нельзя перенести из статуса <code>{current}</code>. "
+                "Обновите расписание.",
+                parse_mode="HTML",
+            )
+        else:
+            await call.message.answer(
+                "⚠️ База вернула другое время после переноса. "
+                "Откройте расписание заново; успешный лог не отправлен."
+            )
         return
     except Exception:
         logger.exception("Could not reschedule auction_id=%s", auction_id)
@@ -801,132 +927,11 @@ async def save_edited_time(call: CallbackQuery, state: FSMContext):
             "Изменение не подтверждено; проверьте расписание."
         )
         return
-    persisted_start = to_moscow(persisted_lot["start_time"])
-    persisted_end = to_moscow(persisted_lot["end_time"])
-    if (
-        persisted_start.replace(second=0, microsecond=0)
-        != start_time.replace(second=0, microsecond=0)
-        or persisted_end.replace(microsecond=0) != end_time.replace(microsecond=0)
-    ):
-        logger.error(
-            "Reschedule verification mismatch auction_id=%s expected=%s/%s actual=%s/%s",
-            auction_id,
-            start_time,
-            end_time,
-            persisted_start,
-            persisted_end,
-        )
-        await call.message.answer(
-            "⚠️ База вернула другое время после переноса. "
-            "Откройте расписание заново; успешный лог не отправлен."
-        )
-        return
-    # The database move is already committed. Show the result before optional
-    # Telegram/logging side effects so a slow log chat cannot hide success.
-    await call.message.answer(
-        "✅ <b>Лот перенесён</b>\n"
-        f"{old_start.strftime('%d.%m %H:%M')}–{old_end.strftime('%H:%M')} → "
-        f"{persisted_start.strftime('%d.%m %H:%M')}–{persisted_end.strftime('%H:%M')} (МСК)",
-        parse_mode="HTML",
-    )
-    owners = await get_lot_owners(auction_id)
-    owner_ids = [o["user_id"] for o in owners]
-    user_flags = []
-    for owner_id in owner_ids:
-        try:
-            is_lux, user = await asyncio.gather(
-                is_luxury_user(owner_id),
-                get_user(owner_id),
-            )
-        except Exception:
-            logger.exception("Could not read owner flags user_id=%s", owner_id)
-            continue
-        is_trusted = user and user.get("is_trusted")
-        if is_lux:
-            user_flags.append("Лакшери")
-        if is_trusted:
-            user_flags.append("Доверенный")
-    flags_str = ", ".join(sorted(set(user_flags))) if user_flags else "Обычный"
-    admin = {
-        "id": call.from_user.id,
-        "username": call.from_user.username or call.from_user.full_name,
-    }
-    owners_text = await get_lot_owners_text(auction_id)
-    try:
-        card_refresh_status = await asyncio.wait_for(
-            refresh_schedule_card_origin(
-                call.bot,
-                state,
-                auction_id,
-                lot=persisted_lot,
-                owners_text=owners_text,
-            ),
-            timeout=6,
-        )
-    except asyncio.TimeoutError:
-        card_refresh_status = False
-        logger.warning("Schedule card refresh timed out auction_id=%s", auction_id)
-    except Exception:
-        card_refresh_status = False
-        logger.exception("Schedule card refresh failed auction_id=%s", auction_id)
-    log_text = format_admin_action_log(
-        action="move_lot",
-        admin=admin,
-        lot={
-            **persisted_lot,
-            "start_time": persisted_start,
-            "end_time": persisted_end,
-        },
-        owners_text=owners_text,
-    )
-    log_text += (
-        f"\n🏷️ <b>Тип владельца:</b> {flags_str}"
-        f"\n📅 <b>Старое время:</b> {old_start.strftime('%d.%m %H:%M')}–{old_end.strftime('%H:%M')} (МСК)"
-        f"\n➡️ <b>Новое время:</b> {persisted_start.strftime('%d.%m %H:%M')}–{persisted_end.strftime('%H:%M')} (МСК)"
-    )
-    try:
-        await asyncio.wait_for(send_admin_log(call.bot, log_text), timeout=6)
-    except Exception:
-        logger.exception("Could not send reschedule admin log auction_id=%s", auction_id)
-    try:
-        await log_audit_action(
-            user_id=call.from_user.id,
-            action_type="move_lot",
-            auction_id=auction_id,
-            details=(
-                f"Перенос с {old_start.strftime('%d.%m %H:%M')}–{old_end.strftime('%H:%M')} "
-                f"на {persisted_start.strftime('%d.%m %H:%M')}–{persisted_end.strftime('%H:%M')} | "
-                f"Тип владельца: {flags_str} | "
-                f"Карточка обновлена: {card_refresh_status}"
-            ),
-        )
-    except Exception:
-        logger.exception("Could not write reschedule audit auction_id=%s", auction_id)
-    async def _notify_owner(owner: dict) -> None:
-        await call.bot.send_message(
-            owner["user_id"],
-            f"⏳ <b>Ваша карта <u>{lot['card_name']}</u> была перенесена!</b>\n\n"
-            f"<b>Новое время аукциона:</b> "
-            f"{persisted_start.strftime('%d.%m %H:%M')}–{persisted_end.strftime('%H:%M')} (МСК)\n"
-            f"Ранее стояло: {old_start.strftime('%d.%m %H:%M')}–{old_end.strftime('%H:%M')}\n"
-            f"<b>Ваш статус:</b> {flags_str}",
-            parse_mode="HTML",
-        )
-    for owner in owners:
-        try:
-            await asyncio.wait_for(_notify_owner(owner), timeout=5)
-        except Exception:
-            logger.exception(
-                "Could not notify owner about rescheduled auction_id=%s user_id=%s",
-                auction_id,
-                owner.get("user_id"),
-            )
-    if card_refresh_status is False:
-        await call.message.answer(
-            "⚠️ Время в базе изменено, но старую карточку Telegram не обновил. "
-            "После повторного открытия расписания будет показано новое время."
-        )
+
+    await _deliver_reschedule_effects(call, state, result)
     await state.clear()
+
+
 @router.callback_query(EditScheduleFSM.entering_value, F.data.startswith("set_currency|"))
 async def set_currency_handler(call: CallbackQuery, state: FSMContext):
     _, currency = split_callback_data(call.data, "|")

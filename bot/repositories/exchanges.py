@@ -17,65 +17,82 @@ class ExchangeRepository:
     def __init__(self, pool: asyncpg.Pool):
         self._pool = pool
 
-    async def create(self, draft: ExchangeDraft) -> dict[str, Any]:
+    async def _create_with_connection(
+        self, conn: asyncpg.Connection, draft: ExchangeDraft
+    ) -> dict[str, Any]:
         card_ids = [int(card_id) for card_id in draft.card_ids]
+        cards = await conn.fetch(
+            """
+            SELECT card_id, card_name, hero_name
+            FROM public.cards
+            WHERE deck_id = $1
+              AND card_id = ANY($2::int[])
+            """,
+            int(draft.deck_id),
+            sorted(set(card_ids)),
+        )
+        cards_by_id = {int(row["card_id"]): row for row in cards}
+        missing = sorted(set(card_ids) - set(cards_by_id))
+        if missing:
+            raise ValueError(
+                "cards do not belong to selected deck or do not exist: "
+                + ", ".join(map(str, missing))
+            )
+
+        batch = await conn.fetchrow(
+            """
+            INSERT INTO public.exchange_batches (
+                user_id, deck_id, mode, currency, price,
+                comment, proof_photo_id, status
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+            RETURNING *
+            """,
+            int(draft.user_id),
+            int(draft.deck_id),
+            draft.mode,
+            draft.currency.value,
+            int(draft.price),
+            draft.comment,
+            draft.proof_photo_id,
+        )
+        if card_ids:
+            await conn.executemany(
+                """
+                INSERT INTO public.exchange_items (
+                    batch_id, card_id, card_name, hero_name
+                )
+                VALUES ($1, $2, $3, $4)
+                """,
+                [
+                    (
+                        int(batch["batch_id"]),
+                        card_id,
+                        cards_by_id[card_id]["card_name"],
+                        cards_by_id[card_id]["hero_name"],
+                    )
+                    for card_id in card_ids
+                ],
+            )
+        return dict(batch)
+
+    async def create(self, draft: ExchangeDraft) -> dict[str, Any]:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                cards = await conn.fetch(
-                    """
-                    SELECT card_id, card_name, hero_name
-                    FROM public.cards
-                    WHERE deck_id = $1
-                      AND card_id = ANY($2::int[])
-                    """,
-                    int(draft.deck_id),
-                    sorted(set(card_ids)),
-                )
-                cards_by_id = {int(row["card_id"]): row for row in cards}
-                missing = sorted(set(card_ids) - set(cards_by_id))
-                if missing:
-                    raise ValueError(
-                        "cards do not belong to selected deck or do not exist: "
-                        + ", ".join(map(str, missing))
-                    )
+                return await self._create_with_connection(conn, draft)
 
-                batch = await conn.fetchrow(
-                    """
-                    INSERT INTO public.exchange_batches (
-                        user_id, deck_id, mode, currency, price,
-                        comment, proof_photo_id, status
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-                    RETURNING *
-                    """,
-                    int(draft.user_id),
-                    int(draft.deck_id),
-                    draft.mode,
-                    draft.currency.value,
-                    int(draft.price),
-                    draft.comment,
-                    draft.proof_photo_id,
-                )
-
-                if card_ids:
-                    await conn.executemany(
-                        """
-                        INSERT INTO public.exchange_items (
-                            batch_id, card_id, card_name, hero_name
-                        )
-                        VALUES ($1, $2, $3, $4)
-                        """,
-                        [
-                            (
-                                int(batch["batch_id"]),
-                                card_id,
-                                cards_by_id[card_id]["card_name"],
-                                cards_by_id[card_id]["hero_name"],
-                            )
-                            for card_id in card_ids
-                        ],
-                    )
-        return dict(batch)
+    async def create_many(
+        self, drafts: Iterable[ExchangeDraft]
+    ) -> list[dict[str, Any]]:
+        normalized = tuple(drafts)
+        if not normalized:
+            raise ValueError("at least one exchange draft is required")
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                return [
+                    await self._create_with_connection(conn, draft)
+                    for draft in normalized
+                ]
 
     async def get(self, batch_id: int) -> dict[str, Any]:
         async with self._pool.acquire() as conn:

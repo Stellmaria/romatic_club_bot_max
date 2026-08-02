@@ -30,6 +30,31 @@ class ExchangeService:
         comment: str = "",
         proof_photo_id: str | None = None,
     ) -> dict[str, Any]:
+        return await self._repository.create(
+            self._draft(
+                user_id=user_id,
+                deck_id=deck_id,
+                mode=mode,
+                currency=currency,
+                price=price,
+                card_ids=card_ids,
+                comment=comment,
+                proof_photo_id=proof_photo_id,
+            )
+        )
+
+    def _draft(
+        self,
+        *,
+        user_id: int,
+        deck_id: int,
+        mode: str,
+        currency: str,
+        price: int,
+        card_ids: Iterable[int],
+        comment: str = "",
+        proof_photo_id: str | None = None,
+    ) -> ExchangeDraft:
         normalized_mode = (mode or "card").strip().lower()
         if normalized_mode not in self._MODES:
             raise ValueError(f"unsupported exchange mode: {normalized_mode}")
@@ -39,8 +64,7 @@ class ExchangeService:
         amount = int(price)
         if amount < 0:
             raise ValueError("exchange price cannot be negative")
-
-        draft = ExchangeDraft(
+        return ExchangeDraft(
             user_id=int(user_id),
             deck_id=int(deck_id),
             mode=normalized_mode,
@@ -50,7 +74,12 @@ class ExchangeService:
             comment=(comment or "").strip()[:2000],
             proof_photo_id=(proof_photo_id or "").strip() or "NO_PROOF",
         )
-        return await self._repository.create(draft)
+
+    async def submit_many(
+        self, requests: Iterable[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        drafts = [self._draft(**request) for request in requests]
+        return await self._repository.create_many(drafts)
 
     async def approve(
         self,

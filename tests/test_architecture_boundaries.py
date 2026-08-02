@@ -60,7 +60,7 @@ def test_domain_has_no_framework_or_infrastructure_dependencies() -> None:
 
 
 def test_application_layers_do_not_depend_on_handlers_or_legacy_db() -> None:
-    for layer in ("bot/features", "bot/services", "bot/repositories"):
+    for layer in ("bot/features", "bot/use_cases", "bot/services", "bot/repositories"):
         for path in _python_files(layer):
             imports = _imports(path)
             forbidden = {
@@ -70,6 +70,16 @@ def test_application_layers_do_not_depend_on_handlers_or_legacy_db() -> None:
             }
             assert not forbidden, f"{path.relative_to(ROOT)}: {sorted(forbidden)}"
 
+
+
+def test_use_cases_are_framework_and_infrastructure_neutral() -> None:
+    forbidden_roots = {"aiogram", "asyncpg", "telethon", "flask", "db"}
+    for path in _python_files("bot/use_cases"):
+        roots = {name.split(".", 1)[0].lower() for name in _imports(path)}
+        assert not (roots & forbidden_roots), path.relative_to(ROOT)
+        assert not any(name.startswith("bot.handlers") for name in _imports(path)), path.relative_to(ROOT)
+        assert _sql_literals(path) == [], path.relative_to(ROOT)
+        assert _driver_calls(path) == [], path.relative_to(ROOT)
 
 def test_database_infrastructure_does_not_depend_on_handlers() -> None:
     for path in _python_files("db"):
@@ -141,4 +151,28 @@ def test_production_uses_package_modules_not_root_compatibility_facades() -> Non
         if legacy:
             violations[path.relative_to(ROOT).as_posix()] = legacy
 
+    assert violations == {}
+
+
+def test_issue30_critical_handlers_do_not_import_database_modules() -> None:
+    critical_handlers = (
+        "bot/handlers/admin/admin_panel_schedule.py",
+        "bot/handlers/admin/moderation_lots.py",
+        "bot/handlers/admin/uid_verification_review.py",
+        "bot/handlers/auction/exchange/moderation.py",
+        "bot/handlers/auction/exchange/submission.py",
+        "bot/handlers/auction/publication.py",
+        "bot/handlers/auction/submission.py",
+        "bot/handlers/users.py",
+        "bot/handlers/admin/action_support/roles.py",
+    )
+    violations: dict[str, list[str]] = {}
+    for relative in critical_handlers:
+        imported = sorted(
+            name
+            for name in _imports(ROOT / relative)
+            if name == "db" or name.startswith("db.") or name == "database" or name.startswith("database.")
+        )
+        if imported:
+            violations[relative] = imported
     assert violations == {}

@@ -22,9 +22,14 @@ from bot.handlers.admin.helper.admin_constants import (
 from bot.handlers.admin.helper.user_helpers import get_owner_refs
 from bot.handlers.auction.winner import post_rules_under_lot
 from bot.services.auction_workflows import AuctionPublicationService
+from bot.use_cases.auction_publication import PublishAuctionCommand, PublishAuctionUseCase
 from bot.telegram.media import bot_send_media_any
 from bot.core.legacy_config import legacy_config
-from db.legacy import count_sold_by_card_id, count_sold_same_card, list_auctions
+from bot.services.handler_persistence import (
+    count_sold_by_card_id,
+    count_sold_same_card,
+    list_auctions,
+)
 
 logger = logging.getLogger("auction_bot.publication")
 
@@ -170,7 +175,7 @@ async def publish_auction_lot(
     publication_service: AuctionPublicationService | None = None,
     channel_username: str | None | object = _UNSET,
 ) -> int | None:
-    """Deliver one claimed auction and atomically record its Telegram message."""
+    """Publish one lot through a framework-neutral application use case."""
     if channel_id is None:
         channel_id = legacy_config.AUCTION_CHANNEL_ID
     resolved_channel_username = (
@@ -182,21 +187,20 @@ async def publish_auction_lot(
         resolved_channel_username, str
     ):
         raise TypeError("channel_username must be a string or None")
-    del lot_number  # retained for compatibility with existing admin calls
+    del lot_number
+
     auction_id = int(auction["auction_id"])
     if auction.get("message_id"):
         return int(auction["message_id"])
-
     service = publication_service or await AuctionPublicationService.create()
-    if str(auction.get("status") or "").lower() != "publishing":
-        try:
-            auction = await service.claim_one(auction_id)
-        except Exception as exc:
-            logger.warning("Auction %s cannot be claimed: %s", auction_id, exc)
-            return None
 
-    try:
-        full_auction, card, deck, owners_count = await _publication_context(auction)
+    async def claim(_auction_id: int) -> dict[str, Any]:
+        if str(auction.get("status") or "").lower() == "publishing":
+            return dict(auction)
+        return await service.claim_one(_auction_id)
+
+    async def build_payload(claimed: dict[str, Any]) -> tuple[str | None, str]:
+        full_auction, card, deck, owners_count = await _publication_context(claimed)
         caption = render_auction_caption(
             full_auction,
             card=card,
@@ -204,8 +208,13 @@ async def publish_auction_lot(
             owners_count=owners_count,
             show_min_bid=True,
         )
-        media = _media_id(full_auction, card, auction)
+        return _media_id(full_auction, card, claimed), caption
 
+    async def send(
+        _claimed: dict[str, Any],
+        payload: tuple[str | None, str],
+    ) -> int:
+        media, caption = payload
         message = None
         last_delivery_error: Exception | None = None
         for target in _publication_targets(channel_id, resolved_channel_username):
@@ -229,35 +238,41 @@ async def publish_auction_lot(
                     target,
                     exc,
                 )
-
         if message is None:
             raise RuntimeError(
                 "auction publication failed for every configured channel target"
             ) from last_delivery_error
+        return int(message.message_id)
 
-        message_id = int(message.message_id)
-        stored = await service.mark_published(auction_id, message_id=message_id)
-        if not stored:
-            logger.critical(
-                "Auction %s was delivered as message %s but its lease was lost; "
-                "manual review required",
-                auction_id,
-                message_id,
-            )
-            return message_id
+    async def mark_published(_auction_id: int, message_id: int) -> bool:
+        return await service.mark_published(_auction_id, message_id=message_id)
 
+    async def mark_failed(_auction_id: int, error: str) -> Any:
+        return await service.mark_failed(_auction_id, error=error)
+
+    async def after_published(_auction: dict[str, Any], _message_id: int) -> None:
         asyncio.create_task(post_rules_under_lot(bot, auction_id))
-        logger.info("Published auction %s as message %s", auction_id, message_id)
-        return message_id
+
+    use_case = PublishAuctionUseCase(
+        claim=claim,
+        build_payload=build_payload,
+        send=send,
+        mark_published=mark_published,
+        mark_failed=mark_failed,
+        after_published=after_published,
+    )
+    try:
+        result = await use_case.execute(PublishAuctionCommand(auction_id=auction_id))
     except asyncio.CancelledError:
         raise
     except Exception as exc:
         logger.exception("Could not publish auction %s", auction_id)
-        try:
-            await service.mark_failed(auction_id, error=repr(exc))
-        except Exception:
-            logger.exception("Could not record publication failure for auction %s", auction_id)
+        if exc.__class__.__name__ in {"AuctionNotFound", "InvalidAuctionTransition"}:
+            logger.warning("Auction %s cannot be claimed: %s", auction_id, exc)
         return None
+
+    logger.info("Published auction %s as message %s", auction_id, result.message_id)
+    return result.message_id
 
 
 async def get_lot_number_for_day(auction: dict[str, Any]) -> int:
