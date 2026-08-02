@@ -24,7 +24,7 @@ def extract_auction_id(text: str | None) -> int | None:
     return value if value > 0 else None
 
 
-def _configured_channels() -> tuple[int | str, ...]:
+def _configured_sources() -> tuple[int | str, ...]:
     targets: list[int | str] = []
     if legacy_config.AUCTION_CHANNEL_ID:
         targets.append(legacy_config.AUCTION_CHANNEL_ID)
@@ -33,7 +33,15 @@ def _configured_channels() -> tuple[int | str, ...]:
         username_target = username if username.startswith("@") else f"@{username}"
         if username_target not in targets:
             targets.append(username_target)
+    if legacy_config.DISCUSSION_CHAT_ID and legacy_config.DISCUSSION_CHAT_ID not in targets:
+        targets.append(legacy_config.DISCUSSION_CHAT_ID)
     return tuple(targets)
+
+
+def _channel_message_id(message: Any) -> int:
+    forwarded = getattr(message, "fwd_from", None)
+    forwarded_id = getattr(forwarded, "channel_post", None) if forwarded else None
+    return int(forwarded_id or getattr(message, "id", 0) or 0)
 
 
 async def reconcile_recent_auction_publications(
@@ -43,7 +51,7 @@ async def reconcile_recent_auction_publications(
     limit: int = 100,
     service: AuctionPublicationRecoveryService | None = None,
 ) -> int:
-    targets = (channel,) if channel is not None else _configured_channels()
+    targets = (channel,) if channel is not None else _configured_sources()
     if not targets:
         return 0
 
@@ -62,7 +70,7 @@ async def reconcile_recent_auction_publications(
                 target,
                 limit=scan_limit,
             ):
-                message_id = int(getattr(message, "id", 0) or 0)
+                message_id = _channel_message_id(message)
                 if message_id <= 0:
                     continue
                 auction_id = extract_auction_id(getattr(message, "message", None))
@@ -85,7 +93,7 @@ async def reconcile_recent_auction_publications(
             raise
         except Exception:
             logger.exception(
-                "Could not scan auction channel target %r for publication recovery",
+                "Could not scan Telegram source %r for publication recovery",
                 target,
             )
     return recovered
