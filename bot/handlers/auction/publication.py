@@ -22,6 +22,7 @@ from bot.handlers.admin.helper.admin_constants import (
 from bot.handlers.admin.helper.user_helpers import get_owner_refs
 from bot.handlers.auction.winner import post_rules_under_lot
 from bot.services.auction_workflows import AuctionPublicationService
+from bot.services.publication_recovery import AuctionPublicationRecoveryService
 from bot.use_cases.auction_publication import PublishAuctionCommand, PublishAuctionUseCase
 from bot.telegram.media import bot_send_media_any
 from bot.core.legacy_config import legacy_config
@@ -173,6 +174,7 @@ async def publish_auction_lot(
     channel_id: int | str | None = None,
     lot_number: int | None = None,
     publication_service: AuctionPublicationService | None = None,
+    publication_recovery_service: AuctionPublicationRecoveryService | None = None,
     channel_username: str | None | object = _UNSET,
 ) -> int | None:
     """Publish one lot through a framework-neutral application use case."""
@@ -269,6 +271,29 @@ async def publish_auction_lot(
         logger.exception("Could not publish auction %s", auction_id)
         if exc.__class__.__name__ in {"AuctionNotFound", "InvalidAuctionTransition"}:
             logger.warning("Auction %s cannot be claimed: %s", auction_id, exc)
+        return None
+
+    if result.pending_confirmation:
+        recovery = (
+            publication_recovery_service
+            or await AuctionPublicationRecoveryService.create()
+        )
+        try:
+            marked = await recovery.mark_awaiting_channel_post(auction_id)
+            if not marked:
+                logger.error(
+                    "Auction %s received Telegram message_id=0 but its publishing claim was lost",
+                    auction_id,
+                )
+        except Exception:
+            logger.exception(
+                "Auction %s received Telegram message_id=0 and could not persist the pending marker",
+                auction_id,
+            )
+        logger.warning(
+            "Telegram scheduled auction %s with message_id=0; awaiting the real channel post",
+            auction_id,
+        )
         return None
 
     logger.info("Published auction %s as message %s", auction_id, result.message_id)
