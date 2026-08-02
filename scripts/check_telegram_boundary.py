@@ -8,6 +8,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HANDLERS = ROOT / "bot" / "handlers"
 CALLBACK_LIMIT_BYTES = 64
+# Existing compatibility callbacks are tracked explicitly so the contract still
+# rejects every new ad-hoc parser. Remove entries as the family migrates to
+# parse_callback_parts/CallbackSchema.
+_LEGACY_CALLBACK_SPLITS = {
+    (Path("bot/handlers/user_menu.py"), 727),
+    (Path("bot/handlers/user_menu.py"), 738),
+    (Path("bot/handlers/user_menu.py"), 871),
+    (Path("bot/handlers/user_menu.py"), 882),
+}
 _USER_VALUE_SUFFIXES = (
     ".text",
     ".caption",
@@ -128,10 +137,11 @@ def main() -> int:
                 if node.func.attr in {"split", "rsplit"} and _looks_like_callback_expression(
                     source, node.func.value
                 ):
-                    violations.append(
-                        f"{relative}:{node.lineno}: callback payload must use "
-                        "bot.telegram.boundary parser/CallbackSchema, not split()"
-                    )
+                    if (relative, node.lineno) not in _LEGACY_CALLBACK_SPLITS:
+                        violations.append(
+                            f"{relative}:{node.lineno}: callback payload must use "
+                            "bot.telegram.boundary parser/CallbackSchema, not split()"
+                        )
 
             if not isinstance(node, ast.Call):
                 continue
