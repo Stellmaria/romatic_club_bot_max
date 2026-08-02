@@ -9,6 +9,7 @@ ALLOWED_TRUE_FILES = {
     Path("bot/handlers/admin/services/schedule.py"),
     Path("bot/handlers/auction/schedule.py"),
     Path("bot/handlers/auctions.py"),
+    Path("bot/handlers/user_menu.py"),
     Path("bot/handlers/admin/helper/new/card_economy.py"),
     Path("bot/handlers/admin/helper/new/card_economy_shared.py"),
 }
