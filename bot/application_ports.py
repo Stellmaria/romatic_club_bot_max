@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncContextManager, Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import AsyncContextManager, Protocol, TypeVar, runtime_checkable
 
 from bot.application_models import (
     AuctionRecord,
