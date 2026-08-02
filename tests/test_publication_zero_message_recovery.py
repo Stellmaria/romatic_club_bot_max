@@ -99,7 +99,11 @@ async def test_publish_handler_marks_zero_message_as_awaiting_channel_post(monke
 @pytest.mark.asyncio
 async def test_userbot_reconciles_real_channel_message_id() -> None:
     messages = (
-        SimpleNamespace(id=4567, message="🏓АУКЦИОН 🏓\n\nЛот №9217\n"),
+        SimpleNamespace(
+            id=7777,
+            fwd_from=SimpleNamespace(channel_post=4567),
+            message="🏓АУКЦИОН 🏓\n\nЛот №9217\n",
+        ),
         SimpleNamespace(id=4566, message="Обычный пост"),
     )
 
