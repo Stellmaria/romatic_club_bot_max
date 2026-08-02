@@ -7,6 +7,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.telegram.callback_parser import split_callback_data
 from bot.handlers.admin.schedule_setup_ui import (
     ASSET_BY_KEY,
     ORIGINAL_UPSERT_ASSET,
@@ -25,7 +26,7 @@ router = Router(name=__name__)
 @admin_only
 async def set_temporary_emoji(call: CallbackQuery) -> None:
     try:
-        _, scope, key = str(call.data).split(":", 2)
+        _, scope, key = split_callback_data(call.data, ":", 2)
     except ValueError:
         await call.answer("Некорректная кнопка", show_alert=True)
         return
@@ -43,7 +44,7 @@ async def set_temporary_emoji(call: CallbackQuery) -> None:
             upsert_deck=ORIGINAL_UPSERT_DECK,
             upsert_card=ORIGINAL_UPSERT_CARD,
         )
-    except ValueError as exc:
+    except ValueEError as exc:
         await call.answer(str(exc), show_alert=True)
         return
     await call.answer("Временный эмодзи сохранён")
@@ -57,7 +58,7 @@ async def set_temporary_emoji(call: CallbackQuery) -> None:
         await set_setup_session(
             int(call.from_user.id), stage="card_review",
             deck_id=int(card["deck_id"]), card_id=int(key),
-        )
+       )
         await send_card(call.message, card, review=True)
     else:
         await show_next(call.message, int(call.from_user.id))
@@ -88,7 +89,7 @@ async def list_temporary_emojis(message: Message) -> None:
 @admin_only
 async def replace_temporary_emoji(call: CallbackQuery) -> None:
     try:
-        _, scope, key = str(call.data).split(":", 2)
+        _, scope, key = split_callback_data(call.data, ":", 2)
     except ValueError:
         await call.answer("Некорректная кнопка", show_alert=True)
         return

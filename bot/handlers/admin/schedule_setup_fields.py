@@ -65,7 +65,7 @@ async def choose_field(call: CallbackQuery) -> None:
 @admin_only
 async def request_value(call: CallbackQuery) -> None:
     try:
-        _, field, raw_id = str(call.data).split(":", 2)
+        _, field, raw_id = rsplit_callback_data(call.data, ":", 2)
         card_id = int(raw_id)
     except (TypeError, ValueError):
         await call.answer("Некорректная кнопка", show_alert=True)
@@ -94,7 +94,7 @@ async def request_value(call: CallbackQuery) -> None:
     await call.message.answer(
         f"Введите: <b>{LABELS[field]}</b>. {hints.get(field, 'Одним сообщением.')}{clear}",
         parse_mode="HTML",
-   )
+    )
 
 
 @router.callback_query(F.data.startswith("schcard:show:"))
@@ -130,7 +130,7 @@ def parse_value(field: str, message: Message) -> object:
         except ValueError as exc:
             raise ValueError("Номер должен быть целым числом.") from exc
         if value <= 0:
-            raise ValueError("Номер волжен быть больше нуля.")
+            raise ValueError("Номер должен быть больше нуля.")
         return value
     if field == "rarity":
         value = normalize_rarity(raw)
@@ -180,8 +180,7 @@ async def process_value(message: Message) -> None:
     await set_setup_session(
         user_id, stage="card_review", deck_id=int(card["deck_id"]), card_id=card_id,
     )
-    await message.answer(f"✅ Поле «{LABELS[field]}».обновлено.")
+    await message.answer(f"✅ Поле «{LABELS[field]}» обновлено.")
     await send_card(message, card, review=True)
-
 
 __all__ = ["router"]
