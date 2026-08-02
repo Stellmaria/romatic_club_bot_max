@@ -53,7 +53,7 @@ def test_owner_has_recovery_command_and_button() -> None:
     assert "await cancel_owner_unpublished_lots(int(user_id))" in source
     recovery = features["auctions.submission-recovery"]
     assert recovery.router is not None
-    assert recovery.router.name == "bot.handlers.auction.submission_recovery"
+    assert recovery.router.name == "auction-submission-recovery"
     assert recovery.callback_namespaces == ("submission_recovery",)
 
 
