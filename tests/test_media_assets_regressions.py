@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from bot.bootstrap.routers import get_router_registry
 from bot.domain.media_assets import (
     infer_media_type,
     normalize_media_type,
@@ -22,9 +23,13 @@ def test_media_registry_migration_is_persistent_and_unique() -> None:
 
 
 def test_admin_media_router_is_registered() -> None:
-    source = (ROOT / "bot/bootstrap/routers.py").read_text(encoding="utf-8")
-    assert "from bot.handlers.admin.media_assets import router as media_assets_router" in source
-    assert "dispatcher.include_router(media_assets_router)" in source
+    features = {feature.name: feature for feature in get_router_registry().ordered_features}
+    media = features["admin.media-assets"]
+
+    assert media.router is not None
+    assert media.router.name == "admin_media_assets"
+    assert media.priority.name == "CALLBACKS"
+    assert media.callback_namespaces == ("media_assets",)
 
 
 def test_media_command_supports_direct_file_id_and_deck_alias() -> None:

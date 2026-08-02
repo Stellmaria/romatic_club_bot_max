@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from bot.bootstrap.routers import get_router_registry
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -32,11 +34,16 @@ def test_autobid_commands_were_removed_from_auction_monolith() -> None:
 
 
 def test_new_auction_routers_are_registered() -> None:
-    source = (ROOT / "bot/bootstrap/routers.py").read_text(encoding="utf-8")
-    assert "auction_bidding_router" in source
-    assert "auction_autobid_router" in source
-    assert "dispatcher.include_router(auction_bidding_router)" in source
-    assert "dispatcher.include_router(auction_autobid_router)" in source
+    features = {feature.name: feature for feature in get_router_registry().ordered_features}
+
+    bidding = features["auctions.bidding"]
+    autobid = features["auctions.autobid"]
+    assert bidding.router is not None
+    assert bidding.router.name == "auction-bidding"
+    assert bidding.callback_namespaces == ("bid",)
+    assert autobid.router is not None
+    assert autobid.router.name == "auction-autobid"
+    assert autobid.callback_namespaces == ("autobid",)
 
 
 def test_bid_repository_uses_row_lock_and_message_id_uniqueness() -> None:
@@ -70,7 +77,7 @@ def test_autobid_password_is_retired_from_telegram_contract() -> None:
     handler_source = (ROOT / "bot/handlers/auction/autobid.py").read_text(encoding="utf-8")
     env_source = (ROOT / ".env.example").read_text(encoding="utf-8")
 
-    assert 'AUTOBID_SET_PASSWORD' in config_source
+    assert "AUTOBID_SET_PASSWORD" in config_source
     assert 'return ""' in config_source
     assert "AUTOBID_SET_PASSWORD" not in handler_source
     assert "_password_is_valid" not in handler_source

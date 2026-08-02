@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from bot.bootstrap.routers import get_router_registry
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -9,17 +11,17 @@ def _source(relative_path: str) -> str:
 
 
 def test_priority_admin_navigation_precedes_conflicting_routers() -> None:
-    source = _source("bot/bootstrap/routers.py")
+    names = [feature.name for feature in get_router_registry().ordered_features]
 
-    priority = source.index("dispatcher.include_router(admin_navigation_router)")
-    for later_router in (
-        "dispatcher.include_router(admin_panel_system_router)",
-        "dispatcher.include_router(users_router)",
-        "dispatcher.include_router(auctions_router)",
-        "dispatcher.include_router(auction_exchange_router)",
-        "dispatcher.include_router(admin_panel_router)",
+    priority = names.index("admin.navigation")
+    for later_feature in (
+        "admin.system",
+        "users.core",
+        "auctions.core",
+        "exchange.catalog",
+        "admin.panel",
     ):
-        assert priority < source.index(later_router)
+        assert priority < names.index(later_feature)
 
 
 def test_admin_root_keeps_schedule_inside_moderation() -> None:
