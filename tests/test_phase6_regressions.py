@@ -108,7 +108,7 @@ def test_outbox_admin_commands_use_service_boundary() -> None:
     assert "SELECT " not in handler
     assert "UPDATE " not in handler
     assert outbox.router is not None
-    assert outbox.router.name == "bot.handlers.admin.outbox"
+    assert outbox.router.name == "outbox_admin"
     assert outbox.callback_namespaces == ("outbox",)
 
 
