@@ -118,6 +118,10 @@ async def test_userbot_reconciles_real_channel_message_id() -> None:
         def __init__(self):
             self.calls: list[tuple[int, int]] = []
 
+        async def recoverable_auction_ids(self, *, limit: int) -> list[int]:
+            assert limit == 100
+            return [9217]
+
         async def confirm_channel_post(self, auction_id: int, *, message_id: int) -> bool:
             self.calls.append((auction_id, message_id))
             return True
@@ -134,6 +138,27 @@ async def test_userbot_reconciles_real_channel_message_id() -> None:
     assert recovery.calls == [(9217, 4567)]
 
 
+@pytest.mark.asyncio
+async def test_userbot_skips_channel_history_when_nothing_is_stuck() -> None:
+    class Client:
+        def iter_messages(self, _channel, *, limit):
+            raise AssertionError(f"history must not be read, requested limit={limit}")
+
+    class Recovery:
+        async def recoverable_auction_ids(self, *, limit: int) -> list[int]:
+            assert limit == 100
+            return []
+
+    recovered = await reconcile_recent_auction_publications(
+        Client(),
+        channel=-100123,
+        limit=100,
+        service=Recovery(),
+    )
+
+    assert recovered == 0
+
+
 def test_publication_recovery_contract_is_fail_closed_and_started() -> None:
     repository = (ROOT / "bot/repositories/publication_recovery.py").read_text(
         encoding="utf-8"
@@ -148,6 +173,7 @@ def test_publication_recovery_contract_is_fail_closed_and_started() -> None:
     assert "actual_message_id <= 0" in repository
     assert "status = 'publication_failed'" in repository
     assert "publication_error = $3" in repository
+    assert "recoverable_auction_ids" in repository
     assert "result.pending_confirmation" in publication_source
     assert "mark_awaiting_channel_post(auction_id)" in publication_source
     assert "publication_reconciliation_watchdog(telegram_client)" in application_source
