@@ -1,12 +1,53 @@
-from aiogram.types import InlineKeyboardButton
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
+from __future__ import annotations
+
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 
-def back_to_menu_keyboard():
+USER_MENU_ADD_LOT = "🎴 Подать лот"
+USER_MENU_MY_LOTS = "📦 Мои лоты"
+USER_MENU_SCHEDULE = "📅 Расписание"
+USER_MENU_EXCHANGE = "🛍 Биржа"
+USER_MENU_NOTIFICATIONS = "🔔 Уведомления"
+USER_MENU_SUBSCRIPTIONS = "🃏 Подписки"
+USER_MENU_PROFILE = "👤 Профиль"
+USER_MENU_LUXURY = "👑 Лакшери"
+USER_MENU_SUPPORT = "🆘 Поддержка"
+USER_MENU_HELP = "ℹ️ Помощь"
+USER_MENU_HOME = "🏠 Меню"
+
+USER_MENU_LAYOUT: tuple[tuple[str, ...], ...] = (
+    (USER_MENU_ADD_LOT, USER_MENU_MY_LOTS),
+    (USER_MENU_SCHEDULE, USER_MENU_EXCHANGE),
+    (USER_MENU_NOTIFICATIONS, USER_MENU_SUBSCRIPTIONS),
+    (USER_MENU_PROFILE, USER_MENU_LUXURY),
+    (USER_MENU_SUPPORT, USER_MENU_HELP),
+    (USER_MENU_HOME,),
+)
+
+
+def build_user_main_keyboard() -> ReplyKeyboardMarkup:
+    """Build the canonical persistent keyboard for private users."""
+
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="🏠 Меню")]],
-        resize_keyboard=True
+        keyboard=[
+            [KeyboardButton(text=label) for label in row]
+            for row in USER_MENU_LAYOUT
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Выберите раздел меню",
     )
+
+
+def back_to_menu_keyboard() -> ReplyKeyboardMarkup:
+    """Compatibility alias used by legacy flows after completing an action."""
+
+    return build_user_main_keyboard()
 
 
 def currency_choice_keyboard() -> InlineKeyboardMarkup:
@@ -32,3 +73,23 @@ def craft_uid_kb() -> InlineKeyboardMarkup:
             ],
         ]
     )
+
+
+__all__ = [
+    "USER_MENU_ADD_LOT",
+    "USER_MENU_EXCHANGE",
+    "USER_MENU_HELP",
+    "USER_MENU_HOME",
+    "USER_MENU_LAYOUT",
+    "USER_MENU_LUXURY",
+    "USER_MENU_MY_LOTS",
+    "USER_MENU_NOTIFICATIONS",
+    "USER_MENU_PROFILE",
+    "USER_MENU_SCHEDULE",
+    "USER_MENU_SUBSCRIPTIONS",
+    "USER_MENU_SUPPORT",
+    "back_to_menu_keyboard",
+    "build_user_main_keyboard",
+    "craft_uid_kb",
+    "currency_choice_keyboard",
+]
