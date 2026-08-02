@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from bot.bootstrap.routers import get_router_registry
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -43,13 +45,16 @@ def test_stale_unpublished_lots_stop_blocking_new_submissions() -> None:
 
 def test_owner_has_recovery_command_and_button() -> None:
     source = _source("bot/handlers/auction/submission_recovery.py")
-    bootstrap = _source("bot/bootstrap/routers.py")
+    features = {feature.name: feature for feature in get_router_registry().ordered_features}
 
     assert 'Command("cancel_pending")' in source
     assert 'callback_data="user_cancel_pending_lots"' in source
     assert "await release_stale_unpublished_lots(int(user_id))" in source
     assert "await cancel_owner_unpublished_lots(int(user_id))" in source
-    assert "dispatcher.include_router(submission_recovery_router)" in bootstrap
+    recovery = features["auctions.submission-recovery"]
+    assert recovery.router is not None
+    assert recovery.router.name == "bot.handlers.auction.submission_recovery"
+    assert recovery.callback_namespaces == ("submission_recovery",)
 
 
 def test_status_constraint_supports_recovery_states() -> None:
