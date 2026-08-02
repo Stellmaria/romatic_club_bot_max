@@ -17,6 +17,11 @@ class AuctionPublicationRecoveryService:
     async def mark_awaiting_channel_post(self, auction_id: int) -> bool:
         return await self._repository.mark_awaiting_channel_post(int(auction_id))
 
+    async def recoverable_auction_ids(self, *, limit: int = 100) -> list[int]:
+        return await self._repository.recoverable_auction_ids(
+            limit=max(1, int(limit))
+        )
+
     async def confirm_channel_post(
         self,
         auction_id: int,
