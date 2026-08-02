@@ -9,7 +9,7 @@ from telethon import events
 
 from bot.core.legacy_config import legacy_config
 from bot.core.time import MOSCOW
-from userbot.schedule_announcements import (
+from userbot.schedule_publication import (
     extract_custom_emoji_assignments,
     missing_required_emoji_keys,
     preview_schedule_announcement,
@@ -114,8 +114,10 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
             "Автопубликация расписания: "
             + ("включена" if legacy_config.SCHEDULE_ANNOUNCEMENTS_ENABLED else "выключена")
             + "\nПревью: 22:30 МСК"
-            + f"\nПубликация: {legacy_config.SCHEDULE_ANNOUNCEMENTS_HOUR:02d}:"
+            + "\nПубликация: после завершения последнего аукциона дня"
+            + f"\nЕсли аукционов нет: {legacy_config.SCHEDULE_ANNOUNCEMENTS_HOUR:02d}:"
             f"{legacy_config.SCHEDULE_ANNOUNCEMENTS_MINUTE:02d} МСК"
+            + "\nПосле публикации: закрепление нового анонса и открепление предыдущего"
             + f"\nАдминская ветка: {target_text}"
             + f"\nСтатус на {target_date:%d.%m.%Y}: {review_text}"
         )
@@ -151,8 +153,8 @@ async def on_schedule_review_callback(event: events.CallbackQuery.Event) -> None
         await event.answer("Расписание подтверждено")
         status_text = (
             f"✅ Расписание на {target_date:%d.%m.%Y} подтверждено. "
-            f"Публикация произойдёт в {legacy_config.SCHEDULE_ANNOUNCEMENTS_HOUR:02d}:"
-            f"{legacy_config.SCHEDULE_ANNOUNCEMENTS_MINUTE:02d} МСК."
+            "Оно выйдет в аукционном канале после завершения последнего аукциона, "
+            "будет закреплено, а предыдущий анонс будет откреплён."
         )
     elif action == "reject":
         await decide_schedule_review(

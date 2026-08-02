@@ -11,10 +11,10 @@ from userbot.schedule_announcements import (
     extract_custom_emoji_assignments,
     load_announcement_state,
     missing_required_emoji_keys,
-    render_schedule_announcement,
     save_announcement_state,
     utf16_length,
 )
+from userbot.schedule_publication import render_schedule_announcement
 
 
 def _entity_text(text: str, entity: MessageEntityCustomEmoji) -> str:
@@ -50,51 +50,75 @@ def test_extract_custom_emoji_assignments_uses_utf16_offsets() -> None:
     }
 
 
-def test_render_schedule_announcement_adds_custom_entities() -> None:
+def test_render_schedule_announcement_applies_public_currency_and_kind_policy() -> None:
     rendered = render_schedule_announcement(
         date(2026, 8, 1),
         [
             {
+                "auction_id": 4,
+                "hero_name": "Реверс",
+                "card_name": "Реверс",
+                "start_time": datetime(2026, 8, 1, 11, 30, tzinfo=timezone.utc),
+                "obtain_amount": 40,
+                "obtain_type": "diamonds",
+                "currency": "сокровища",
+                "auction_kind": "reverse",
+            },
+            {
                 "auction_id": 2,
-                "hero_name": "Сонхва",
-                "card_name": "Сонхва",
+                "hero_name": "Чай",
+                "card_name": "Чай",
                 "start_time": datetime(2026, 8, 1, 9, 30, tzinfo=timezone.utc),
-                "start_price": 20,
-                "currency": "diamonds",
-                "comment": "за чай @hidden",
+                "obtain_amount": 2,
+                "obtain_type": "tea",
+                "currency": "чай",
+                "auction_kind": "fast",
             },
             {
                 "auction_id": 1,
-                "hero_name": "Граф",
-                "card_name": "Граф",
+                "hero_name": "Алмазы",
+                "card_name": "Алмазы",
                 "start_time": datetime(2026, 8, 1, 8, 30, tzinfo=timezone.utc),
-                "start_price": 2,
-                "currency": "tea",
-                "comment": "-",
+                "obtain_amount": 20,
+                "obtain_type": "diamonds",
+                "currency": "алмазы",
+                "auction_kind": "standard",
+            },
+            {
+                "auction_id": 3,
+                "hero_name": "Свободный",
+                "card_name": "Свободный",
+                "start_time": datetime(2026, 8, 1, 10, 30, tzinfo=timezone.utc),
+                "obtain_amount": 20,
+                "obtain_type": "diamonds",
+                "currency": "алмазы",
+                "accepted_currencies": ["чай", "алмазы"],
+                "auction_kind": "free",
             },
         ],
         {
             "header": 11,
             "card": 22,
-            "hero:сонхва": 33,
             "diamond": 44,
             "tea": 55,
         },
     )
 
     assert rendered.text.startswith("🦋 АНОНС НА 1 АВГУСТА 🦋")
-    assert "🎴 11:30 Граф +2☕" in rendered.text
-    assert "🎴 12:30 Сонхва +20💎 (за чай)" in rendered.text
-    assert "@hidden" not in rendered.text
-    assert [entity.document_id for entity in rendered.entities] == [11, 11, 22, 55, 33, 44]
-    assert [_entity_text(rendered.text, entity) for entity in rendered.entities] == [
-        "🦋",
-        "🦋",
-        "🎴",
-        "☕",
-        "🎴",
-        "💎",
-    ]
+    assert "🎴 11:30 Алмазы +20💎" in rendered.text
+    assert "за алмазы" not in rendered.text
+    assert "стандарт" not in rendered.text.casefold()
+    assert "🎴 12:30 Чай +2☕ (за чай) · быстрый" in rendered.text
+    assert (
+        "🎴 13:30 Свободный +20💎 (за чай и алмазы) · свободный"
+        in rendered.text
+    )
+    assert "🎴 14:30 Реверс +40💎 (за сокровища) · обратный" in rendered.text
+    assert [entity.document_id for entity in rendered.entities[:2]] == [11, 11]
+    assert all(
+        _entity_text(rendered.text, entity) in {"🦋", "🎴", "💎", "☕"}
+        for entity in rendered.entities
+    )
 
 
 def test_announcement_target_date_only_after_configured_time() -> None:

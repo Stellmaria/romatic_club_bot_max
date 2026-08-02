@@ -67,7 +67,9 @@ def test_enriched_schedule_template_uses_card_rarity_deck_and_rewards() -> None:
                 "deck_emoji_id": 2020,
                 "deck_diamonds": 380,
                 "deck_tea": 10,
-                "currency": "tea diamonds",
+                "currency": "diamonds",
+                "accepted_currencies": ["чай", "алмазы"],
+                "auction_kind": "free",
             },
         ],
         {
@@ -83,7 +85,7 @@ def test_enriched_schedule_template_uses_card_rarity_deck_and_rewards() -> None:
     assert "Ава" in rendered.text
     assert "+80💎 (за чай)" in rendered.text
     assert "17:00 Вся 20 колода" in rendered.text
-    assert "+380💎 +10☕ (за чай и алмазы)" in rendered.text
+    assert "+380💎 +10☕ (за чай и алмазы) · свободный" in rendered.text
     assert [entity.document_id for entity in rendered.entities] == [
         10,
         10,
