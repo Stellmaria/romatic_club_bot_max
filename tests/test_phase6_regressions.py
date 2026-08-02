@@ -5,6 +5,9 @@ import builtins
 import symtable
 from pathlib import Path
 
+from bot.bootstrap.router_registry import MiddlewareScope
+from bot.bootstrap.routers import get_router_registry
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -21,6 +24,10 @@ def _top_level_functions(relative: str) -> set[str]:
     }
 
 
+def _registry_features():
+    return {feature.name: feature for feature in get_router_registry().ordered_features}
+
+
 def test_schedule_and_warning_routers_are_extracted_and_registered() -> None:
     auctions = _top_level_functions("bot/handlers/auctions.py")
     schedule = _top_level_functions("bot/handlers/auction/schedule.py")
@@ -31,7 +38,7 @@ def test_schedule_and_warning_routers_are_extracted_and_registered() -> None:
         _top_level_functions(str(path.relative_to(ROOT)))
         for path in sorted((ROOT / "bot/handlers/auction/exchange").glob("*.py"))
     ))
-    router_bootstrap = _source("bot/bootstrap/routers.py")
+    features = _registry_features()
 
     assert {"cmd_when", "cmd_gaps"} <= schedule
     assert not ({"cmd_when", "cmd_gaps"} & auctions)
@@ -39,10 +46,10 @@ def test_schedule_and_warning_routers_are_extracted_and_registered() -> None:
     assert not ({"admin_unmute", "admin_ban_user", "cmd_prune_warns"} & comments)
     assert {"announce_winner", "cmd_print_win"} <= winner
     assert {"exchange_deck_keyboard", "show_pending_exchange_requests"} <= exchange
-    assert "dispatcher.include_router(auction_schedule_router)" in router_bootstrap
-    assert "dispatcher.include_router(auction_warnings_router)" in router_bootstrap
-    assert "dispatcher.include_router(auction_winner_manual_router)" in router_bootstrap
-    assert "dispatcher.include_router(auction_exchange_router)" in router_bootstrap
+    assert features["auctions.schedule"].router is not None
+    assert features["auctions.warnings"].router is not None
+    assert features["auctions.winner-manual"].router is not None
+    assert features["exchange.catalog"].router is not None
 
 
 def test_card_day_claim_and_enqueue_are_one_transaction() -> None:
@@ -92,7 +99,7 @@ def test_delivery_certainty_blocks_unknown_replay() -> None:
 
 def test_outbox_admin_commands_use_service_boundary() -> None:
     handler = _source("bot/handlers/admin/outbox.py")
-    router_bootstrap = _source("bot/bootstrap/routers.py")
+    outbox = _registry_features()["admin.outbox"]
     assert 'Command("outbox_status")' in handler
     assert 'Command("outbox_failed")' in handler
     assert 'Command("outbox_retry")' in handler
@@ -100,7 +107,9 @@ def test_outbox_admin_commands_use_service_boundary() -> None:
     assert "TelegramOutboxService.create()" in handler
     assert "SELECT " not in handler
     assert "UPDATE " not in handler
-    assert "dispatcher.include_router(outbox_admin_router)" in router_bootstrap
+    assert outbox.router is not None
+    assert outbox.router.name == "bot.handlers.admin.outbox"
+    assert outbox.callback_namespaces == ("outbox",)
 
 
 def test_admin_broadcast_is_queued_as_copy_message() -> None:
@@ -187,6 +196,7 @@ def test_phase6_handler_split_has_no_unresolved_globals() -> None:
 
         assert not (referenced_globals - defined - known), relative
 
+
 def test_market_sales_card_rewards_do_not_compare_enum_to_invalid_literals() -> None:
     market_flow = _source("bot/repositories/market.py")
     block = market_flow[market_flow.index("c.obtain_type::text"):]
@@ -196,19 +206,21 @@ def test_market_sales_card_rewards_do_not_compare_enum_to_invalid_literals() -> 
     assert "('tea', 'cups', 'cup')" in block
 
 
-
-
 def test_stale_callback_updates_are_dropped_and_safely_ignored() -> None:
     application = _source("bot/application.py")
-    router_bootstrap = _source("bot/bootstrap/routers.py")
     middleware = _source("bot/middlewares/expired_callback.py")
     callback_utils = _source("bot/telegram/callbacks.py")
+    middleware_feature = _registry_features()["system.middleware"]
+    expired = next(
+        item for item in middleware_feature.middlewares if item.name == "expired-callback"
+    )
 
     assert 'drop_pending_updates=reader.boolean("DROP_PENDING_UPDATES", default=True)' in _source("bot/core/settings.py")
     assert "await telegram_bot.delete_webhook(" in application
     assert "drop_pending_updates=bot_settings.drop_pending_updates" in application
     assert application.index("await telegram_bot.delete_webhook") < application.index("task_manager = BackgroundTaskManager()")
-    assert "dispatcher.update.outer_middleware(ExpiredCallbackMiddleware())" in router_bootstrap
+    assert expired.scope is MiddlewareScope.UPDATE
+    assert expired.factory.__name__ == "ExpiredCallbackMiddleware"
     assert '"query is too old"' in callback_utils
     assert '"response timeout expired"' in callback_utils
     assert '"query id is invalid"' in callback_utils
