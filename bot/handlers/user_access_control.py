@@ -8,10 +8,13 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from bot.core.time import to_moscow, utc_now
+from bot.handlers.user_menu import show_day_schedule
 from bot.keyboards.keyboards import (
     USER_MENU_EXCHANGE,
     USER_MENU_HELP,
     USER_MENU_SCHEDULE,
+    USER_MENU_TODAY,
     build_user_main_keyboard,
 )
 from bot.legacy_fsm import ExchangeFSM
@@ -33,6 +36,11 @@ _EXCHANGE_STATES = (
 
 async def _has_schedule_access(user_id: int) -> bool:
     return await is_admin(user_id) or await is_luxury_user(user_id)
+
+
+async def _show_today(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await show_day_schedule(message, to_moscow(utc_now()).date())
 
 
 async def _deny_schedule_message(message: Message) -> None:
@@ -67,7 +75,13 @@ async def _deny_exchange_callback(call: CallbackQuery, state: FSMContext) -> Non
     await call.answer("Биржа доступна только администраторам.", show_alert=True)
 
 
-@router.message(Command("day", "today"), F.chat.type == "private")
+@router.message(Command("today"), F.chat.type == "private")
+@router.message(F.text == USER_MENU_TODAY, F.chat.type == "private")
+async def public_today(message: Message, state: FSMContext) -> None:
+    await _show_today(message, state)
+
+
+@router.message(Command("day"), F.chat.type == "private")
 async def guard_legacy_schedule_commands(message: Message) -> None:
     if await _has_schedule_access(message.from_user.id):
         raise SkipHandler
@@ -130,12 +144,14 @@ async def guarded_user_help(message: Message, state: FSMContext) -> None:
         "ℹ️ <b>Как пользоваться ботом</b>\n\n"
         "🎴 <b>Подать лот</b> — пошаговое оформление заявки.\n"
         "📦 <b>Мои лоты</b> — актуальные, завершённые, выплаты и архив.\n"
+        "📅 <b>Сегодня</b> — аукционы, которые идут в течение текущего дня.\n"
         "🔔 <b>Уведомления</b> — настройка оповещений.\n"
         "🃏 <b>Подписки</b> — подписки на карты, колоды и пресеты.\n"
         "👤 <b>Профиль</b> — статус уведомлений и UID-верификация.\n"
         "👑 <b>Лакшери</b> — расписание, свободные слоты и поиск карт.\n"
         "🆘 <b>Поддержка</b> — обращение администрации с вложениями.\n\n"
-        "Расписание вне Лакшери-раздела и биржа являются административными функциями.\n"
+        "Расписание по другим дням доступно администраторам и Лакшери-пользователям. "
+        "Биржа является административной функцией.\n"
         "Кнопка «🏠 Меню» отменяет текущий ввод и возвращает на главный экран.",
         parse_mode="HTML",
         reply_markup=build_user_main_keyboard(),
