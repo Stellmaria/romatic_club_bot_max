@@ -30,6 +30,31 @@ class AuctionPublicationRecoveryRepository:
             )
         return bool(row)
 
+    async def recoverable_auction_ids(self, *, limit: int = 100) -> list[int]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT auction_id
+                FROM public.auctions
+                WHERE message_id IS NULL
+                  AND (
+                        status = 'publication_failed'
+                        OR (
+                            status = 'publishing'
+                            AND (
+                                publication_error = $1
+                                OR publication_started_at <= NOW() - INTERVAL '30 seconds'
+                            )
+                        )
+                  )
+                ORDER BY start_time DESC NULLS LAST, auction_id DESC
+                LIMIT $2
+                """,
+                _PENDING_MARKER,
+                max(1, int(limit)),
+            )
+        return [int(row["auction_id"]) for row in rows]
+
     async def confirm_channel_post(
         self,
         auction_id: int,
