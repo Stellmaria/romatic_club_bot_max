@@ -24,13 +24,16 @@ def extract_auction_id(text: str | None) -> int | None:
     return value if value > 0 else None
 
 
-def _configured_channel() -> int | str | None:
+def _configured_channels() -> tuple[int | str, ...]:
+    targets: list[int | str] = []
     if legacy_config.AUCTION_CHANNEL_ID:
-        return legacy_config.AUCTION_CHANNEL_ID
+        targets.append(legacy_config.AUCTION_CHANNEL_ID)
     username = str(legacy_config.AUCTION_CHANNEL_USERNAME or "").strip()
-    if not username:
-        return None
-    return username if username.startswith("@") else f"@{username}"
+    if username:
+        username_target = username if username.startswith("@") else f"@{username}"
+        if username_target not in targets:
+            targets.append(username_target)
+    return tuple(targets)
 
 
 async def reconcile_recent_auction_publications(
@@ -40,8 +43,8 @@ async def reconcile_recent_auction_publications(
     limit: int = 100,
     service: AuctionPublicationRecoveryService | None = None,
 ) -> int:
-    target = channel if channel is not None else _configured_channel()
-    if target is None:
+    targets = (channel,) if channel is not None else _configured_channels()
+    if not targets:
         return 0
 
     scan_limit = max(1, int(limit))
@@ -53,26 +56,38 @@ async def reconcile_recent_auction_publications(
         return 0
 
     recovered = 0
-    async for message in telegram_client.iter_messages(target, limit=scan_limit):
-        message_id = int(getattr(message, "id", 0) or 0)
-        if message_id <= 0:
-            continue
-        auction_id = extract_auction_id(getattr(message, "message", None))
-        if auction_id is None or auction_id not in remaining:
-            continue
-        if await recovery.confirm_channel_post(
-            auction_id,
-            message_id=message_id,
-        ):
-            recovered += 1
-            remaining.discard(auction_id)
-            logger.warning(
-                "Recovered auction %s from Telegram channel message %s",
-                auction_id,
-                message_id,
+    for target in targets:
+        try:
+            async for message in telegram_client.iter_messages(
+                target,
+                limit=scan_limit,
+            ):
+                message_id = int(getattr(message, "id", 0) or 0)
+                if message_id <= 0:
+                    continue
+                auction_id = extract_auction_id(getattr(message, "message", None))
+                if auction_id is None or auction_id not in remaining:
+                    continue
+                if await recovery.confirm_channel_post(
+                    auction_id,
+                    message_id=message_id,
+                ):
+                    recovered += 1
+                    remaining.discard(auction_id)
+                    logger.warning(
+                        "Recovered auction %s from Telegram channel message %s",
+                        auction_id,
+                        message_id,
+                    )
+                    if not remaining:
+                        return recovered
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Could not scan auction channel target %r for publication recovery",
+                target,
             )
-            if not remaining:
-                break
     return recovered
 
 
