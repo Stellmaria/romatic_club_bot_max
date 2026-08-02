@@ -28,6 +28,10 @@ if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   echo "Service user does not exist: $SERVICE_USER" >&2
   exit 2
 fi
+if ! [[ "$SUPERVISOR_GID" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ROMATIC_SUPERVISOR_GID must be a positive integer." >&2
+  exit 2
+fi
 
 if getent group "$SUPERVISOR_GROUP" >/dev/null 2>&1; then
   actual_gid="$(getent group "$SUPERVISOR_GROUP" | cut -d: -f3)"
@@ -36,11 +40,13 @@ if getent group "$SUPERVISOR_GROUP" >/dev/null 2>&1; then
     exit 2
   fi
 else
-  if getent group "$SUPERVISOR_GID" >/dev/null 2>&1; then
-    echo "GID $SUPERVISOR_GID is already used by another group." >&2
-    exit 2
+  existing_group="$(getent group "$SUPERVISOR_GID" | cut -d: -f1 || true)"
+  if [[ -n "$existing_group" ]]; then
+    echo "Reusing existing group $existing_group for gid $SUPERVISOR_GID."
+    SUPERVISOR_GROUP="$existing_group"
+  else
+    groupadd --gid "$SUPERVISOR_GID" "$SUPERVISOR_GROUP"
   fi
-  groupadd --gid "$SUPERVISOR_GID" "$SUPERVISOR_GROUP"
 fi
 usermod -a -G "$SUPERVISOR_GROUP" "$SERVICE_USER"
 
@@ -63,7 +69,7 @@ install -d -m 0770 -o "$SERVICE_USER" -g "$SUPERVISOR_GROUP" "$data_dir/runtime/
 install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$data_dir/runtime/docker-config"
 install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$data_dir/backups"
 
-python3 - "$ENV_FILE" "$APP_DIR" "$data_dir" <<'PY'
+python3 - "$ENV_FILE" "$APP_DIR" "$data_dir" "$SUPERVISOR_GID" <<'PY'
 from __future__ import annotations
 
 import os
@@ -74,6 +80,7 @@ from pathlib import Path
 path = Path(sys.argv[1])
 app_dir = Path(sys.argv[2])
 data_dir = Path(sys.argv[3])
+supervisor_gid = sys.argv[4]
 token_path = data_dir / "runtime/supervisor/token"
 supervisor_env_path = data_dir / "runtime/supervisor/supervisor.env"
 
@@ -96,6 +103,7 @@ if len(token) < 24 or "change_me" in token.casefold():
 
 updates = {
     "ROMATIC_DATA_DIR": str(data_dir),
+    "ROMATIC_SUPERVISOR_GID": supervisor_gid,
     "SUPERVISOR_ENABLED": "true",
     "SUPERVISOR_TOKEN": "",
     "SUPERVISOR_TOKEN_FILE_HOST": str(token_path),
@@ -133,6 +141,7 @@ supervisor_env_path.write_text(
     "\n".join(
         [
             f"SUPERVISOR_TOKEN={token}",
+            f"SERVER_SUPERVISOR_SOCKET_GID={supervisor_gid}",
             "SUPERVISOR_COMMAND_TIMEOUT_SECONDS=1800",
             "SUPERVISOR_RATE_LIMIT=6",
             "SUPERVISOR_RATE_WINDOW_SECONDS=60",
@@ -155,17 +164,33 @@ chmod 0640 \
 render_unit() {
   local source="$1"
   local target="$2"
-  python3 - "$source" "$target" "$APP_DIR" "$data_dir" "$SERVICE_USER" "$SUPERVISOR_GROUP" <<'PY'
+  python3 - \
+    "$source" \
+    "$target" \
+    "$APP_DIR" \
+    "$data_dir" \
+    "$SERVICE_USER" \
+    "$SUPERVISOR_GROUP" \
+    "$SUPERVISOR_GID" <<'PY'
 from pathlib import Path
 import sys
 
-source, target, app_dir, data_dir, service_user, supervisor_group = sys.argv[1:]
+(
+    source,
+    target,
+    app_dir,
+    data_dir,
+    service_user,
+    supervisor_group,
+    supervisor_gid,
+) = sys.argv[1:]
 text = Path(source).read_text(encoding="utf-8")
 text = (
     text.replace("%APP_DIR%", app_dir)
     .replace("%DATA_DIR%", data_dir)
     .replace("%SERVICE_USER%", service_user)
     .replace("%SUPERVISOR_GROUP%", supervisor_group)
+    .replace("%SUPERVISOR_GID%", supervisor_gid)
 )
 Path(target).write_text(text, encoding="utf-8")
 PY
@@ -178,6 +203,13 @@ systemctl daemon-reload
 systemctl enable romatic-server-supervisor.service
 systemctl restart romatic-server-supervisor.service
 
+main_pid="$(systemctl show romatic-server-supervisor.service -p MainPID --value)"
+service_gid="$(ps -o egid= -p "$main_pid" | tr -d '[:space:]')"
+if [[ "$service_gid" != "$SUPERVISOR_GID" ]]; then
+  echo "Supervisor process gid is $service_gid, expected $SUPERVISOR_GID." >&2
+  exit 4
+fi
+
 sudo -u "$SERVICE_USER" env \
   DOCKER_CONFIG="$data_dir/runtime/docker-config" \
   COMPOSE_BAKE=false \
@@ -189,10 +221,21 @@ else
   systemctl enable --now romatic-compose.service
 fi
 
+proxy_gid="$(
+  sudo -u "$SERVICE_USER" env \
+    DOCKER_CONFIG="$data_dir/runtime/docker-config" \
+    COMPOSE_BAKE=false \
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T \
+      supervisor-proxy id -g | tr -d '[:space:]'
+)"
+if [[ "$proxy_gid" != "$SUPERVISOR_GID" ]]; then
+  echo "Supervisor proxy gid is $proxy_gid, expected $SUPERVISOR_GID." >&2
+  exit 4
+fi
+
 python3 - "$data_dir/runtime/supervisor/romatic-server-supervisor.sock" "$SUPERVISOR_GID" <<'PY'
 from __future__ import annotations
 
-import os
 import socket
 import stat
 import sys
