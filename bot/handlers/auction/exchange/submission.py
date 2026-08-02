@@ -480,7 +480,7 @@ async def _finalize_exchange_request(
         submit_many=service.submit_many,
     )
     try:
-        result = await use_case.execute(
+        result = await use_case.run(
             SubmitExchangeCommand(
                 user_id=user_id,
                 deck_id=deck_id_i,

@@ -18,6 +18,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.logs_admin import send_admin_log
+from bot.services.uid_verification import (
+    approve_uid_verification_request,
+    reject_uid_verification_request,
+)
 from bot.telegram.states import ModActionFSM, UIDVerificationRevisionFSM
 
 from . import master_ban
