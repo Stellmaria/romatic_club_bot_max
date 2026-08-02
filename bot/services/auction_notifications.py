@@ -39,7 +39,7 @@ async def _list_auctions_with_close_deadlines(
     statuses: Iterable[str],
 ) -> list[dict[str, Any]]:
     status_values = tuple(statuses)
-    rows = await _LEGACY_LIST_AUCTIONS(status_values)
+    rows = await _LEGACY_LIST_AUCTIONS(list(status_values))
     normalized_statuses = {
         str(status).strip().lower()
         for status in status_values
