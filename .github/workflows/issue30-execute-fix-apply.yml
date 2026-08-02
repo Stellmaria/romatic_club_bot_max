@@ -1,0 +1,37 @@
+name: Apply issue 30 execute boundary fix
+
+on:
+  push:
+    branches: [refactor/issue-30-application-use-cases]
+    paths:
+      - '.issue30-execute-fix.patch'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/issue-30-application-use-cases
+      - name: Apply execute boundary fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check .issue30-execute-fix.patch
+          git apply .issue30-execute-fix.patch
+          rm .issue30-execute-fix.patch .github/workflows/issue30-execute-fix-apply.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            bot/handlers/auction/exchange/moderation.py \
+            bot/use_cases/exchange_moderation.py \
+            bot/use_cases/exchange_submission.py \
+            .issue30-execute-fix.patch \
+            .github/workflows/issue30-execute-fix-apply.yml
+          git diff --cached --check
+          git commit -m "fix(architecture): disambiguate exchange use case execution"
+          git push origin HEAD:refactor/issue-30-application-use-cases
