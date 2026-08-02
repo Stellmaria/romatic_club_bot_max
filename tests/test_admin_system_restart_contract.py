@@ -3,11 +3,17 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from aiogram import Router
+
+from bot.bootstrap.router_registry import (
+    FeatureRegistration,
+    RoutePriority,
+    RouterRegistry,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
-ADMIN_PANEL = ROOT / "bot" / "handlers" / "admin" / "admin_panel.py"
 SYSTEM_PANEL = ROOT / "bot" / "handlers" / "admin" / "admin_panel_system.py"
-ROUTER_BOOTSTRAP = ROOT / "bot" / "bootstrap" / "routers.py"
 CLIENT = ROOT / "bot" / "core" / "supervisor_client.py"
 
 
@@ -15,43 +21,39 @@ def _source(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_system_router_is_registered_before_legacy_fsm_routers() -> None:
-    admin_panel = _source(ADMIN_PANEL)
-    bootstrap = _source(ROUTER_BOOTSTRAP)
-
-    # Keep the public facade inventory intact, but skip nesting the system
-    # router so it can be attached directly at the top of dispatch order.
-    tree = ast.parse(admin_panel)
-    feature_assignment = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "FEATURE_ROUTERS"
-            for target in node.targets
+def test_system_priority_is_composed_before_application_and_broad_routes() -> None:
+    registry = RouterRegistry(
+        (
+            FeatureRegistration(
+                name="admin.panel",
+                priority=RoutePriority.CALLBACKS,
+                router=Router(name="admin-panel"),
+            ),
+            FeatureRegistration(
+                name="auctions.core",
+                priority=RoutePriority.EXACT_COMMANDS,
+                router=Router(name="auctions-core"),
+            ),
+            FeatureRegistration(
+                name="users.core",
+                priority=RoutePriority.EXACT_COMMANDS,
+                router=Router(name="users-core"),
+            ),
+            FeatureRegistration(
+                name="admin.system",
+                priority=RoutePriority.SYSTEM_OWNER,
+                router=Router(name="admin-system"),
+                commands=("system", "restart"),
+                callback_namespaces=("system",),
+            ),
         )
     )
-    assert isinstance(feature_assignment.value, ast.Tuple)
-    feature_names = [ast.unparse(element) for element in feature_assignment.value.elts]
-    assert feature_names[0] == "admin_panel_system.router"
-    assert "router.include_routers(*FEATURE_ROUTERS[1:])" in admin_panel
 
-    assert (
-        "from bot.handlers.admin.admin_panel_system import "
-        "router as admin_panel_system_router"
-    ) in bootstrap
-    system_position = bootstrap.index(
-        "dispatcher.include_router(admin_panel_system_router)"
-    )
-    assert system_position < bootstrap.index(
-        "dispatcher.include_router(users_router)"
-    )
-    assert system_position < bootstrap.index(
-        "dispatcher.include_router(auctions_router)"
-    )
-    assert system_position < bootstrap.index(
-        "dispatcher.include_router(admin_panel_router)"
-    )
+    names = [feature.name for feature in registry.ordered_features]
+    system_position = names.index("admin.system")
+    assert system_position < names.index("users.core")
+    assert system_position < names.index("auctions.core")
+    assert system_position < names.index("admin.panel")
 
 
 def test_system_panel_is_owner_only_and_hides_button_from_admins() -> None:
@@ -101,9 +103,9 @@ def test_system_panel_supports_separate_bot_and_userbot_restart() -> None:
 def test_supervisor_client_requires_explicit_enablement_and_token() -> None:
     source = _source(CLIENT)
 
-    assert 'def from_settings(' in source
-    assert 'os.getenv' not in source
-    assert 'settings.token' in source
+    assert "def from_settings(" in source
+    assert "os.getenv" not in source
+    assert "settings.token" in source
     assert '"Authorization": f"Bearer {self.token}"' in source
     assert '"/v1/restart-userbot"' in source
     assert '"/v1/update"' in source
