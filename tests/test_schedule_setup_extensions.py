@@ -77,7 +77,7 @@ def test_extension_modules_and_migration_contract() -> None:
     temp = (handlers / "schedule_setup_temp.py").read_text(encoding="utf-8")
     persistence = (ROOT / "db" / "schedule_setup_extensions.py").read_text(encoding="utf-8")
     routers = (ROOT / "bot" / "bootstrap" / "routers.py").read_text(encoding="utf-8")
-    migration = (ROOT / "db" / "migrations" / "012_schedule_temporary_emoji_marks.sql").read_text(encoding="utf-8")
+    migration = (ROOT / "db" / "migrations" / "013_schedule_temporary_emoji_marks.sql").read_text(encoding="utf-8")
 
     assert 'Command("schedule_setup_restart")' in restart
     assert 'Command("schedule_audit")' in restart
