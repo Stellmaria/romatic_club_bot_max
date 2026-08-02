@@ -13,12 +13,7 @@ from aiogram.exceptions import TelegramForbiddenError
 from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import (
-    CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Message,
-)
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.core.time import to_moscow, utc_now
@@ -41,11 +36,7 @@ from bot.handlers.auction.schedule import (
 )
 from bot.handlers.constants import USER_MESSAGES
 from bot.handlers.helper.appeals import appeal_start
-from bot.handlers.helper.helpers_users import (
-    check_luxury,
-    format_today_lots_fancy,
-    register_user,
-)
+from bot.handlers.helper.helpers_users import check_luxury, format_today_lots_fancy, register_user
 from bot.handlers.users import my_lots_cmd
 from bot.keyboards.keyboards import (
     USER_MENU_ADD_LOT,
@@ -85,21 +76,11 @@ from db.legacy import (
     is_luxury_user,
 )
 
-
 router = Router(name="user-menu")
 logger = logging.getLogger(__name__)
 
 _SCHEDULE_PAGE_SIZE = 8
-_WEEKDAYS_RU = (
-    "Пн",
-    "Вт",
-    "Ср",
-    "Чт",
-    "Пт",
-    "Сб",
-    "Вс",
-)
-
+_WEEKDAYS_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 _NOTIFY_DEFAULTS = {
     "notify_auction_start": True,
     "notify_bid_reminder": True,
@@ -107,26 +88,10 @@ _NOTIFY_DEFAULTS = {
     "notify_daily_today": False,
 }
 _NOTIFY_MAP = {
-    "notify_toggle_start": (
-        "notify_auction_start",
-        "notify_start_on",
-        "notify_start_off",
-    ),
-    "notify_toggle_remind": (
-        "notify_bid_reminder",
-        "notify_remind_on",
-        "notify_remind_off",
-    ),
-    "notify_toggle_end": (
-        "notify_auction_end",
-        "notify_end_on",
-        "notify_end_off",
-    ),
-    "notify_toggle_today": (
-        "notify_daily_today",
-        "notify_today_on",
-        "notify_today_off",
-    ),
+    "notify_toggle_start": ("notify_auction_start", "notify_start_on", "notify_start_off"),
+    "notify_toggle_remind": ("notify_bid_reminder", "notify_remind_on", "notify_remind_off"),
+    "notify_toggle_end": ("notify_auction_end", "notify_end_on", "notify_end_off"),
+    "notify_toggle_today": ("notify_daily_today", "notify_today_on", "notify_today_off"),
 }
 
 
@@ -150,11 +115,7 @@ def _as_bool(value: object, default: bool = False) -> bool:
     return default
 
 
-def user_main_text(
-    *,
-    full_name: str | None = None,
-    status_line: str | None = None,
-) -> str:
+def user_main_text(*, full_name: str | None = None, status_line: str | None = None) -> str:
     parts = ["✨ <b>Клуб Романтики • Аукционы</b>"]
     if full_name:
         parts.append(f"Привет, <b>{html.escape(full_name)}</b>!")
@@ -174,10 +135,12 @@ async def send_user_main_menu(
     message: Message,
     state: FSMContext,
     *,
+    user: types.User | None = None,
     status_line: str | None = None,
 ) -> None:
     await state.clear()
-    full_name = message.from_user.full_name if message.from_user else None
+    actor = user or message.from_user
+    full_name = actor.full_name if actor else None
     await message.answer(
         user_main_text(full_name=full_name, status_line=status_line),
         parse_mode="HTML",
@@ -193,7 +156,6 @@ def build_schedule_keyboard(*, page: int = 0) -> InlineKeyboardMarkup:
     page = max(0, int(page))
     today = _today_msk()
     start = today + timedelta(days=page * _SCHEDULE_PAGE_SIZE)
-
     builder = InlineKeyboardBuilder()
     buttons: list[InlineKeyboardButton] = []
     for offset in range(_SCHEDULE_PAGE_SIZE):
@@ -205,28 +167,17 @@ def build_schedule_keyboard(*, page: int = 0) -> InlineKeyboardMarkup:
         else:
             label = f"{_WEEKDAYS_RU[selected.weekday()]} • {selected:%d.%m}"
         buttons.append(
-            InlineKeyboardButton(
-                text=label,
-                callback_data=f"user_day|{selected.isoformat()}",
-            )
+            InlineKeyboardButton(text=label, callback_data=f"user_day|{selected.isoformat()}")
         )
-
     for index in range(0, len(buttons), 2):
-        builder.row(*buttons[index:index + 2])
-
+        builder.row(*buttons[index : index + 2])
     navigation: list[InlineKeyboardButton] = []
     if page > 0:
         navigation.append(
-            InlineKeyboardButton(
-                text="⬅️ Раньше",
-                callback_data=f"user_schedule|{page - 1}",
-            )
+            InlineKeyboardButton(text="⬅️ Раньше", callback_data=f"user_schedule|{page - 1}")
         )
     navigation.append(
-        InlineKeyboardButton(
-            text="Позже ➡️",
-            callback_data=f"user_schedule|{page + 1}",
-        )
+        InlineKeyboardButton(text="Позже ➡️", callback_data=f"user_schedule|{page + 1}")
     )
     builder.row(*navigation)
     builder.row(_home_inline_button())
@@ -278,7 +229,6 @@ async def show_day_schedule(message: Message, target_day: date) -> None:
             reply_markup=build_user_main_keyboard(),
         )
         return
-
     text = await format_today_lots_fancy(target_day, lots)
     lines = text.splitlines()
     header = f"🛜АНОНС НА {target_day:%d.%m.%Y}🛜"
@@ -294,16 +244,10 @@ async def show_day_schedule(message: Message, target_day: date) -> None:
 def build_exchange_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(
-            text="➕ Выставить на биржу",
-            callback_data="user_exchange|create",
-        )
+        InlineKeyboardButton(text="➕ Выставить на биржу", callback_data="user_exchange|create")
     )
     builder.row(
-        InlineKeyboardButton(
-            text="🔎 Смотреть предложения",
-            callback_data="ex_view:decks",
-        )
+        InlineKeyboardButton(text="🔎 Смотреть предложения", callback_data="ex_view:decks")
     )
     builder.row(_home_inline_button())
     return builder.as_markup()
@@ -330,7 +274,6 @@ async def start_exchange_submission(message: Message, state: FSMContext) -> None
             reply_markup=build_user_main_keyboard(),
         )
         return
-
     await state.set_state(ExchangeFSM.waiting_for_deck)
     await message.answer(
         "🛍 <b>Новая заявка на биржу</b>\n\nВыберите колоду:",
@@ -343,21 +286,13 @@ async def show_exchange_browser(message: Message) -> None:
     allowed_ids = await get_exchange_deck_ids()
     service = await ExchangeCatalogService.create()
     deck_ids = await service.decks_with_approved(allowed_ids)
-
     builder = InlineKeyboardBuilder()
     for deck_id in deck_ids:
-        builder.button(
-            text=f"📚 Колода {int(deck_id)}",
-            callback_data=f"ex_view:deck:{int(deck_id)}",
-        )
+        builder.button(text=f"📚 Колода {int(deck_id)}", callback_data=f"ex_view:deck:{int(deck_id)}")
     builder.adjust(2 if len(deck_ids) > 1 else 1)
     builder.row(
-        InlineKeyboardButton(
-            text="⬅️ Назад к бирже",
-            callback_data="user_exchange|root",
-        )
+        InlineKeyboardButton(text="⬅️ Назад к бирже", callback_data="user_exchange|root")
     )
-
     text = (
         "🛍 <b>Биржа карт</b>\n\nВыберите колоду:"
         if deck_ids
@@ -366,15 +301,10 @@ async def show_exchange_browser(message: Message) -> None:
     await _edit_or_answer(message, text=text, reply_markup=builder.as_markup())
 
 
-def build_notifications_keyboard(
-    settings: dict,
-    *,
-    subscribed: bool,
-) -> InlineKeyboardMarkup:
-    enabled = lambda key: _as_bool(
-        settings.get(key),
-        _NOTIFY_DEFAULTS[key],
-    )
+def build_notifications_keyboard(settings: dict, *, subscribed: bool) -> InlineKeyboardMarkup:
+    def enabled(key: str) -> bool:
+        return _as_bool(settings.get(key), _NOTIFY_DEFAULTS[key])
+
     builder = InlineKeyboardBuilder()
     builder.row(
         InlineKeyboardButton(
@@ -384,37 +314,25 @@ def build_notifications_keyboard(
     )
     builder.row(
         InlineKeyboardButton(
-            text=(
-                "🔔 О начале аукциона "
-                f"{'✅' if enabled('notify_auction_start') else '❌'}"
-            ),
+            text=f"🔔 О начале аукциона {'✅' if enabled('notify_auction_start') else '❌'}",
             callback_data="notify_toggle_start",
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text=(
-                "⏰ За минуту до конца "
-                f"{'✅' if enabled('notify_bid_reminder') else '❌'}"
-            ),
+            text=f"⏰ За минуту до конца {'✅' if enabled('notify_bid_reminder') else '❌'}",
             callback_data="notify_toggle_remind",
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text=(
-                "🏁 О завершении "
-                f"{'✅' if enabled('notify_auction_end') else '❌'}"
-            ),
+            text=f"🏁 О завершении {'✅' if enabled('notify_auction_end') else '❌'}",
             callback_data="notify_toggle_end",
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text=(
-                "📅 Анонс дня в 00:00 "
-                f"{'✅' if enabled('notify_daily_today') else '❌'}"
-            ),
+            text=f"📅 Анонс дня в 00:00 {'✅' if enabled('notify_daily_today') else '❌'}",
             callback_data="notify_toggle_today",
         )
     )
@@ -422,11 +340,7 @@ def build_notifications_keyboard(
     return builder.as_markup()
 
 
-async def show_notifications_menu(
-    message: Message,
-    *,
-    user_id: int,
-) -> None:
+async def show_notifications_menu(message: Message, *, user_id: int) -> None:
     settings = await get_settings(user_id) or {}
     subscribed = await is_subscribed(user_id)
     await _edit_or_answer(
@@ -436,10 +350,7 @@ async def show_notifications_menu(
             f"Общие уведомления: <b>{'включены' if subscribed else 'выключены'}</b>\n"
             "Нажимайте на пункты, чтобы изменить настройки."
         ),
-        reply_markup=build_notifications_keyboard(
-            settings,
-            subscribed=subscribed,
-        ),
+        reply_markup=build_notifications_keyboard(settings, subscribed=subscribed),
     )
 
 
@@ -468,20 +379,17 @@ async def show_profile(message: Message, *, user: types.User) -> None:
         uid = await get_user_verified_uid(user.id)
     except Exception:
         uid = None
-
     verification = "✅ UID верифицирован" if uid else "❌ UID не верифицирован"
     uid_line = ""
     if uid:
         value = str(uid)
         uid_line = f"\nUID: <code>{value[:3]}***{value[-3:]}</code>"
-
     await message.answer(
         "<b>👤 Профиль</b>\n"
         f"Имя: {escape_html(user.full_name)}\n"
         f"Telegram ID: <code>{user.id}</code>\n"
         f"Общие уведомления: {'✅ включены' if subscribed else '❌ выключены'}\n"
-        f"Верификация: {verification}"
-        f"{uid_line}",
+        f"Верификация: {verification}{uid_line}",
         parse_mode="HTML",
         reply_markup=build_profile_keyboard(verified=bool(uid)),
     )
@@ -490,23 +398,14 @@ async def show_profile(message: Message, *, user: types.User) -> None:
 def build_luxury_keyboard(*, is_luxury: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(
-            text="🔄 Обновить статус",
-            callback_data="user_luxury|refresh",
-        )
+        InlineKeyboardButton(text="🔄 Обновить статус", callback_data="user_luxury|refresh")
     )
     if is_luxury:
         builder.row(
-            InlineKeyboardButton(
-                text="📅 VIP-расписание",
-                callback_data="user_luxury|schedule",
-            )
+            InlineKeyboardButton(text="📅 VIP-расписание", callback_data="user_luxury|schedule")
         )
         builder.row(
-            InlineKeyboardButton(
-                text="🕳 Свободные слоты",
-                callback_data="user_luxury|gaps",
-            )
+            InlineKeyboardButton(text="🕳 Свободные слоты", callback_data="user_luxury|gaps")
         )
         builder.row(
             InlineKeyboardButton(
@@ -518,21 +417,12 @@ def build_luxury_keyboard(*, is_luxury: bool) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-async def show_luxury_menu(
-    message: Message,
-    *,
-    user_id: int,
-    bot: Bot,
-) -> None:
+async def show_luxury_menu(message: Message, *, user_id: int, bot: Bot) -> None:
     is_luxury = await check_luxury(user_id, bot)
-    text = (
-        "👑 <b>Лакшери-раздел</b>\n\n"
-        + (
-            "Статус подтверждён. Доступны расширенное расписание, "
-            "свободные слоты и поиск карт."
-            if is_luxury
-            else "Лакшери-статус не найден. Оформить доступ можно у @velassya."
-        )
+    text = "👑 <b>Лакшери-раздел</b>\n\n" + (
+        "Статус подтверждён. Доступны расширенное расписание, свободные слоты и поиск карт."
+        if is_luxury
+        else "Лакшери-статус не найден. Оформить доступ можно у @velassya."
     )
     await _edit_or_answer(
         message,
@@ -543,44 +433,27 @@ async def show_luxury_menu(
 
 def build_gap_days_keyboard(*, page: int = 0) -> InlineKeyboardMarkup:
     page = max(0, int(page))
-    today = _today_msk()
-    start = today + timedelta(days=page * _SCHEDULE_PAGE_SIZE)
+    start = _today_msk() + timedelta(days=page * _SCHEDULE_PAGE_SIZE)
     builder = InlineKeyboardBuilder()
-
     buttons = [
         InlineKeyboardButton(
             text=f"{_WEEKDAYS_RU[day.weekday()]} • {day:%d.%m}",
             callback_data=f"user_gap_day|{day.isoformat()}",
         )
-        for day in (
-            start + timedelta(days=offset)
-            for offset in range(_SCHEDULE_PAGE_SIZE)
-        )
+        for day in (start + timedelta(days=offset) for offset in range(_SCHEDULE_PAGE_SIZE))
     ]
     for index in range(0, len(buttons), 2):
-        builder.row(*buttons[index:index + 2])
-
+        builder.row(*buttons[index : index + 2])
     navigation: list[InlineKeyboardButton] = []
     if page > 0:
         navigation.append(
-            InlineKeyboardButton(
-                text="⬅️ Раньше",
-                callback_data=f"user_gaps_page|{page - 1}",
-            )
+            InlineKeyboardButton(text="⬅️ Раньше", callback_data=f"user_gaps_page|{page - 1}")
         )
     navigation.append(
-        InlineKeyboardButton(
-            text="Позже ➡️",
-            callback_data=f"user_gaps_page|{page + 1}",
-        )
+        InlineKeyboardButton(text="Позже ➡️", callback_data=f"user_gaps_page|{page + 1}")
     )
     builder.row(*navigation)
-    builder.row(
-        InlineKeyboardButton(
-            text="⬅️ Назад",
-            callback_data="user_luxury|root",
-        )
-    )
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="user_luxury|root"))
     return builder.as_markup()
 
 
@@ -596,7 +469,6 @@ async def show_day_gaps(message: Message, *, user_id: int, target_day: date) -> 
     if not (await is_admin(user_id) or await is_luxury_user(user_id)):
         await message.answer("Эта функция доступна только Лакшери-пользователям.")
         return
-
     range_start = datetime.combine(target_day, time())
     rows = await get_auctions_in_range(
         range_start,
@@ -606,9 +478,7 @@ async def show_day_gaps(message: Message, *, user_id: int, target_day: date) -> 
     busy: set[time] = set()
     for auction in rows:
         start = to_moscow(auction["start_time"]).replace(tzinfo=None)
-        rounded_minute = 0 if start.minute < 30 else 30
-        busy.add(time(start.hour, rounded_minute))
-
+        busy.add(time(start.hour, 0 if start.minute < 30 else 30))
     now = to_moscow(utc_now()).replace(tzinfo=None)
 
     def free_slots(start: time, end: time) -> list[datetime]:
@@ -621,7 +491,6 @@ async def show_day_gaps(message: Message, *, user_id: int, target_day: date) -> 
     luxury_free = free_slots(LUX_START, LUX_END)
     regular_free = free_slots(REG_START, REG_END)
     blocks = _format_blocks(show_free)
-
     await message.answer(
         f"🕳 Свободные слоты на <b>{target_day:%d.%m.%Y}</b>\n\n"
         f"<b>Показ:</b> {', '.join(blocks) if blocks else '—'}\n"
@@ -634,16 +503,10 @@ async def show_day_gaps(message: Message, *, user_id: int, target_day: date) -> 
     )
 
 
-async def show_card_schedule_search(
-    message: Message,
-    *,
-    user_id: int,
-    query: str,
-) -> None:
+async def show_card_schedule_search(message: Message, *, user_id: int, query: str) -> None:
     if not (await is_admin(user_id) or await is_luxury_user(user_id)):
         await message.answer("Эта функция доступна только Лакшери-пользователям.")
         return
-
     lots = await get_auctions_by_card_ref(
         query,
         statuses=["pending", "scheduled", "active"],
@@ -654,24 +517,18 @@ async def show_card_schedule_search(
             reply_markup=build_user_main_keyboard(),
         )
         return
-
     by_day: dict[date, list[dict]] = defaultdict(list)
     for lot in lots:
         by_day[to_moscow(lot["start_time"]).date()].append(lot)
-
     lines = [f"🔎 <b>Расписание по запросу «{html.escape(query)}»</b>", ""]
     for selected_day in sorted(by_day):
         lines.append(f"<b>{selected_day:%d.%m.%Y}</b>")
-        for lot in sorted(
-            by_day[selected_day],
-            key=lambda item: to_moscow(item["start_time"]),
-        ):
+        for lot in sorted(by_day[selected_day], key=lambda item: to_moscow(item["start_time"])):
             start = to_moscow(lot["start_time"]).strftime("%H:%M")
             hero = html.escape(str(lot.get("hero_name") or "—"))
             card = html.escape(str(lot.get("card_name") or "—"))
             lines.append(f"• {start} • {hero} — {card}")
         lines.append("")
-
     await message.answer(
         "\n".join(lines).strip(),
         parse_mode="HTML",
@@ -707,7 +564,6 @@ async def user_start(
         await mark_user_private_chat_opened(message.from_user.id)
     except Exception:
         pass
-
     argument = (command.args or "").strip().lower()
     if argument == "addlot":
         await launch_add_lot(message, state, bot)
@@ -715,12 +571,8 @@ async def user_start(
     if argument == "subs":
         await launch_card_subscription(message, state)
         return
-
     try:
-        await sync_trusted_status(
-            message.from_user.id,
-            message.from_user.username,
-        )
+        await sync_trusted_status(message.from_user.id, message.from_user.username)
         is_luxury, full_name = await register_user(message.from_user, bot)
         status = (
             "👑 Лакшери-статус подтверждён."
@@ -752,31 +604,31 @@ async def user_home(message: Message, state: FSMContext) -> None:
 
 
 @router.message(F.text == USER_MENU_ADD_LOT, F.chat.type == "private")
-async def user_add_lot(
-    message: Message,
-    state: FSMContext,
-    bot: Bot,
-) -> None:
+async def user_add_lot(message: Message, state: FSMContext, bot: Bot) -> None:
     await launch_add_lot(message, state, bot)
 
 
 @router.message(F.text == USER_MENU_MY_LOTS, F.chat.type == "private")
-async def user_my_lots(message: Message) -> None:
+async def user_my_lots(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await my_lots_cmd(message)
 
 
 @router.message(F.text == USER_MENU_SCHEDULE, F.chat.type == "private")
-async def user_schedule(message: Message) -> None:
+async def user_schedule(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await show_schedule_menu(message)
 
 
 @router.message(F.text == USER_MENU_EXCHANGE, F.chat.type == "private")
-async def user_exchange(message: Message) -> None:
+async def user_exchange(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await show_exchange_menu(message)
 
 
 @router.message(F.text == USER_MENU_NOTIFICATIONS, F.chat.type == "private")
-async def user_notifications(message: Message) -> None:
+async def user_notifications(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await show_notifications_menu(message, user_id=message.from_user.id)
 
 
@@ -786,20 +638,15 @@ async def user_subscriptions(message: Message, state: FSMContext) -> None:
 
 
 @router.message(F.text == USER_MENU_PROFILE, F.chat.type == "private")
-async def user_profile(message: Message) -> None:
+async def user_profile(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await show_profile(message, user=message.from_user)
 
 
 @router.message(F.text == USER_MENU_LUXURY, F.chat.type == "private")
-async def user_luxury(
-    message: Message,
-    bot: Bot,
-) -> None:
-    await show_luxury_menu(
-        message,
-        user_id=message.from_user.id,
-        bot=bot,
-    )
+async def user_luxury(message: Message, state: FSMContext, bot: Bot) -> None:
+    await state.clear()
+    await show_luxury_menu(message, user_id=message.from_user.id, bot=bot)
 
 
 @router.message(F.text == USER_MENU_SUPPORT, F.chat.type == "private")
@@ -808,7 +655,8 @@ async def user_support(message: Message, state: FSMContext) -> None:
 
 
 @router.message(F.text == USER_MENU_HELP, F.chat.type == "private")
-async def user_help(message: Message) -> None:
+async def user_help(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await message.answer(
         help_text(),
         parse_mode="HTML",
@@ -817,12 +665,9 @@ async def user_help(message: Message) -> None:
 
 
 @router.callback_query(F.data == "user_menu|home")
-async def user_home_callback(
-    call: CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def user_home_callback(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
-    await send_user_main_menu(call.message, state)
+    await send_user_main_menu(call.message, state, user=call.from_user)
 
 
 @router.callback_query(F.data.startswith("user_schedule|"))
@@ -854,10 +699,7 @@ async def user_exchange_root(call: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "user_exchange|create")
-async def user_exchange_create(
-    call: CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def user_exchange_create(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer("Открываю оформление")
     await start_exchange_submission(call.message, state)
 
@@ -889,16 +731,13 @@ async def user_toggle_global_notifications(call: CallbackQuery) -> None:
     except Exception:
         pass
     await call.answer(
-        "Общие уведомления включены"
-        if new_value
-        else "Общие уведомления выключены"
+        "Общие уведомления включены" if new_value else "Общие уведомления выключены"
     )
     await show_notifications_menu(call.message, user_id=call.from_user.id)
 
 
 @router.callback_query(
-    F.data.startswith("notify_toggle_")
-    | (F.data == "toggle_notify_daily_today")
+    F.data.startswith("notify_toggle_") | (F.data == "toggle_notify_daily_today")
 )
 async def user_toggle_notification(call: CallbackQuery) -> None:
     callback = call.data or ""
@@ -907,15 +746,13 @@ async def user_toggle_notification(call: CallbackQuery) -> None:
     if callback not in _NOTIFY_MAP:
         await call.answer("Неизвестная настройка.", show_alert=True)
         return
-
     field, enabled_key, disabled_key = _NOTIFY_MAP[callback]
     settings = await get_settings(call.from_user.id) or {}
     current = _as_bool(settings.get(field), _NOTIFY_DEFAULTS[field])
     new_value = not current
     await set_settings(call.from_user.id, **{field: new_value})
     await call.answer(
-        USER_MESSAGES.get(enabled_key if new_value else disabled_key)
-        or "Настройка обновлена"
+        USER_MESSAGES.get(enabled_key if new_value else disabled_key) or "Настройка обновлена"
     )
     await show_notifications_menu(call.message, user_id=call.from_user.id)
 
@@ -927,10 +764,7 @@ async def user_profile_notifications(call: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "user_profile|verify_uid")
-async def user_profile_verify_uid(
-    call: CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def user_profile_verify_uid(call: CallbackQuery, state: FSMContext) -> None:
     existing = await get_verified_uid_for_user(call.from_user.id)
     if existing:
         await call.answer("UID уже верифицирован.", show_alert=True)
@@ -945,36 +779,19 @@ async def user_profile_verify_uid(
 
 
 @router.callback_query(F.data == "user_luxury|root")
-async def user_luxury_root(
-    call: CallbackQuery,
-    bot: Bot,
-) -> None:
+async def user_luxury_root(call: CallbackQuery, bot: Bot) -> None:
     await call.answer()
-    await show_luxury_menu(
-        call.message,
-        user_id=call.from_user.id,
-        bot=bot,
-    )
+    await show_luxury_menu(call.message, user_id=call.from_user.id, bot=bot)
 
 
 @router.callback_query(F.data == "user_luxury|refresh")
-async def user_luxury_refresh(
-    call: CallbackQuery,
-    bot: Bot,
-) -> None:
+async def user_luxury_refresh(call: CallbackQuery, bot: Bot) -> None:
     await call.answer("Статус обновлён")
-    await show_luxury_menu(
-        call.message,
-        user_id=call.from_user.id,
-        bot=bot,
-    )
+    await show_luxury_menu(call.message, user_id=call.from_user.id, bot=bot)
 
 
 @router.callback_query(F.data == "user_luxury|schedule")
-async def user_luxury_schedule(
-    call: CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def user_luxury_schedule(call: CallbackQuery, state: FSMContext) -> None:
     if not await is_luxury_user(call.from_user.id):
         await call.answer("Доступно только Лакшери-пользователям.", show_alert=True)
         return
@@ -983,10 +800,7 @@ async def user_luxury_schedule(
     await call.answer()
     await call.message.answer(
         "📅 Выберите месяц:",
-        reply_markup=months_keyboard(
-            prefix="luxsched",
-            auction_id=None,
-        ),
+        reply_markup=months_keyboard(prefix="luxsched", auction_id=None),
         protect_content=True,
     )
 
@@ -1019,18 +833,11 @@ async def user_luxury_gap_day(call: CallbackQuery) -> None:
         await call.answer("Некорректная дата.", show_alert=True)
         return
     await call.answer("Считаю свободные слоты")
-    await show_day_gaps(
-        call.message,
-        user_id=call.from_user.id,
-        target_day=target_day,
-    )
+    await show_day_gaps(call.message, user_id=call.from_user.id, target_day=target_day)
 
 
 @router.callback_query(F.data == "user_luxury|when")
-async def user_luxury_when(
-    call: CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def user_luxury_when(call: CallbackQuery, state: FSMContext) -> None:
     if not await is_luxury_user(call.from_user.id):
         await call.answer("Доступно только Лакшери-пользователям.", show_alert=True)
         return
@@ -1043,24 +850,14 @@ async def user_luxury_when(
     )
 
 
-@router.message(
-    StateFilter(UserMenuFSM.waiting_for_card_search),
-    F.chat.type == "private",
-)
-async def user_luxury_when_query(
-    message: Message,
-    state: FSMContext,
-) -> None:
+@router.message(StateFilter(UserMenuFSM.waiting_for_card_search), F.chat.type == "private")
+async def user_luxury_when_query(message: Message, state: FSMContext) -> None:
     query = (message.text or "").strip()
     if not query:
         await message.answer("Введите название карты, героя или ID.")
         return
     await state.clear()
-    await show_card_schedule_search(
-        message,
-        user_id=message.from_user.id,
-        query=query,
-    )
+    await show_card_schedule_search(message, user_id=message.from_user.id, query=query)
 
 
 __all__ = [
