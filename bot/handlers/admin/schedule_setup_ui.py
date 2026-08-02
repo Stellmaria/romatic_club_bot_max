@@ -14,9 +14,16 @@ from bot.services.schedule_setup import (
     select_next_setup_step,
     validate_card_economy,
 )
-from db.schedule_setup import clear_setup_session, get_setup_audit
+from db.schedule_setup import (
+    clear_setup_session,
+    get_cards_for_setup,
+    get_setup_audit,
+    set_setup_session,
+)
 from db.schedule_setup_extensions import (
+    clear_schedule_deck_scope,
     clear_temporary_emoji,
+    get_schedule_deck_scope,
     is_temporary_emoji,
     temporary_emoji_counts,
 )
@@ -104,7 +111,45 @@ def _temporary_button(scope: str, key: object) -> InlineKeyboardMarkup:
     )
 
 
+def _choose_deck_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🗂 Выбрать другую колоду", callback_data="schsetup:restart")]
+        ]
+    )
+
+
+async def _show_next_scoped_card(message: Message, user_id: int, deck_id: int) -> bool:
+    for card in await get_cards_for_setup(deck_id):
+        if bool(card.get("emoji_verified")):
+            continue
+        stage = "card_review" if card.get("card_emoji_id") else "card_emoji"
+        await set_setup_session(
+            user_id,
+            stage=stage,
+            deck_id=deck_id,
+            card_id=int(card["card_id"]),
+        )
+        await send_card(message, card, review=stage == "card_review")
+        return True
+    return False
+
+
 async def show_next(message: Message, user_id: int) -> None:
+    scope_deck_id = await get_schedule_deck_scope(user_id)
+    if scope_deck_id is not None:
+        if await _show_next_scoped_card(message, user_id, scope_deck_id):
+            return
+        await clear_schedule_deck_scope(user_id)
+        await clear_setup_session(user_id)
+        await message.answer(
+            "✅ <b>Проверка выбранной колоды завершена</b>\n\n"
+            f"Колода №{scope_deck_id} проверена. Другие колоды и их отметки не затронуты.",
+            parse_mode="HTML",
+            reply_markup=_choose_deck_keyboard(),
+        )
+        return
+
     step = await select_next_setup_step(user_id)
     kind = step["kind"]
     if kind == "asset":
@@ -132,6 +177,7 @@ async def show_next(message: Message, user_id: int) -> None:
         await send_card(message, step["card"], review=step["stage"] == "card_review")
         return
 
+    await clear_schedule_deck_scope(user_id)
     await clear_setup_session(user_id)
     audit = await get_setup_audit()
     temp = await temporary_emoji_counts()
@@ -140,12 +186,10 @@ async def show_next(message: Message, user_id: int) -> None:
         f"Общие эмодзи: {audit['common_configured']}/{audit['common_total']} (временных: {temp['assets']})\n"
         f"Колоды: {audit['decks_configured']}/{audit['decks_total']} (временных: {temp['decks']})\n"
         f"Карты: {audit['cards_verified']}/{audit['cards_total']} (временных: {temp['cards']})\n\n"
-        "Повторная проверка с первой карты: /schedule_setup_restart\n"
+        "Повторная проверка выбранной колоды: /schedule_setup_restart\n"
         "Замена временных эмодзи: /schedule_temp",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="🔄 Проверить заново", callback_data="schsetup:restart")]]
-        ),
+        reply_markup=_choose_deck_keyboard(),
     )
 
 
