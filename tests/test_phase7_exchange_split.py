@@ -5,6 +5,8 @@ import builtins
 import symtable
 from pathlib import Path
 
+from bot.bootstrap.routers import get_router_registry
+
 
 ROOT = Path(__file__).resolve().parents[1]
 EXCHANGE_MODULES = (
@@ -43,7 +45,6 @@ def test_exchange_blocks_are_extracted_by_responsibility() -> None:
 
 def test_exchange_routers_are_registered_once_in_handler_order() -> None:
     package = _source("bot/handlers/auction/exchange/__init__.py")
-    bootstrap = _source("bot/bootstrap/routers.py")
 
     for child in (
         "submission_router",
@@ -53,10 +54,16 @@ def test_exchange_routers_are_registered_once_in_handler_order() -> None:
     ):
         assert package.count(f"router.include_router({child})") == 1
 
-    assert bootstrap.count("dispatcher.include_router(auction_exchange_router)") == 1
-    assert "auction_exchange_diagnostics_router" not in bootstrap
-    assert "auction_exchange_moderation_router" not in bootstrap
-    assert "auction_exchange_catalog_router" not in bootstrap
+    matches = [
+        feature
+        for feature in get_router_registry().ordered_features
+        if feature.name == "exchange.catalog"
+    ]
+    assert len(matches) == 1
+    exchange = matches[0]
+    assert exchange.router is not None
+    assert exchange.router.name == "bot.handlers.auction.exchange"
+    assert exchange.callback_namespaces == ("exchange", "ex_view")
 
 
 def test_exchange_components_import_shared_contracts_without_sibling_cycles() -> None:
