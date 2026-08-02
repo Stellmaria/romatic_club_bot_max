@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from bot.bootstrap.routers import get_router_registry
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -71,7 +73,7 @@ def test_phase5_migration_preserves_start_time_trigger_during_type_change() -> N
 def test_admin_lifecycle_router_is_extracted_and_registered() -> None:
     legacy_functions = _functions("bot/handlers/auction_comments.py")
     extracted_functions = _functions("bot/handlers/auction/admin_lifecycle.py")
-    routers = (ROOT / "bot/bootstrap/routers.py").read_text(encoding="utf-8")
+    features = {feature.name: feature for feature in get_router_registry().ordered_features}
 
     moved = {
         "show_lot_owners",
@@ -83,7 +85,10 @@ def test_admin_lifecycle_router_is_extracted_and_registered() -> None:
     }
     assert not (legacy_functions & moved)
     assert moved <= extracted_functions
-    assert "dispatcher.include_router(auction_admin_lifecycle_router)" in routers
+    lifecycle = features["auctions.admin-lifecycle"]
+    assert lifecycle.router is not None
+    assert lifecycle.router.name == "bot.handlers.auction.admin_lifecycle"
+    assert lifecycle.callback_namespaces == ("auction_admin",)
 
 
 def test_admin_bid_delete_is_a_transactional_application_operation() -> None:
