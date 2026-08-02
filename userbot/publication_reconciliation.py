@@ -70,9 +70,14 @@ async def reconcile_recent_auction_publications(
 
 
 async def publication_reconciliation_watchdog(telegram_client: Any) -> None:
+    history_limit = 500
     while True:
         try:
-            recovered = await reconcile_recent_auction_publications(telegram_client)
+            recovered = await reconcile_recent_auction_publications(
+                telegram_client,
+                limit=history_limit,
+            )
+            history_limit = 100
             if recovered:
                 logger.warning("Recovered %s auction publication(s)", recovered)
         except asyncio.CancelledError:
