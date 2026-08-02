@@ -39,10 +39,10 @@ def test_new_auction_routers_are_registered() -> None:
     bidding = features["auctions.bidding"]
     autobid = features["auctions.autobid"]
     assert bidding.router is not None
-    assert bidding.router.name == "bot.handlers.auction.bidding"
+    assert bidding.router.name == "auction-bidding"
     assert bidding.callback_namespaces == ("bid",)
     assert autobid.router is not None
-    assert autobid.router.name == "bot.handlers.auction.autobid"
+    assert autobid.router.name == "auction-autobid"
     assert autobid.callback_namespaces == ("autobid",)
 
 
