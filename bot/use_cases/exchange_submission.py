@@ -52,12 +52,12 @@ class SubmitExchangeUseCase:
         self._price_for_deck = price_for_deck
         self._submit_many = submit_many
 
-    async def run(self, command: SubmitExchangeCommand) -> SubmittedExchange:
-        """Execute the submission without colliding with SQL-driver call names."""
-
-        return await self.execute(command)
-
     async def execute(self, command: SubmitExchangeCommand) -> SubmittedExchange:
+        return await self.run(command)
+
+    async def run(self, command: SubmitExchangeCommand) -> SubmittedExchange:
+        """Submit an exchange batch through the application boundary."""
+
         card_ids = tuple(dict.fromkeys(int(card_id) for card_id in command.card_ids))
         mode = (command.mode or "card").strip().lower()
         split_mode = (command.split_mode or "one").strip().lower()
