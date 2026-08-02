@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from bot.bootstrap.routers import get_router_registry
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,16 +115,16 @@ def test_user_schedule_label_does_not_collide_with_priority_admin_router() -> No
 
 
 def test_access_control_precedes_schedule_and_user_routers() -> None:
-    source = _source("bot/bootstrap/routers.py")
+    names = [feature.name for feature in get_router_registry().ordered_features]
 
-    access = source.index("dispatcher.include_router(user_access_control_router)")
-    assert access < source.index("dispatcher.include_router(auction_schedule_router)")
-    assert access < source.index("dispatcher.include_router(user_menu_router)")
-    assert access < source.index("dispatcher.include_router(users_router)")
-    assert access < source.index("dispatcher.include_router(auction_exchange_router)")
+    access = names.index("users.access-control")
+    assert access < names.index("auctions.schedule")
+    assert access < names.index("users.menu")
+    assert access < names.index("users.core")
+    assert access < names.index("exchange.catalog")
 
-    menu = source.index("dispatcher.include_router(user_menu_router)")
-    assert menu < source.index("dispatcher.include_router(profile_router)")
-    assert menu < source.index("dispatcher.include_router(users_router)")
-    assert menu < source.index("dispatcher.include_router(auctions_router)")
-    assert menu < source.index("dispatcher.include_router(auction_exchange_router)")
+    menu = names.index("users.menu")
+    assert menu < names.index("users.profile")
+    assert menu < names.index("users.core")
+    assert menu < names.index("auctions.core")
+    assert menu < names.index("exchange.catalog")
