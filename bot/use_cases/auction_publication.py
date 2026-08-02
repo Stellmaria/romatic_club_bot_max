@@ -24,14 +24,18 @@ class PublishAuctionCommand:
 class PublishedAuction:
     auction: Row
     message_id: int
+    pending_confirmation: bool = False
 
 
 class PublishAuctionUseCase:
     """Claim, deliver and finalize one auction publication atomically by state.
 
-    Telegram delivery is an injected output port.  A failed delivery marks the
+    Telegram delivery is an injected output port. A failed delivery marks the
     claim as failed; optional post-publication effects run only after the
-    published state has been committed.
+    published state has been committed. Telegram can return ``message_id=0``
+    while a large-chat media post is still being processed. That delivery must
+    wait for a later channel-post confirmation instead of writing zero to the
+    database or retrying the visible post.
     """
 
     def __init__(
@@ -76,8 +80,15 @@ class PublishAuctionUseCase:
                 pass
             raise
 
-        # Delivery already happened.  Never mark the lot failed here because a
-        # retry could duplicate a visible Telegram post.  Lost/unknown commit
+        if message_id <= 0:
+            return PublishedAuction(
+                auction=auction,
+                message_id=0,
+                pending_confirmation=True,
+            )
+
+        # Delivery already happened. Never mark the lot failed here because a
+        # retry could duplicate a visible Telegram post. Lost/unknown commit
         # state requires operator review instead.
         try:
             committed = await self._mark_published(auction_id, message_id)
