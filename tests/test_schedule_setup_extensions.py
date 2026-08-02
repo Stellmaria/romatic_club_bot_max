@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from bot.bootstrap.routers import get_router_registry
 from db import schedule_setup_extensions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -116,8 +117,8 @@ def test_extension_modules_and_migration_contract() -> None:
     restart = (handlers / "schedule_setup_restart.py").read_text(encoding="utf-8")
     temp = (handlers / "schedule_setup_temp.py").read_text(encoding="utf-8")
     persistence = (ROOT / "db" / "schedule_setup_extensions.py").read_text(encoding="utf-8")
-    routers = (ROOT / "bot" / "bootstrap" / "routers.py").read_text(encoding="utf-8")
     migration = (ROOT / "db" / "migrations" / "013_schedule_temporary_emoji_marks.sql").read_text(encoding="utf-8")
+    names = [feature.name for feature in get_router_registry().ordered_features]
 
     assert 'Command("schedule_setup_restart")' in restart
     assert 'Command("schedule_audit")' in restart
@@ -131,11 +132,13 @@ def test_extension_modules_and_migration_contract() -> None:
     assert "_show_next_scoped_card" in ui
     assert "base._show_next_step = show_next" in ui
     assert "_CARD_FIELDS" in persistence and "_DECK_FIELDS" in persistence
-    for name in ("schedule_setup_fields_router", "schedule_setup_restart_router", "schedule_setup_temp_router"):
-        assert name in routers
-        assert routers.index(f"dispatcher.include_router({name})") < routers.index(
-            "dispatcher.include_router(schedule_setup_router)"
-        )
+    base_position = names.index("schedule.setup.base")
+    for name in (
+        "schedule.setup.fields",
+        "schedule.setup.restart",
+        "schedule.setup.temporary",
+    ):
+        assert names.index(name) < base_position
     assert "CREATE TABLE IF NOT EXISTS public.schedule_temporary_emoji_marks" in migration
     assert "PRIMARY KEY (scope, entity_key)" in migration
     assert "CREATE TABLE IF NOT EXISTS public.schedule_setup_deck_scopes" in migration
