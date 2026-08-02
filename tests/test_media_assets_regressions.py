@@ -27,7 +27,7 @@ def test_admin_media_router_is_registered() -> None:
     media = features["admin.media-assets"]
 
     assert media.router is not None
-    assert media.router.name == "bot.handlers.admin.media_assets"
+    assert media.router.name == "admin_media_assets"
     assert media.priority.name == "CALLBACKS"
     assert media.callback_namespaces == ("media_assets",)
 
