@@ -44,7 +44,7 @@ async def set_temporary_emoji(call: CallbackQuery) -> None:
             upsert_deck=ORIGINAL_UPSERT_DECK,
             upsert_card=ORIGINAL_UPSERT_CARD,
         )
-    except ValueEError as exc:
+    except ValueError as exc:
         await call.answer(str(exc), show_alert=True)
         return
     await call.answer("Временный эмодзи сохранён")
@@ -58,7 +58,7 @@ async def set_temporary_emoji(call: CallbackQuery) -> None:
         await set_setup_session(
             int(call.from_user.id), stage="card_review",
             deck_id=int(card["deck_id"]), card_id=int(key),
-       )
+        )
         await send_card(call.message, card, review=True)
     else:
         await show_next(call.message, int(call.from_user.id))
