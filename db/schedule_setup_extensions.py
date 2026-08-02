@@ -117,6 +117,39 @@ async def temporary_emoji_counts() -> dict[str, int]:
     }
 
 
+async def set_schedule_deck_scope(user_id: int, deck_id: int) -> None:
+    await execute(
+        """
+        INSERT INTO public.schedule_setup_deck_scopes(user_id, deck_id, updated_at)
+        VALUES ($1, $2, now())
+        ON CONFLICT (user_id) DO UPDATE
+        SET deck_id = EXCLUDED.deck_id,
+            updated_at = now()
+        """,
+        int(user_id),
+        int(deck_id),
+    )
+
+
+async def get_schedule_deck_scope(user_id: int) -> int | None:
+    row = await fetchrow(
+        """
+        SELECT deck_id
+        FROM public.schedule_setup_deck_scopes
+        WHERE user_id = $1
+        """,
+        int(user_id),
+    )
+    return int(row["deck_id"]) if row else None
+
+
+async def clear_schedule_deck_scope(user_id: int) -> None:
+    await execute(
+        "DELETE FROM public.schedule_setup_deck_scopes WHERE user_id = $1",
+        int(user_id),
+    )
+
+
 async def create_temporary_emoji(
     scope: str,
     entity_key: object,
@@ -151,7 +184,19 @@ async def create_temporary_emoji(
     return placeholder
 
 
-async def restart_schedule_card_reviews() -> None:
+async def restart_schedule_card_reviews(deck_id: int | None = None) -> None:
+    if deck_id is None:
+        await execute(
+            """
+            UPDATE public.schedule_card_emojis
+            SET verified = false,
+                verified_by = NULL,
+                verified_at = NULL,
+                updated_at = now()
+            """
+        )
+        return
+
     await execute(
         """
         UPDATE public.schedule_card_emojis
@@ -159,7 +204,13 @@ async def restart_schedule_card_reviews() -> None:
             verified_by = NULL,
             verified_at = NULL,
             updated_at = now()
-        """
+        WHERE card_id IN (
+            SELECT card_id
+            FROM public.cards
+            WHERE deck_id = $1
+        )
+        """,
+        int(deck_id),
     )
 
 
@@ -184,11 +235,14 @@ async def update_schedule_deck_field(deck_id: int, field: str, value: object) ->
 
 
 __all__ = [
+    "clear_schedule_deck_scope",
     "clear_temporary_emoji",
     "create_temporary_emoji",
+    "get_schedule_deck_scope",
     "get_temporary_emoji_marks",
     "is_temporary_emoji",
     "restart_schedule_card_reviews",
+    "set_schedule_deck_scope",
     "temporary_emoji_counts",
     "update_schedule_card_field",
     "update_schedule_deck_field",
