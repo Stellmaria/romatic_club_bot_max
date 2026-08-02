@@ -38,10 +38,11 @@ def canonicalize_notification_deadlines(
 async def _list_auctions_with_close_deadlines(
     statuses: Iterable[str],
 ) -> list[dict[str, Any]]:
-    rows = await _LEGACY_LIST_AUCTIONS(statuses)
+    status_values = tuple(statuses)
+    rows = await _LEGACY_LIST_AUCTIONS(status_values)
     normalized_statuses = {
         str(status).strip().lower()
-        for status in statuses
+        for status in status_values
         if str(status).strip()
     }
     if normalized_statuses == {"active"}:
