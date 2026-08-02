@@ -44,7 +44,6 @@ def resolve_userbot_session(
     project_root: Path,
 ) -> str:
     """Preserve an existing root session unless a session was configured."""
-
     environment = os.environ if environ is None else environ
     configured_session = config.session.strip()
     if (environment.get("USERBOT_SESSION") or "").strip():
@@ -66,7 +65,6 @@ def create_userbot_client(
     environ: Mapping[str, str] | None = None,
 ) -> TelegramClient:
     """Construct, but do not connect, a Telegram client."""
-
     errors = userbot_configuration_errors(config)
     if errors:
         raise UserbotConfigurationError("; ".join(errors))
@@ -84,7 +82,6 @@ def create_userbot_client(
 
 async def run_userbot_application(config: UserbotProcessSettings) -> None:
     """Run authorization, handlers and workers with deterministic cleanup."""
-
     logging.basicConfig(level=logging.INFO)
 
     from bot.core.legacy_config import configure_legacy_config
@@ -97,7 +94,11 @@ async def run_userbot_application(config: UserbotProcessSettings) -> None:
     from db.lifecycle import close_db, init_db
     from db.pool import DatabaseRuntime
     from userbot.handlers import register_handlers, register_schedule_handlers
-    from userbot.workers import autobid_watchdog, schedule_announcement_watchdog
+    from userbot.workers import (
+        autobid_watchdog,
+        publication_reconciliation_watchdog,
+        schedule_announcement_watchdog,
+    )
 
     database_runtime = DatabaseRuntime(config.database)
     telegram_client = create_userbot_client(
@@ -126,6 +127,10 @@ async def run_userbot_application(config: UserbotProcessSettings) -> None:
                 asyncio.create_task(
                     autobid_watchdog(telegram_client),
                     name="userbot-autobid-watchdog",
+                ),
+                asyncio.create_task(
+                    publication_reconciliation_watchdog(telegram_client),
+                    name="userbot-publication-reconciliation-watchdog",
                 ),
                 asyncio.create_task(
                     schedule_announcement_watchdog(
