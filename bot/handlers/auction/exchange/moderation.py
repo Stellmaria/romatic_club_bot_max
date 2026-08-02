@@ -18,6 +18,12 @@ from bot.services.admin_thanks import admin_tag, build_thanks_kb
 from bot.services.exchange_media import get_exchange_cover_media as _get_exchange_cover_media
 from bot.services.exchanges import ExchangeService
 from bot.services.exchange_moderation import ExchangeModerationService
+from bot.use_cases.common import ApplicationError, ApplicationInvalidState, ApplicationNotFound
+from bot.use_cases.exchange_moderation import (
+    ApproveExchangeUseCase,
+    ModerateExchangeCommand,
+    RejectExchangeUseCase,
+)
 from bot.telegram.media import safe_send_media
 from bot.core.legacy_config import legacy_config
 from bot.legacy_fsm import ModActionFSM
@@ -86,164 +92,164 @@ async def exchange_show_proof(call: types.CallbackQuery):
     await call.answer()
 
 
+async def _exchange_approval_use_case() -> ApproveExchangeUseCase:
+    moderation = await ExchangeModerationService.create()
+    service = await ExchangeService.create()
+    return ApproveExchangeUseCase(
+        get_batch=moderation.batch,
+        get_deck=moderation.deck,
+        get_items=moderation.raw_items,
+        moderate=service.approve,
+    )
+
+
+async def _exchange_rejection_use_case() -> RejectExchangeUseCase:
+    moderation = await ExchangeModerationService.create()
+    service = await ExchangeService.create()
+    return RejectExchangeUseCase(
+        get_batch=moderation.batch,
+        get_deck=moderation.deck,
+        get_items=moderation.raw_items,
+        moderate=service.reject,
+    )
+
+
 @router.callback_query(F.data.startswith("exchange_approve|"))
 @admin_only
 async def exchange_approve(call: types.CallbackQuery):
     batch_id = int(split_callback_data(call.data, "|")[1])
-    moderation = await ExchangeModerationService.create()
-    batch = await moderation.batch(batch_id)
-    if not batch:
+    try:
+        result = await (await _exchange_approval_use_case()).execute(
+            ModerateExchangeCommand(
+                batch_id=batch_id,
+                moderator_id=call.from_user.id,
+                moderator_username=call.from_user.username or call.from_user.full_name,
+            )
+        )
+    except ApplicationNotFound:
         await call.answer("Заявка не найдена.", show_alert=True)
         return
-
-    try:
-        service = await ExchangeService.create()
-        batch = await service.approve(
-            batch_id,
-            moderator_id=call.from_user.id,
-            moderator_username=call.from_user.username or call.from_user.full_name,
-        )
-    except InvalidExchangeTransition as exc:
+    except ApplicationInvalidState as exc:
         await call.answer(
-            f"Заявка уже обработана (статус: {exc.current}).",
+            f"Заявка уже обработана (статус: {exc.details.get('current') or 'неизвестен'}).",
             show_alert=True,
         )
         return
 
-    # ---------- данные для лога ----------
+    batch = result.batch
+    items = list(result.items)
     when_msk = fmt_dt_msk(datetime.now(timezone.utc))
-
     admin_html = user_link(call.from_user.id, call.from_user.username)
-
     user_id = int(batch.get("user_id") or 0)
     user_html = user_link(user_id, batch.get("username")) if user_id else "—"
 
     deck_id = int(batch.get("deck_id") or 0)
-    deck_name = None
-    try:
-        if deck_id:
-            d = await moderation.deck(deck_id)
-            deck_name = (d.get("name") or "").strip() if d else None
-    except Exception:
-        deck_name = None
+    deck_name = (str((result.deck or {}).get("name") or "").strip() or None)
     deck_title = deck_name or (f"{deck_id}" if deck_id else "—")
-
-    mode = (batch.get("mode") or "").strip()
+    mode = str(batch.get("mode") or "").strip()
     currency = str(batch.get("currency") or "алмазы").strip()
     price = batch.get("price")
-    comment = (batch.get("comment") or "").strip() or "-"
-
-    proof_id = (batch.get("proof_photo_id") or "").strip()
+    comment = str(batch.get("comment") or "").strip() or "-"
+    proof_id = str(batch.get("proof_photo_id") or "").strip()
     has_proof = bool(proof_id) and proof_id.upper() != "NO_PROOF"
 
-    # состав (короткое превью до 10 строк)
-    items_cnt = 0
-    preview: list[str] = []
-    try:
-        items = await moderation.raw_items(batch_id)
-        items_cnt = len(items)
-        for i, it in enumerate(items[:10], start=1):
-            card_name = tg_clean(str(it.get("card_name") or "-"))
-            hero_name = tg_clean(str(it.get("hero_name") or "-"))
-            preview.append(f"{i}. <b>{card_name}</b> — {hero_name}")
-        more = items_cnt - min(items_cnt, 10)
-        if more > 0:
-            preview.append(f"…и ещё <b>{more}</b> шт.")
-    except Exception:
-        items_cnt = int(batch.get("items_count") or 0) if batch.get("items_count") is not None else 0
-        preview = []
+    preview = [
+        f"{index}. <b>{tg_clean(str(item.get('card_name') or '-'))}</b> — "
+        f"{tg_clean(str(item.get('hero_name') or '-'))}"
+        for index, item in enumerate(items[:10], start=1)
+    ]
+    if len(items) > 10:
+        preview.append(f"…и ещё <b>{len(items) - 10}</b> шт.")
 
-    # ---------- отправка лога в лог-чаты ----------
     try:
-        log_text = format_exchange_approved_log(
-            created_at_msk=when_msk,
-            batch_id=batch_id,
-            admin_html=admin_html,
-            user_html=user_html,
-            deck_title=deck_title,
-            mode=mode,
-            items_count=items_cnt,
-            price=int(price) if price is not None else None,
-            currency=currency,
-            has_proof=has_proof,
-            comment=comment,
-            items_preview=preview,
+        await send_admin_log(
+            call.bot,
+            format_exchange_approved_log(
+                created_at_msk=when_msk,
+                batch_id=batch_id,
+                admin_html=admin_html,
+                user_html=user_html,
+                deck_title=deck_title,
+                mode=mode,
+                items_count=len(items),
+                price=int(price) if price is not None else None,
+                currency=currency,
+                has_proof=has_proof,
+                comment=comment,
+                items_preview=preview,
+            ),
         )
-        await send_admin_log(call.bot, log_text)
     except Exception:
-        pass
+        logging.getLogger(__name__).exception(
+            "Could not send exchange approval log batch_id=%s", batch_id
+        )
 
-    # ---------- уведомление пользователю (как раньше, можно оставить твою версию) ----------
     moderator_tag_str = admin_tag(call.from_user)
-    thanks_kb = await build_thanks_kb(int(batch_id), moderator_tag_str)
-
-    mode_key = (mode or "").strip().lower()
+    thanks_kb = await build_thanks_kb(batch_id, moderator_tag_str)
     mode_ru = {
         "card": "Одна карта",
         "deck": "Колода целиком",
         "deck_split": "Разбор колоды",
-    }.get(mode_key, mode or "—")
-
+    }.get(mode.lower(), mode or "—")
     currency_icon = cur_emoji(currency.lower())
-    price_line = f"{int(price)} {currency_icon} ({html.escape(currency)})" if price is not None else f"— {currency_icon} ({html.escape(currency)})"
-    proof_line = "✅ Да" if has_proof else "❌ Нет"
-
+    price_line = (
+        f"{int(price)} {currency_icon} ({html.escape(currency)})"
+        if price is not None
+        else f"— {currency_icon} ({html.escape(currency)})"
+    )
     notify_text = (
         "✅ <b>Ваша заявка на биржу одобрена и добавлена в биржу!</b>\n"
         f"🆔 Batch: <code>{batch_id}</code>\n\n"
         f"📚 Колода: <b>{html.escape(deck_title)}</b>\n"
         f"🎛 Режим: <b>{html.escape(str(mode_ru))}</b>\n"
-        f"🃏 Карт: <b>{items_cnt}</b>\n"
-        f"💰 Цена: <b>{html.escape(price_line)}</b>\n"
-        f"📸 Пруф: <b>{proof_line}</b>\n"
+        f"🃏 Карт: <b>{len(items)}</b>\n"
+        f"💰 Цена: <b>{price_line}</b>\n"
+        f"📸 Пруф: <b>{'✅ Да' if has_proof else '❌ Нет'}</b>\n"
         f"💬 Комментарий: <i>{html.escape(comment)}</i>\n\n"
-        f"<b>Модератор:</b> {admin_html}"
-        f"Если хочешь, можешь сказать спасибо ниже ❤️\n\n"
+        f"<b>Модератор:</b> {admin_html}\n"
+        "Если хочешь, можешь сказать спасибо ниже ❤️"
     )
 
     media_id = None
-    kind = "photo"
     try:
-        cover_id, cover_kind = await _get_exchange_cover_media(batch_id)
-        if cover_id:
-            media_id = cover_id
-            kind = cover_kind
+        media_id, _media_kind = await _get_exchange_cover_media(batch_id)
     except Exception:
-        media_id = None
-
+        logging.getLogger(__name__).exception(
+            "Could not resolve exchange cover batch_id=%s", batch_id
+        )
     if not media_id and has_proof:
         media_id = proof_id
-        kind = "photo"
 
     try:
-        if user_id:
-            if media_id:
-                await safe_send_media(
-                    call.bot,
-                    chat_id=user_id,
-                    file_id=str(media_id),
-                    caption=notify_text,
-                    reply_markup=thanks_kb,
-                    parse_mode="HTML",
-                    protect_content=False,
-                )
-            else:
-                await call.bot.send_message(
-                    user_id,
-                    notify_text,
-                    parse_mode="HTML",
-                    reply_markup=thanks_kb,
-                    disable_web_page_preview=True,
-                )
+        if user_id and media_id:
+            await safe_send_media(
+                call.bot,
+                chat_id=user_id,
+                file_id=str(media_id),
+                caption=notify_text,
+                reply_markup=thanks_kb,
+                parse_mode="HTML",
+                protect_content=False,
+            )
+        elif user_id:
+            await call.bot.send_message(
+                user_id,
+                notify_text,
+                parse_mode="HTML",
+                reply_markup=thanks_kb,
+                disable_web_page_preview=True,
+            )
     except Exception:
-        pass
+        logging.getLogger(__name__).exception(
+            "Could not notify exchange owner batch_id=%s user_id=%s", batch_id, user_id
+        )
 
-    # обновим кнопки у админа
     try:
-        await call.message.edit_reply_markup(reply_markup=_approved_kb(batch_id, has_proof=has_proof))
+        await call.message.edit_reply_markup(
+            reply_markup=_approved_kb(batch_id, has_proof=has_proof)
+        )
     except Exception:
         pass
-
     await call.answer("Одобрено ✅", show_alert=False)
 
 
@@ -303,32 +309,37 @@ async def exchange_reject_reason(message: types.Message, state: FSMContext):
     data = await state.get_data()
     batch_id = int(data.get("exchange_batch_id") or 0)
     reason = (message.text or "").strip()
-
     if not batch_id or not reason:
         await message.answer("Нужна причина текстом.")
         return
 
-    moderation = await ExchangeModerationService.create()
-    batch = await moderation.batch(batch_id)
-    if not batch:
+    try:
+        result = await (await _exchange_rejection_use_case()).execute(
+            ModerateExchangeCommand(
+                batch_id=batch_id,
+                moderator_id=message.from_user.id,
+                moderator_username=(
+                    message.from_user.username or message.from_user.full_name
+                ),
+                reason=reason,
+            )
+        )
+    except ApplicationNotFound:
         await message.answer("Заявка не найдена или уже обработана.")
         await state.clear()
         return
-
-    try:
-        service = await ExchangeService.create()
-        batch = await service.reject(
-            batch_id,
-            moderator_id=message.from_user.id,
-            moderator_username=message.from_user.username or message.from_user.full_name,
-            comment=reason,
+    except ApplicationInvalidState as exc:
+        await message.answer(
+            f"Заявка уже обработана (статус: {exc.details.get('current') or 'неизвестен'})."
         )
-    except InvalidExchangeTransition as exc:
-        await message.answer(f"Заявка уже обработана (статус: {exc.current}).")
+        await state.clear()
+        return
+    except ApplicationError:
+        await message.answer("Не удалось отклонить заявку.")
         await state.clear()
         return
 
-    # 1) уведомим пользователя — КРАСИВО, как у аукциона
+    batch = result.batch
     try:
         await notify_exchange_user_moderation(
             message.bot,
@@ -338,53 +349,41 @@ async def exchange_reject_reason(message: types.Message, state: FSMContext):
             reason=reason,
         )
     except Exception:
-        pass
-
-    # 2) лог в лог-чат — единый стиль, как у обычной заявки
-    try:
-        deck_id = int(batch.get("deck_id") or 0)
-
-        # moderation read model: deck + item count are outside the handler SQL layer
-        deck_name = None
-        try:
-            drow = await moderation.deck(deck_id)
-            if drow:
-                deck_name = (drow.get("name") or "").strip() or None
-        except Exception:
-            deck_name = None
-        deck_title = deck_name or (f"#{deck_id}" if deck_id else "—")
-
-        try:
-            items_cnt = await moderation.item_count(batch_id)
-        except Exception:
-            items_cnt = 0
-
-        proof_id = (batch.get("proof_photo_id") or "").strip()
-        has_proof = bool(proof_id) and proof_id.upper() != "NO_PROOF"
-
-        when_msk = fmt_dt_msk(datetime.now(timezone.utc))
-
-        log_text = format_exchange_moderation_log(
-            action_title="Отклонена заявка на биржу",
-            action_code="exchange_reject через бота",
-            when_msk=when_msk,
-            admin_user=message.from_user,
-            batch_id=batch_id,
-            sender_username=batch.get("username"),
-            sender_id=batch.get("user_id"),
-            deck_name=deck_title,
-            deck_id=deck_id,
-            mode=str(batch.get("mode") or "—"),
-            items_count=items_cnt,
-            price=int(batch["price"]) if batch.get("price") is not None else None,
-            currency=str(batch.get("currency") or "алмазы"),
-            has_proof=has_proof,
-            comment=str(batch.get("comment") or ""),
-            moderator_comment=reason,
+        logging.getLogger(__name__).exception(
+            "Could not notify rejected exchange batch_id=%s", batch_id
         )
-        await send_admin_log(message.bot, log_text)
+
+    deck_id = int(batch.get("deck_id") or 0)
+    deck_name = str((result.deck or {}).get("name") or "").strip() or None
+    deck_title = deck_name or (f"#{deck_id}" if deck_id else "—")
+    proof_id = str(batch.get("proof_photo_id") or "").strip()
+    has_proof = bool(proof_id) and proof_id.upper() != "NO_PROOF"
+    try:
+        await send_admin_log(
+            message.bot,
+            format_exchange_moderation_log(
+                action_title="Отклонена заявка на биржу",
+                action_code="exchange_reject через бота",
+                when_msk=fmt_dt_msk(datetime.now(timezone.utc)),
+                admin_user=message.from_user,
+                batch_id=batch_id,
+                sender_username=batch.get("username"),
+                sender_id=batch.get("user_id"),
+                deck_name=deck_title,
+                deck_id=deck_id,
+                mode=str(batch.get("mode") or "—"),
+                items_count=len(result.items),
+                price=int(batch["price"]) if batch.get("price") is not None else None,
+                currency=str(batch.get("currency") or "алмазы"),
+                has_proof=has_proof,
+                comment=str(batch.get("comment") or ""),
+                moderator_comment=reason,
+            ),
+        )
     except Exception:
-        pass
+        logging.getLogger(__name__).exception(
+            "Could not send exchange rejection log batch_id=%s", batch_id
+        )
 
     await message.answer(f"Отклонено ❌ (Batch {batch_id})")
     await state.clear()

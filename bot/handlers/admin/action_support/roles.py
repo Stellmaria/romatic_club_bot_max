@@ -21,8 +21,18 @@ from bot.handlers.admin.helper.new.formatting import format_admin_action_log
 from bot.handlers.admin.helper.user_helpers import format_user_ref
 from bot.security import admin_secret_matches
 from bot.services.admin_logging import send_admin_log
-from db.admin import add_admin, is_admin, log_admin_action, remove_admin
-from db.users import set_trusted_status
+from bot.services.roles import add_admin, is_admin, log_admin_action, remove_admin, set_trusted_status
+from bot.use_cases.roles import ChangeRoleCommand, ChangeRoleUseCase, RoleKind
+
+async def _role_use_case() -> ChangeRoleUseCase:
+    return ChangeRoleUseCase(
+        is_admin=is_admin,
+        add_admin=add_admin,
+        remove_admin=remove_admin,
+        set_trusted=set_trusted_status,
+        audit=log_admin_action,
+    )
+
 
 async def add_admin_role(
         user_id: int,
@@ -34,7 +44,17 @@ async def add_admin_role(
 ) -> None:
     if username is not None and not isinstance(username, str):
         username = None
-    await add_admin(user_id, username, by_admin_id)
+    await (await _role_use_case()).execute(
+        ChangeRoleCommand(
+            target_id=user_id,
+            target_username=username,
+            actor_id=by_admin_id,
+            actor_username=admin_username,
+            role=RoleKind.ADMIN,
+            grant=True,
+            owner_ids=frozenset(legacy_config.ADMINS_OWNERS),
+        )
+    )
     if bot:
         text = format_admin_action_log(
             action="add_admin",
@@ -52,7 +72,17 @@ async def remove_admin_role(
         bot: Optional[Bot] = None,
         admin_username: Optional[str] = None,
 ) -> None:
-    await remove_admin(user_id)
+    await (await _role_use_case()).execute(
+        ChangeRoleCommand(
+            target_id=user_id,
+            target_username=username,
+            actor_id=by_admin_id,
+            actor_username=admin_username,
+            role=RoleKind.ADMIN,
+            grant=False,
+            owner_ids=frozenset(legacy_config.ADMINS_OWNERS),
+        )
+    )
     if bot:
         text = format_admin_action_log(
             action="remove_admin",
@@ -122,12 +152,6 @@ async def _remove_admin_flow(
     await message.answer(
         ADMIN_MESSAGES["user_removed_admin"].format(user_id=who_id)
     )
-    await log_admin_action(
-        user_id=by_admin_id,
-        action_type="remove_admin",
-        auction_id=None,
-        details=f"Удалён админ {who_id} (@{who_username or 'no_username'})",
-    )
 
 
 async def _add_admin_flow(
@@ -155,12 +179,6 @@ async def _add_admin_flow(
     await message.answer(
         ADMIN_MESSAGES["user_now_admin"].format(user_id=who_id),
         parse_mode="HTML",
-    )
-    await log_admin_action(
-        user_id=by_admin_id,
-        action_type="add_admin",
-        auction_id=None,
-        details=f"Добавлен админ {who_id} (@{who_username or 'no_username'})",
     )
 
 
@@ -264,6 +282,34 @@ async def admin_add_remove(
     )
 
 
+async def _set_trusted_role(
+    *,
+    user_id: int,
+    by_admin_id: int,
+    grant: bool,
+    username: Optional[str],
+    bot: Optional[Bot],
+    admin_username: Optional[str],
+) -> None:
+    await (await _role_use_case()).execute(
+        ChangeRoleCommand(
+            target_id=user_id,
+            target_username=username,
+            actor_id=by_admin_id,
+            actor_username=admin_username,
+            role=RoleKind.TRUSTED,
+            grant=grant,
+        )
+    )
+    if bot:
+        text = format_admin_action_log(
+            action="give_trusted" if grant else "remove_trusted",
+            admin={"id": by_admin_id, "username": admin_username},
+            target={"user_id": user_id, "username": username},
+        )
+        await send_admin_log(bot, text)
+
+
 async def give_trusted_status(
         user_id: int,
         by_admin_id: int,
@@ -272,19 +318,9 @@ async def give_trusted_status(
         bot: Optional[Bot] = None,
         admin_username: Optional[str] = None,
 ) -> None:
-    await set_trusted_status(user_id, True)
-    if bot:
-        text = format_admin_action_log(
-            action="give_trusted",
-            admin={"id": by_admin_id, "username": admin_username},
-            target={"user_id": user_id, "username": username},
-        )
-        await send_admin_log(bot, text)
-    await log_admin_action(
-        user_id=by_admin_id,
-        action_type="give_trusted",
-        auction_id=None,
-        details=f"Выдан trusted @{username or user_id} (id {user_id})",
+    await _set_trusted_role(
+        user_id=user_id, by_admin_id=by_admin_id, grant=True, username=username,
+        bot=bot, admin_username=admin_username,
     )
 
 
@@ -296,19 +332,9 @@ async def remove_trusted_status(
         bot: Optional[Bot] = None,
         admin_username: Optional[str] = None,
 ) -> None:
-    await set_trusted_status(user_id, False)
-    if bot:
-        text = format_admin_action_log(
-            action="remove_trusted",
-            admin={"id": by_admin_id, "username": admin_username},
-            target={"user_id": user_id, "username": username},
-        )
-        await send_admin_log(bot, text)
-    await log_admin_action(
-        user_id=by_admin_id,
-        action_type="remove_trusted",
-        auction_id=None,
-        details=f"Снят trusted @{username or user_id} (id {user_id})",
+    await _set_trusted_role(
+        user_id=user_id, by_admin_id=by_admin_id, grant=False, username=username,
+        bot=bot, admin_username=admin_username,
     )
 
 

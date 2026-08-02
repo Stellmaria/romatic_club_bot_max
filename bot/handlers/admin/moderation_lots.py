@@ -5,6 +5,7 @@ Handlers retain their relative order from the legacy ``moderation`` module.
 
 import html as _html
 import html
+import logging
 from bot.handlers.admin.helper.admin_constants import (
     ADMIN_MESSAGES,
     BUTTONS,
@@ -23,6 +24,16 @@ from bot.telegram.states import (
     RejectDeleteFSM,
 )
 from bot.services.auction_workflows import AuctionModerationService
+from bot.use_cases.auction_moderation import (
+    ScheduleAuctionCommand,
+    ScheduleAuctionUseCase,
+)
+from bot.use_cases.common import (
+    ApplicationConflict,
+    ApplicationInvalidState,
+    ApplicationNotFound,
+    ApplicationTimeout,
+)
 from bot.domain.auctions import (
     AuctionSlotConflict,
     InvalidAuctionTransition,
@@ -106,6 +117,18 @@ from bot.telegram.callback_parser import split_callback_data
 
 
 router = Router(name=__name__)
+logger = logging.getLogger(__name__)
+
+
+async def _schedule_auction_use_case() -> ScheduleAuctionUseCase:
+    service = await AuctionModerationService.create()
+    return ScheduleAuctionUseCase(
+        get_lot=get_lot_by_id,
+        mutate=service.schedule,
+        get_owners=get_lot_owners,
+        get_user=get_user,
+        is_luxury=is_luxury_user,
+    )
 
 
 @router.callback_query(F.data.startswith("back_to_"))
@@ -509,56 +532,72 @@ async def handle_confirm_lot(call: types.CallbackQuery, state: FSMContext):
         end_time = auction_end_at_59(start_time)
 
         try:
-            moderation_service = await AuctionModerationService.create()
-            await moderation_service.schedule(
-                auction_id,
-                start_time=start_time,
-                end_time=end_time,
+            scheduled = await (await _schedule_auction_use_case()).execute(
+                ScheduleAuctionCommand(
+                    auction_id=auction_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                )
             )
-        except AuctionSlotConflict:
+        except ApplicationConflict:
             await call.answer(
                 "Этот слот уже заняли. Выберите другое время.",
                 show_alert=True,
             )
             return
-        except InvalidAuctionTransition as exc:
+        except ApplicationInvalidState as exc:
             await call.answer(
-                f"Заявка уже обработана (статус: {exc.current}).",
+                f"Заявка уже обработана (статус: {exc.details.get('current') or 'неизвестен'}).",
                 show_alert=True,
             )
             return
-        lot = await get_lot_by_id(auction_id)
+        except ApplicationNotFound:
+            await call.answer("Лот не найден.", show_alert=True)
+            return
+        except ApplicationTimeout:
+            await call.answer("База отвечает слишком долго. Повторите позже.", show_alert=True)
+            return
 
-        owners = await get_lot_owners(int(auction_id))
-        owner_users = []
-        for o in owners:
-            user = await get_user(int(o["user_id"]))
-            if user:
-                user = dict(user)
-                user["is_luxury"] = await is_luxury_user(int(user["user_id"]))
-                owner_users.append(user)
+        lot = scheduled.lot
+        owner_users = [
+            {
+                "user_id": owner.user_id,
+                "username": owner.username,
+                "full_name": owner.full_name,
+                "is_luxury": owner.is_luxury,
+                "is_trusted": owner.is_trusted,
+            }
+            for owner in scheduled.owners
+        ]
+        owners_text = scheduled.owners_text
 
-        owners_text = ", ".join(
-            "👑 @" + u["username"] if u.get("is_luxury") and u.get("username") else
-            ("@" + u["username"] if u.get("username") else f"id:{u['user_id']}")
-            for u in owner_users
-        ) or "-"
-
-        await send_admin_log(
-            call.bot,
-            format_admin_action_log(
-                action="approve_lot",
-                admin={"id": call.from_user.id, "username": call.from_user.username or call.from_user.full_name},
-                lot=lot,
-                owners_text=owners_text
+        try:
+            await send_admin_log(
+                call.bot,
+                format_admin_action_log(
+                    action="approve_lot",
+                    admin={
+                        "id": call.from_user.id,
+                        "username": call.from_user.username or call.from_user.full_name,
+                    },
+                    lot=lot,
+                    owners_text=owners_text,
+                ),
             )
-        )
-        await log_audit_action(
-            user_id=call.from_user.id,
-            action_type="approve_lot",
-            auction_id=auction_id,
-            details=f"Лот {lot['card_name']} одобрен на {start_time:%d.%m %H:%M}–{end_time.strftime('%H:%M')}"
-        )
+        except Exception:
+            logger.exception("Could not send approval log auction_id=%s", auction_id)
+        try:
+            await log_audit_action(
+                user_id=call.from_user.id,
+                action_type="approve_lot",
+                auction_id=auction_id,
+                details=(
+                    f"Лот {lot['card_name']} одобрен на "
+                    f"{start_time:%d.%m %H:%M}–{end_time:%H:%M}"
+                ),
+            )
+        except Exception:
+            logger.exception("Could not write approval audit auction_id=%s", auction_id)
 
         # --- расширенная инфа для владельца ---
         def _cur_emoji_local(cur: str) -> str:
@@ -656,8 +695,12 @@ async def handle_confirm_lot(call: types.CallbackQuery, state: FSMContext):
                         parse_mode="HTML",
                         reply_markup=kb,
                     )
-            except Exception as e:
-                print(f"Ошибка уведомления владельца {u['user_id']}: {e}")
+            except Exception:
+                logger.exception(
+                    "Could not notify approved auction owner auction_id=%s user_id=%s",
+                    auction_id,
+                    u.get("user_id"),
+                )
 
         await safe_edit_message(call, ADMIN_MESSAGES["lot_scheduled"])
         await state.clear()

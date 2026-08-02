@@ -4,6 +4,7 @@ from bot.telegram.callback_parser import split_callback_data
 """Exchange flow component extracted during refactoring phase 7."""
 
 import html
+import logging
 from datetime import datetime, timezone
 from html import escape
 from aiogram import Bot, F, Router, types
@@ -15,12 +16,15 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.admin.action_support.compat import safe_user_mention, send_admin_log
 from bot.handlers.admin.services.market_utils import safe_edit_text
 from bot.services.exchanges import ExchangeService
+from bot.use_cases.common import ApplicationError
+from bot.use_cases.exchange_submission import SubmitExchangeCommand, SubmitExchangeUseCase
 from bot.services.exchange_submission import ExchangeSubmissionQueries
 from bot.telegram.media import answer_media_any as _answer_media_any
 from db.legacy import get_card_by_id, get_cards_by_ids, get_cards_ids_by_deck, get_deck_by_id, is_luxury_user
 from bot.legacy_fsm import ExchangeFSM, UserAddLotFSM
 
 router = Router(name="auction_exchange_submission")
+log = logging.getLogger(__name__)
 
 from .common import (
     GUIDE_UID_CRAFT_PHOTO_ID,
@@ -445,53 +449,66 @@ async def _finalize_exchange_request(
 ) -> None:
     data = await state.get_data()
     user_id = int(message.from_user.id)
-
     deck_id = data.get("ex_deck_id") or data.get("deck_id")
     if not deck_id:
         await state.clear()
         await message.answer("⚠️ Не смог определить колоду. Попробуй заново.")
         return
     deck_id_i = int(deck_id)
-
     mode = (data.get("mode") or data.get("exchange_kind") or "card").strip() or "card"
     currency = (data.get("currency") or "алмазы").strip()
     comment = ((data.get("ex_comment") or "") or (data.get("comment") or "")).strip()
-
     split_mode = (data.get("split_mode") or ("per_card" if mode == "deck_split" else "one")).strip()
-    copies = int(data.get("copies") or 1)
-    copies = max(1, min(copies, 20))
-
+    copies = max(1, min(int(data.get("copies") or 1), 20))
     proof_photo_id = (proof_photo_id or "").strip() or "NO_PROOF"
-
     card_ids = normalize_card_ids(data.get("ex_card_ids") or data.get("card_ids"))
     if not card_ids and data.get("ex_card_id"):
         card_ids = [int(data["ex_card_id"])]
 
-    if not card_ids and mode in {"deck", "deck_split"}:
-        card_ids = await get_cards_ids_by_deck(deck_id_i)
-        if card_ids:
-            await state.update_data(ex_card_ids=card_ids)
-
-    if not card_ids:
+    service = await ExchangeService.create()
+    use_case = SubmitExchangeUseCase(
+        get_card_ids_by_deck=get_cards_ids_by_deck,
+        get_cards=get_cards_by_ids,
+        price_for_card=exchange_price_for_card,
+        price_for_deck=deck_price_for_deck,
+        submit_many=service.submit_many,
+    )
+    try:
+        result = await use_case.execute(
+            SubmitExchangeCommand(
+                user_id=user_id,
+                deck_id=deck_id_i,
+                mode=mode,
+                currency=currency,
+                comment=comment,
+                proof_photo_id=proof_photo_id,
+                card_ids=tuple(card_ids),
+                split_mode=split_mode,
+                copies=copies,
+                explicit_price=digits_int(data.get("ex_price") or data.get("ex_price_diamonds") or 0),
+            )
+        )
+    except ApplicationError as exc:
         await state.clear()
-        await message.answer("⚠️ Не смог определить карты. Попробуй заново.")
+        await message.answer(f"⚠️ {exc}")
+        return
+    except Exception:
+        await state.clear()
+        log.exception("exchange submission failed")
+        await message.answer("⚠️ Не удалось создать заявку биржи. Попробуй позже.")
         return
 
-    full_cards = await get_cards_by_ids([int(x) for x in card_ids])
-    by_id = {int(c["card_id"]): c for c in full_cards if c and c.get("card_id") is not None}
+    full_cards = list(result.cards)
+    by_id = {int(card["card_id"]): card for card in full_cards}
 
     async def _send_exchange_log_one(batch_id: int, *, items_count: int, price: int) -> None:
-        # deck_name
-        deck_name = None
         try:
             deck_name = await (await ExchangeSubmissionQueries.create()).deck_name(deck_id_i)
         except Exception:
             deck_name = None
-
-        created_at_msk = fmt_dt_msk(datetime.now(timezone.utc))
         log_text = format_exchange_new_request_log(
             batch_id=int(batch_id),
-            created_at_msk=created_at_msk,
+            created_at_msk=fmt_dt_msk(datetime.now(timezone.utc)),
             sender_username=message.from_user.username,
             sender_id=message.from_user.id,
             deck_id=deck_id_i,
@@ -500,128 +517,51 @@ async def _finalize_exchange_request(
             items_count=int(items_count),
             price=int(price),
             currency=currency,
-            has_proof=bool(proof_photo_id) and str(proof_photo_id).upper() != "NO_PROOF",
+            has_proof=str(proof_photo_id).upper() != "NO_PROOF",
             comment=comment,
         )
         try:
-            await send_admin_log(message.bot, log_text)  # ✅ НЕ импортированный bot и не аргумент “bot”
+            await send_admin_log(message.bot, log_text)
         except Exception:
-            pass
+            log.exception("Could not deliver exchange submission log for batch %s", batch_id)
 
-    # 1) deck_split = каждая карта отдельной заявкой
-    if split_mode == "per_card" or mode == "deck_split":
-        created: list[tuple[int, dict, int]] = []
-
-        for cid in card_ids:
-            c = by_id.get(int(cid))
-            if not c:
-                continue
-
-            price_one = int(exchange_price_for_card(c) or 0)
-
-            batch_id = await _db_create_exchange_batch(
-                user_id=user_id,
-                username=message.from_user.username or "",
-                deck_id=deck_id_i,
-                mode=mode,
-                card_ids=[int(cid)],
-                currency=currency,
-                price=price_one,
-                comment=comment,
-                proof_photo_id=proof_photo_id,
-            )
-            created.append((batch_id, c, price_one))
-
-            # ✅ лог на каждый созданный batch
-            await _send_exchange_log_one(batch_id, items_count=1, price=price_one)
-
-        await send_user_exchange_confirmation_deck_split(
-            message,
-            created=created,
-            user_id=user_id,
-            deck_id=deck_id_i,
+    for item in result.items:
+        await _send_exchange_log_one(
+            item.batch_id, items_count=len(item.card_ids), price=item.price
         )
 
-        await state.clear()
-        return
-
-    # 2) copies = N одинаковых заявок
-    if len(card_ids) == 1 and copies > 1:
-        cid = int(card_ids[0])
-        c = by_id.get(cid) or (full_cards[0] if full_cards else None)
-        if not c:
-            await state.clear()
-            await message.answer("⚠️ Карта не найдена. Попробуй заново.")
-            return
-
-        price_one = int(exchange_price_for_card(c) or 0)
-        batch_ids: list[int] = []
-
-        for _ in range(copies):
-            batch_id = await _db_create_exchange_batch(
-                user_id=user_id,
-                username=message.from_user.username or "",
-                deck_id=deck_id_i,
-                mode=mode,
-                card_ids=[cid],
-                currency=currency,
-                price=price_one,
-                comment=comment,
-                proof_photo_id=proof_photo_id,
-            )
-            batch_ids.append(batch_id)
-
-            # ✅ лог на каждый batch
-            await _send_exchange_log_one(batch_id, items_count=1, price=price_one)
-
+    if split_mode == "per_card" or mode == "deck_split":
+        created = [
+            (item.batch_id, by_id[item.card_ids[0]], item.price)
+            for item in result.items
+        ]
+        await send_user_exchange_confirmation_deck_split(
+            message, created=created, user_id=user_id, deck_id=deck_id_i
+        )
+    elif len(result.items) > 1 and len(result.items[0].card_ids) == 1:
+        first = result.items[0]
         await send_user_exchange_confirmation_copies(
             message,
-            batch_ids=batch_ids,
+            batch_ids=[item.batch_id for item in result.items],
             user_id=user_id,
-            card=c,
-            price=price_one,
+            card=by_id[first.card_ids[0]],
+            price=first.price,
             currency=currency,
             comment=comment,
             deck_id=deck_id_i,
         )
-
-        await state.clear()
-        return
-
-    # 3) обычный режим: одна заявка
-    price_i = digits_int(data.get("ex_price") or data.get("ex_price_diamonds") or 0)
-    if not price_i:
-        if mode == "card":
-            price_i = int(exchange_price_for_card(full_cards[0]) if full_cards else 0)
-        else:
-            price_i = await deck_price_for_deck(deck_id_i)
-
-    batch_id = await _db_create_exchange_batch(
-        user_id=user_id,
-        username=message.from_user.username or "",
-        deck_id=deck_id_i,
-        mode=mode,
-        card_ids=[int(cid) for cid in card_ids],
-        currency=currency,
-        price=int(price_i or 0),
-        comment=comment,
-        proof_photo_id=proof_photo_id,
-    )
-
-    await send_user_exchange_confirmation(
-        message,
-        batch_id=batch_id,
-        user_id=user_id,
-        cards=full_cards,
-        price=int(price_i or 0),
-        currency=currency,
-        comment=comment,
-        deck_id=deck_id_i,
-    )
-
-    # ✅ лог гарантированно улетает в лог-чаты
-    await _send_exchange_log_one(batch_id, items_count=len(card_ids or []), price=int(price_i or 0))
-
+    else:
+        item = result.items[0]
+        await send_user_exchange_confirmation(
+            message,
+            batch_id=item.batch_id,
+            user_id=user_id,
+            cards=full_cards,
+            price=item.price,
+            currency=currency,
+            comment=comment,
+            deck_id=deck_id_i,
+        )
     await state.clear()
 
 

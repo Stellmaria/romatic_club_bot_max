@@ -33,6 +33,8 @@ from bot.domain.auctions import (
 from bot.services.auction_workflows import (
     AuctionCreationService,
 )
+from bot.use_cases.auction_submission import SubmitAuctionCommand, SubmitAuctionUseCase
+from bot.use_cases.common import ApplicationPermissionDenied, ApplicationValidationError
 from bot.services.luxury import get_user_luxury_level
 from bot.telegram.media import answer_media_any as _answer_media_any
 from bot.core.legacy_config import legacy_config
@@ -1549,36 +1551,41 @@ async def _final_addlot_create(
 ) -> None:
     try:
         service = await AuctionCreationService.create()
-        created = await service.submit(
-            owner_id=user_id,
-            luxury_level=await get_user_luxury_level(message.bot, user_id),
-            card_id=card_id,
-            hero_name=hero_name or "",
-            card_name=card_name or "",
-            start_price=start_price,
-            currency=currency,
-            accepted_currencies=accepted_currencies,
-            custom_offer_terms=custom_offer_terms,
-            comment=comment,
-            image_id=image_file_id,
-            auction_kind=auction_kind,
-            proof_photo_id=proof_photo_id,
-            craft_uid_possible=craft_uid_possible,
+
+        async def _luxury_level(owner_id: int) -> int:
+            return await get_user_luxury_level(message.bot, owner_id)
+
+        result = await SubmitAuctionUseCase(
+            get_luxury_level=_luxury_level,
+            submit=service.submit,
+            access_denied_errors=(AuctionAccessDenied,),
+        ).execute(
+            SubmitAuctionCommand(
+                owner_id=user_id,
+                card_id=card_id,
+                hero_name=hero_name,
+                card_name=card_name,
+                start_price=start_price,
+                currency=currency,
+                accepted_currencies=tuple(accepted_currencies or (currency,)),
+                custom_offer_terms=custom_offer_terms,
+                comment=comment,
+                image_id=image_file_id,
+                auction_kind=auction_kind,
+                proof_photo_id=proof_photo_id,
+                craft_uid_possible=craft_uid_possible,
+            )
         )
-        auction_id = int(created["auction_id"])
-    except AuctionAccessDenied:
+        auction_id = result.auction_id
+    except ApplicationPermissionDenied:
         await message.answer("❌ Этот тип аукциона недоступен для вашего уровня Лакшери.")
         return
-    except (TypeError, ValueError) as exc:
+    except ApplicationValidationError as exc:
         logging.getLogger(__name__).warning("invalid auction draft: %s", exc)
         await message.answer("❌ Не удалось проверить данные заявки. Начните создание лота заново.")
         return
     except Exception:
         logging.getLogger(__name__).exception("auction creation failed")
-        await message.answer("❌ Не удалось создать заявку. Попробуйте позже.")
-        return
-
-    if not auction_id:
         await message.answer("❌ Не удалось создать заявку. Попробуйте позже.")
         return
 

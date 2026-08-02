@@ -25,6 +25,9 @@ from bot.handlers.helper.helpers_users import (
 )
 from bot.keyboards.keyboards import back_to_menu_keyboard, currency_choice_keyboard
 from bot.services.auction_workflows import AuctionOwnerService
+from bot.use_cases.common import ApplicationError, ApplicationInvalidState
+from bot.use_cases.auction_cancellation import CancelOwnedAuctionCommand, CancelOwnedAuctionUseCase
+from bot.use_cases.user_lot_edit import EditOwnedLotCommand, EditOwnedLotUseCase
 from db.legacy import (
     add_delete_request,
     get_auctions_by_date,
@@ -741,16 +744,29 @@ async def user_delete_lot(call: types.CallbackQuery, state: FSMContext):
         return
 
     if lot["status"] == "pending":
-        await owner_service.cancel(lot_id, owner_id=call.from_user.id)
+        use_case = CancelOwnedAuctionUseCase(
+            get_owned=owner_service.get_owned,
+            cancel_owned=owner_service.cancel,
+            get_owners_text=get_pretty_owners_for_log,
+        )
+        try:
+            result = await use_case.execute(
+                CancelOwnedAuctionCommand(auction_id=lot_id, owner_id=call.from_user.id)
+            )
+        except ApplicationError as exc:
+            await call.answer(str(exc), show_alert=True)
+            return
         await call.message.answer("Лот удалён.")
-        owners_text = await get_pretty_owners_for_log(lot_id)
         log_text = format_admin_action_log(
             action="delete_lot",
             admin=None,
-            lot=lot,
-            owners_text=owners_text,
+            lot=result.lot,
+            owners_text=result.owners_text,
         )
-        await send_admin_log(call.bot, log_text)
+        try:
+            await send_admin_log(call.bot, log_text)
+        except Exception:
+            logger.exception("Could not log owner cancellation for auction %s", lot_id)
 
     elif lot["status"] in ["scheduled", "active"]:
         await state.update_data(lot_id=lot_id)
@@ -822,31 +838,77 @@ async def user_edit_price(call: types.CallbackQuery, state: FSMContext):
     await call.answer()
 
 
+async def _owned_lot_edit_use_case() -> EditOwnedLotUseCase:
+    service = await AuctionOwnerService.create()
+    return EditOwnedLotUseCase(
+        update_owned=service.update_fields,
+        owners_text=get_pretty_owners_for_log,
+    )
+
+
+async def _apply_owned_lot_edit(
+    message: types.Message,
+    state: FSMContext,
+    *,
+    changes: dict[str, object],
+    success_text: str,
+) -> None:
+    data = await state.get_data()
+    lot_id = int(data["lot_id"])
+    try:
+        result = await (await _owned_lot_edit_use_case()).execute(
+            EditOwnedLotCommand(
+                auction_id=lot_id,
+                owner_id=message.from_user.id,
+                changes=changes,
+            )
+        )
+    except ApplicationError as exc:
+        logger.warning(
+            "Owned lot edit rejected lot_id=%s user_id=%s code=%s",
+            lot_id,
+            message.from_user.id,
+            exc.code,
+        )
+        await message.answer("Не удалось изменить лот: он уже обработан или вам не принадлежит.")
+        await state.clear()
+        return
+    except Exception:
+        logger.exception(
+            "Owned lot edit failed lot_id=%s user_id=%s",
+            lot_id,
+            message.from_user.id,
+        )
+        await message.answer("Не удалось обновить лот. Попробуйте ещё раз.")
+        await state.clear()
+        return
+
+    await message.answer(success_text, parse_mode="HTML")
+    try:
+        await send_admin_log(
+            message.bot,
+            format_admin_action_log(
+                action="edit_lot",
+                admin=None,
+                lot=result.lot,
+                owners_text=result.owners_text,
+            ),
+        )
+    except Exception:
+        logger.exception("Could not send owner edit log lot_id=%s", lot_id)
+    finally:
+        await state.clear()
+
+
 @router.message(UserEditLotFSM.waiting_for_price, F.text.regexp(r"^\d+$"))
 async def process_edit_price(message: types.Message, state: FSMContext):
-    try:
-        data = await state.get_data()
-        lot_id = data["lot_id"]
-        value = int(message.text)
-
-        await update_lot_field(lot_id, "start_price", value)
-        await message.answer("Стартовая цена обновлена.")
-
-        lot = await get_lot_by_id(lot_id)
-        owners_text = await get_pretty_owners_for_log(lot_id)
-        log_text = format_admin_action_log(
-            action="edit_lot",
-            admin=None,
-            lot=lot,
-            owners_text=owners_text,
-        )
-        await send_admin_log(message.bot, log_text)
-        await state.clear()
-
-    except Exception as e:
-        logger.error(f"Ошибка обновления цены: {e}")
-        await message.answer("Не удалось обновить цену. Попробуйте ещё раз.")
-        await state.clear()
+    value = int(message.text)
+    await _apply_owned_lot_edit(
+        message,
+        state,
+        changes={"start_price": value},
+        success_text="Стартовая цена обновлена.",
+    )
 
 
 @router.callback_query(UserEditLotFSM.choosing_field, F.data.startswith("user_edit_currency"))
@@ -871,28 +933,17 @@ async def process_currency_choice(call: types.CallbackQuery, state: FSMContext):
 @router.message(UserEditLotFSM.waiting_for_currency_price, F.text.regexp(r"^\d+$"))
 async def process_currency_and_price(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    lot_id = data["lot_id"]
     currency = data["new_currency"]
     price = int(message.text)
-
-    await update_lot_field(lot_id, "currency", currency)
-    await update_lot_field(lot_id, "start_price", price)
-
-    await message.answer(
-        f"Валюта обновлена на <b>{currency}</b>, цена изменена на <b>{price}</b>.",
-        parse_mode="HTML",
+    await _apply_owned_lot_edit(
+        message,
+        state,
+        changes={"currency": currency, "start_price": price},
+        success_text=(
+            f"Валюта обновлена на <b>{currency}</b>, "
+            f"цена изменена на <b>{price}</b>."
+        ),
     )
-
-    lot = await get_lot_by_id(lot_id)
-    owners_text = await get_pretty_owners_for_log(lot_id)
-    log_text = format_admin_action_log(
-        action="edit_lot",
-        admin=None,
-        lot=lot,
-        owners_text=owners_text,
-    )
-    await send_admin_log(message.bot, log_text)
-    await state.clear()
 
 
 @router.message(UserEditLotFSM.waiting_for_currency_price, ~F.text.lower().in_(["отмена", "cancel"]))
@@ -909,29 +960,12 @@ async def user_edit_comment(call: types.CallbackQuery, state: FSMContext):
 
 @router.message(UserEditLotFSM.waiting_for_comment, ~F.text.lower().in_(["отмена", "cancel"]))
 async def process_edit_comment(message: types.Message, state: FSMContext):
-    try:
-        data = await state.get_data()
-        lot_id = data["lot_id"]
-        value = message.text.strip()
-
-        await update_lot_field(lot_id, "comment", value)
-        await message.answer("Комментарий обновлён.")
-
-        lot = await get_lot_by_id(lot_id)
-        owners_text = await get_pretty_owners_for_log(lot_id)
-        log_text = format_admin_action_log(
-            action="edit_lot",
-            admin=None,
-            lot=lot,
-            owners_text=owners_text,
-        )
-        await send_admin_log(message.bot, log_text)
-        await state.clear()
-
-    except Exception as e:
-        logger.error(f"Ошибка обновления комментария: {e}")
-        await message.answer("Не удалось обновить комментарий. Попробуйте ещё раз.")
-        await state.clear()
+    await _apply_owned_lot_edit(
+        message,
+        state,
+        changes={"comment": message.text.strip()},
+        success_text="Комментарий обновлён.",
+    )
 
 
 @router.callback_query(UserEditLotFSM.choosing_field, F.data == "user_edit_cancel")
