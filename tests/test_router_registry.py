@@ -59,6 +59,24 @@ def test_exact_command_collision_with_broad_fsm_is_rejected() -> None:
         )
 
 
+def test_router_name_collision_is_rejected() -> None:
+    with pytest.raises(RouteCollisionError, match="router name 'shared'"):
+        RouterRegistry(
+            (
+                _feature(
+                    "first",
+                    RoutePriority.CALLBACKS,
+                    router=Router(name="shared"),
+                ),
+                _feature(
+                    "second",
+                    RoutePriority.CALLBACKS,
+                    router=Router(name="shared"),
+                ),
+            )
+        )
+
+
 def test_callback_namespace_collision_is_rejected() -> None:
     with pytest.raises(RouteCollisionError, match="callback namespace"):
         RouterRegistry(
@@ -202,6 +220,7 @@ def test_project_inventory_is_stable_unique_and_machine_readable() -> None:
     payload = json.loads(route_inventory_json())
 
     names = [entry["name"] for entry in payload]
+    router_names = [entry["router_name"] for entry in payload if entry["router_name"]]
     commands = [command for entry in payload for command in entry["commands"]]
     namespaces = [
         namespace for entry in payload for namespace in entry["callback_namespaces"]
@@ -209,6 +228,7 @@ def test_project_inventory_is_stable_unique_and_machine_readable() -> None:
 
     assert names == [entry.name for entry in registry.inventory()]
     assert len(names) == len(set(names))
+    assert len(router_names) == len(set(router_names))
     assert len(commands) == len(set(commands))
     assert len(namespaces) == len(set(namespaces))
     assert names.index("schedule.setup.fields") < names.index("schedule.setup.base")
