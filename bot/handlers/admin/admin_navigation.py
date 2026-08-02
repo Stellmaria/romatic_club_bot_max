@@ -11,12 +11,17 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.handlers.admin.action_support.forms import start_preview_schedule
 from bot.handlers.admin.admin_menu import send_admin_main_menu
 from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.handlers.admin.presentation.exchange_pending_view import (
+    clear_pending_exchange_detail,
+    show_pending_exchange_all_header,
+    show_pending_exchange_mode_picker,
+    show_pending_exchange_request_one,
+)
 from bot.handlers.auction.exchange.catalog import (
     kb_exchange_approved_root,
     safe_edit_text_or_caption,
 )
 from bot.handlers.auction.exchange.moderation import (
-    show_pending_exchange_requests,
     show_pending_exchange_requests_all,
 )
 from bot.telegram.callback_parser import split_callback_data
@@ -105,10 +110,12 @@ async def exchange_pending_requests(
     call: CallbackQuery,
     state: FSMContext,
 ) -> None:
-    await state.clear()
-    await call.answer("Открываю заявки…")
     if isinstance(call.message, Message):
-        await show_pending_exchange_requests(call.message)
+        await clear_pending_exchange_detail(call.message, state)
+    await state.clear()
+    await call.answer("Выберите режим просмотра")
+    if isinstance(call.message, Message):
+        await show_pending_exchange_mode_picker(call.message)
 
 
 @router.callback_query(F.data.startswith("expend_mode|"))
@@ -117,7 +124,7 @@ async def exchange_pending_mode_compat(
     call: CallbackQuery,
     state: FSMContext,
 ) -> None:
-    """Keep already-sent mode keyboards functional after the routing fix."""
+    """Handle both restored and already-sent pending-exchange mode keyboards."""
 
     try:
         _, mode = split_callback_data(call.data or "", "|", 1)
@@ -127,15 +134,38 @@ async def exchange_pending_mode_compat(
     if mode not in {"all", "one"}:
         await call.answer("Неизвестный режим.", show_alert=True)
         return
+    if not isinstance(call.message, Message):
+        await call.answer()
+        return
 
+    await clear_pending_exchange_detail(call.message, state)
     await state.clear()
     await call.answer("Открываю заявки…")
-    if not isinstance(call.message, Message):
-        return
+
     if mode == "all":
-        await show_pending_exchange_requests_all(call.message)
-    else:
-        await show_pending_exchange_requests(call.message)
+        await show_pending_exchange_all_header(call.message)
+        await show_pending_exchange_requests_all(call.message, limit=200)
+        return
+
+    await show_pending_exchange_request_one(call.message, state, page=0)
+
+
+@router.callback_query(F.data.startswith("expend_page|"))
+@admin_only
+async def exchange_pending_page(
+    call: CallbackQuery,
+    state: FSMContext,
+) -> None:
+    try:
+        _, raw_page = split_callback_data(call.data or "", "|", 1)
+        page = int(raw_page)
+    except (TypeError, ValueError):
+        await call.answer("Некорректная страница.", show_alert=True)
+        return
+
+    await call.answer()
+    if isinstance(call.message, Message):
+        await show_pending_exchange_request_one(call.message, state, page=page)
 
 
 @router.callback_query(F.data == "ex_appr:root")
@@ -159,5 +189,6 @@ __all__ = [
     "exchange_menu_button",
     "exchange_pending_requests",
     "exchange_pending_mode_compat",
+    "exchange_pending_page",
     "exchange_approved_root",
 ]

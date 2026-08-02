@@ -45,14 +45,24 @@ def test_admin_root_keeps_schedule_inside_moderation() -> None:
 
 def test_exchange_navigation_exposes_pending_and_approved_flows() -> None:
     navigation = _source("bot/handlers/admin/admin_navigation.py")
+    pending_view = _source(
+        "bot/handlers/admin/presentation/exchange_pending_view.py"
+    )
     catalog = _source("bot/handlers/auction/exchange/catalog.py")
 
     assert 'F.text == "🛒 Биржа"' in navigation
     assert 'callback_data="admreq|pending|exchange"' in navigation
     assert 'F.data == "admreq|pending|exchange"' in navigation
+    assert "show_pending_exchange_mode_picker(call.message)" in navigation
     assert 'F.data.startswith("expend_mode|")' in navigation
-    assert "show_pending_exchange_requests(call.message)" in navigation
-    assert "show_pending_exchange_requests_all(call.message)" in navigation
+    assert "show_pending_exchange_request_one(call.message, state, page=0)" in navigation
+    assert "show_pending_exchange_requests_all(call.message, limit=200)" in navigation
+    assert 'F.data.startswith("expend_page|")' in navigation
+    assert "show_pending_exchange_request_one(call.message, state, page=page)" in navigation
+    assert "page намеренно игнорируем" not in pending_view
+    assert "pending_batches(include_luxury=True)" in pending_view
+    assert 'callback_data="expend_mode|one"' in pending_view
+    assert 'callback_data="expend_mode|all"' in pending_view
     assert 'F.data == "ex_appr:root"' in navigation
     assert "kb_exchange_approved_root()" in navigation
     assert "exinv|" not in navigation
