@@ -1,0 +1,32 @@
+name: Sync issue 30 with main
+
+on:
+  push:
+    branches: [refactor/issue-30-application-use-cases]
+    paths:
+      - '.issue30-sync-main'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/issue-30-application-use-cases
+          fetch-depth: 0
+      - name: Merge current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge --no-edit origin/main
+          rm .issue30-sync-main .github/workflows/issue30-sync-main.yml
+          git add -- .issue30-sync-main .github/workflows/issue30-sync-main.yml
+          git commit -m "chore(branch): remove issue 30 sync helper"
+          git push origin HEAD:refactor/issue-30-application-use-cases
