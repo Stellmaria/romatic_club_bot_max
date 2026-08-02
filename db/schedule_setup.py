@@ -377,7 +377,7 @@ async def get_schedule_lots_for_day(day: date) -> list[dict[str, Any]]:
         """
         WITH matched AS (
             SELECT a.*,
-                   c.card_id,
+                   COALESCE(a.card_id, c.card_id) AS resolved_card_id,
                    c.num AS card_num,
                    COALESCE(
                        c.deck_id,
@@ -399,10 +399,14 @@ async def get_schedule_lots_for_day(day: date) -> list[dict[str, Any]]:
             LEFT JOIN LATERAL (
                 SELECT candidate.*
                 FROM public.cards candidate
-                WHERE lower(trim(candidate.card_name)) = lower(trim(a.card_name))
-                  AND lower(trim(COALESCE(candidate.hero_name, ''))) =
-                      lower(trim(COALESCE(a.hero_name, '')))
-                ORDER BY candidate.card_id
+                WHERE candidate.card_id = a.card_id
+                   OR (
+                        a.card_id IS NULL
+                        AND lower(trim(candidate.card_name)) = lower(trim(a.card_name))
+                        AND lower(trim(COALESCE(candidate.hero_name, ''))) =
+                            lower(trim(COALESCE(a.hero_name, '')))
+                   )
+                ORDER BY (candidate.card_id = a.card_id) DESC, candidate.card_id
                 LIMIT 1
             ) c ON true
             WHERE CASE
@@ -421,7 +425,7 @@ async def get_schedule_lots_for_day(day: date) -> list[dict[str, Any]]:
                COALESCE(totals.tea, 0) AS deck_tea
         FROM matched m
         LEFT JOIN public.decks d ON d.id = m.resolved_deck_id
-        LEFT JOIN public.schedule_card_emojis ce ON ce.card_id = m.card_id
+        LEFT JOIN public.schedule_card_emojis ce ON ce.card_id = m.resolved_card_id
         LEFT JOIN public.schedule_deck_emojis de ON de.deck_id = m.resolved_deck_id
         LEFT JOIN LATERAL (
             SELECT COALESCE(SUM(
