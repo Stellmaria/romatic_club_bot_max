@@ -1,49 +1,158 @@
-"""Restart and audit commands for extended schedule setup."""
+"""Restart, deck selection and audit commands for extended schedule setup."""
 
 from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.schedule_setup_ui import show_next
 from bot.services.schedule_setup import validate_card_economy
+from bot.telegram.callback_parser import rsplit_callback_data
 from db.schedule_setup import (
     clear_setup_session,
     get_all_decks_for_setup,
     get_cards_for_setup,
     get_setup_audit,
 )
-from db.schedule_setup_extensions import restart_schedule_card_reviews, temporary_emoji_counts
+from db.schedule_setup_extensions import (
+    clear_schedule_deck_scope,
+    restart_schedule_card_reviews,
+    set_schedule_deck_scope,
+    temporary_emoji_counts,
+)
 
 router = Router(name=__name__)
 
 
-async def _restart(message: Message, user_id: int) -> None:
+def _deck_picker_keyboard(decks: list[dict[str, object]]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="🔄 Проверить все колоды", callback_data="schsetup:restart:all")]
+    ]
+    deck_buttons: list[InlineKeyboardButton] = []
+    for deck in decks:
+        deck_id = int(deck["deck_id"])
+        name = " ".join(str(deck.get("deck_name") or "Без названия").split())
+        if len(name) > 28:
+            name = name[:27].rstrip() + "…"
+        deck_buttons.append(
+            InlineKeyboardButton(
+                text=f"№{deck_id} · {name}",
+                callback_data=f"schsetup:restart:{deck_id}",
+            )
+        )
+    for index in range(0, len(deck_buttons), 2):
+        rows.append(deck_buttons[index : index + 2])
+    rows.append([InlineKeyboardButton(text="✖️ Закрыть", callback_data="schsetup:stop")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _show_deck_picker(message: Message) -> None:
+    decks = await get_all_decks_for_setup()
+    if not decks:
+        await message.answer("В базе нет колод для проверки.")
+        return
+    await message.answer(
+        "🗂 <b>Какую колоду проверить заново?</b>\n\n"
+        "Будут сброшены только отметки проверки выбранной колоды. "
+        "Эмодзи, экономика, тексты и остальные колоды останутся без изменений.",
+        parse_mode="HTML",
+        reply_markup=_deck_picker_keyboard(decks),
+    )
+
+
+async def _restart_all(message: Message, user_id: int) -> None:
     await restart_schedule_card_reviews()
+    await clear_schedule_deck_scope(user_id)
     await clear_setup_session(user_id)
     await message.answer(
-        "🔄 Проверка начата с первой карточки. Эмодзи, временные заглушки, "
-        "экономика и поля сохранены; сброшены только отметки «проверено»."
+        "🔄 Проверка всех колод начата с первой карточки. Эмодзи, временные "
+        "заглушки, экономика и поля сохранены; сброшены только отметки «проверено»."
     )
+    await show_next(message, user_id)
+
+
+async def _restart_deck(message: Message, user_id: int, deck_id: int) -> None:
+    decks = {int(deck["deck_id"]): deck for deck in await get_all_decks_for_setup()}
+    deck = decks.get(deck_id)
+    if not deck:
+        await message.answer("Выбранная колода больше не существует в базе.")
+        return
+    await restart_schedule_card_reviews(deck_id)
+    await clear_setup_session(user_id)
+    await set_schedule_deck_scope(user_id, deck_id)
+    await message.answer(
+        "🔄 <b>Повторная проверка выбранной колоды</b>\n\n"
+        f"Колода №{deck_id}: <b>{deck.get('deck_name') or '—'}</b>\n"
+        "После последней карты мастер остановится и не перейдёт к другим колодам.",
+        parse_mode="HTML",
+    )
+    await show_next(message, user_id)
+
+
+@router.message(Command("schedule_setup"), F.chat.type == "private")
+@admin_only
+async def start_full_schedule_setup(message: Message) -> None:
+    user_id = int(message.from_user.id)
+    await clear_schedule_deck_scope(user_id)
     await show_next(message, user_id)
 
 
 @router.message(Command("schedule_setup_restart"), F.chat.type == "private")
 @admin_only
 async def restart_schedule_setup(message: Message) -> None:
-    await _restart(message, int(message.from_user.id))
+    await _show_deck_picker(message)
 
 
 @router.callback_query(F.data == "schsetup:restart")
 @admin_only
 async def restart_schedule_setup_callback(call: CallbackQuery) -> None:
+    await call.answer()
+    if not call.message:
+        return
+    await _show_deck_picker(call.message)
+
+
+@router.callback_query(F.data.startswith("schsetup:restart:"))
+@admin_only
+async def restart_selected_scope(call: CallbackQuery) -> None:
     if not call.message:
         await call.answer("Сообщение недоступно", show_alert=True)
         return
-    await call.answer("Начинаю с первой карточки")
-    await _restart(call.message, int(call.from_user.id))
+    token = rsplit_callback_data(call.data, ":", 1)[1]
+    user_id = int(call.from_user.id)
+    if token == "all":
+        await call.answer("Начинаю проверку всех колод")
+        await _restart_all(call.message, user_id)
+        return
+    try:
+        deck_id = int(token)
+    except ValueError:
+        await call.answer("Некорректная колода", show_alert=True)
+        return
+    await call.answer(f"Начинаю колоду №{deck_id}")
+    await _restart_deck(call.message, user_id, deck_id)
+
+
+@router.message(Command("schedule_setup_cancel"), F.chat.type == "private")
+@admin_only
+async def cancel_extended_schedule_setup(message: Message) -> None:
+    user_id = int(message.from_user.id)
+    await clear_schedule_deck_scope(user_id)
+    await clear_setup_session(user_id)
+    await message.answer("Мастер остановлен. Всё уже сохранённое осталось в базе.")
+
+
+@router.callback_query(F.data == "schsetup:stop")
+@admin_only
+async def stop_extended_schedule_setup(call: CallbackQuery) -> None:
+    user_id = int(call.from_user.id)
+    await clear_schedule_deck_scope(user_id)
+    await clear_setup_session(user_id)
+    await call.answer("Мастер остановлен")
+    if call.message:
+        await call.message.answer("Мастер остановлен. Всё уже сохранённое осталось в базе.")
 
 
 @router.message(Command("schedule_audit"), F.chat.type == "private")
@@ -69,8 +178,9 @@ async def extended_schedule_audit(message: Message) -> None:
         f"Колоды: {audit['decks_configured']}/{audit['decks_total']} (временных: {temp['decks']})\n"
         f"Карты: {audit['cards_verified']}/{audit['cards_total']} (временных: {temp['cards']})\n"
         f"Ошибки экономики: {len(errors)}\n\n{tail}\n\n"
-        "С начала: /schedule_setup_restart · временные: /schedule_temp",
+        "Выбор колоды: /schedule_setup_restart · временные: /schedule_temp",
         parse_mode="HTML",
     )
+
 
 __all__ = ["router"]
