@@ -18,6 +18,7 @@ tools = ["pandas==2.3.3"]
 [project.scripts]
 auction-bot = "main:main"
 auction-userbot = "userbot.entrypoint:run"
+auction-route-inventory = "bot.bootstrap.route_inventory:main"
 
 [tool.setuptools]
 py-modules = ["config", "fsm_states", "main"]
