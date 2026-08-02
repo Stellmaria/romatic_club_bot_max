@@ -1,9 +1,19 @@
-"""Aiogram router composition in deterministic dispatch order."""
+"""Declarative aiogram router composition and route inventory."""
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from aiogram import Dispatcher
 
+from bot.bootstrap.router_registry import (
+    FeatureRegistration,
+    MiddlewareRegistration,
+    MiddlewareScope,
+    PrepareHook,
+    RoutePriority,
+    RouterRegistry,
+)
 from bot.handlers.admin.admin_navigation import router as admin_navigation_router
 from bot.handlers.admin.admin_panel import router as admin_panel_router
 from bot.handlers.admin.admin_panel_system import router as admin_panel_system_router
@@ -52,58 +62,383 @@ from bot.middlewares.user_sync import UserSyncMiddleware
 from bot.telegram.user_entrypoints import configure_user_entrypoints
 
 
-def register_all_routers(dispatcher: Dispatcher, *, debug_messages: bool = False) -> None:
-    """Attach every middleware and router exactly once."""
-
+def _configure_user_entrypoints() -> None:
     configure_user_entrypoints(add_lot=addlot_start, card_subscription=start_subscribe_card)
-    admin_panel_router.include_router(card_economy_router)
+
+
+def _register_auction_extension_handlers() -> None:
     register_card_subscribe_handlers(auctions_router)
     register_broadcast_handlers(auctions_router)
+
+
+def _register_admin_extension_handlers() -> None:
     register_cards_admin_handlers(admin_panel_router)
 
-    if debug_messages:
-        dispatcher.message.outer_middleware(DebugAllMessages())
 
-    dispatcher.include_router(admin_navigation_router)
-    dispatcher.include_router(admin_panel_system_router)
-    # Extended setup stages must precede the broad base setup session handler.
-    dispatcher.include_router(schedule_setup_fields_router)
-    dispatcher.include_router(schedule_setup_restart_router)
-    dispatcher.include_router(schedule_setup_temp_router)
-    dispatcher.include_router(schedule_setup_router)
+def _feature(
+    name: str,
+    priority: RoutePriority,
+    router,
+    *,
+    parent: str | None = None,
+    dependencies: tuple[str, ...] = (),
+    commands: tuple[str, ...] = (),
+    callbacks: tuple[str, ...] = (),
+    hooks: tuple[PrepareHook, ...] = (),
+    description: str,
+) -> FeatureRegistration:
+    return FeatureRegistration(
+        name=name,
+        priority=priority,
+        router=router,
+        parent=parent,
+        dependencies=dependencies,
+        commands=commands,
+        callback_namespaces=callbacks,
+        prepare_hooks=hooks,
+        description=description,
+    )
 
-    dispatcher.include_router(user_access_control_router)
-    dispatcher.include_router(auction_schedule_router)
-    dispatcher.include_router(user_menu_router)
-    dispatcher.include_router(profile_router)
-    dispatcher.include_router(users_router)
-    dispatcher.include_router(submission_recovery_router)
-    dispatcher.include_router(auctions_router)
-    dispatcher.include_router(auction_exchange_router)
-    dispatcher.include_router(emoji_setup_router)
 
-    dispatcher.update.outer_middleware(TelegramBoundaryMiddleware())
-    dispatcher.update.outer_middleware(ExpiredCallbackMiddleware())
-    dispatcher.update.outer_middleware(UserSyncMiddleware())
+@lru_cache(maxsize=1)
+def get_router_registry() -> RouterRegistry:
+    """Return the immutable process-wide feature registry."""
 
-    dispatcher.include_router(auction_bidding_router)
-    dispatcher.include_router(auction_autobid_router)
-    dispatcher.include_router(auction_admin_lifecycle_router)
-    dispatcher.include_router(auction_warnings_router)
-    dispatcher.include_router(auction_winner_manual_router)
-    dispatcher.include_router(auction_winner_exchange_router)
-    dispatcher.include_router(auction_winner_print_router)
-    dispatcher.include_router(comments_router)
-    dispatcher.include_router(outbox_admin_router)
-    dispatcher.include_router(media_assets_router)
-    dispatcher.include_router(admin_panel_router)
-    dispatcher.include_router(moderation_router)
-    dispatcher.include_router(admin_appeals_router)
-    dispatcher.include_router(luxury_schedule_router)
-    dispatcher.include_router(market_router)
-    dispatcher.include_router(market_flow)
-    dispatcher.include_router(market_diamonds)
-    dispatcher.include_router(market_manage)
-    dispatcher.include_router(stats_posts_router)
-    dispatcher.include_router(uid_verification_router)
-    dispatcher.include_router(uid_verification_admin_router)
+    features = (
+        FeatureRegistration(
+            name="system.middleware",
+            priority=RoutePriority.SYSTEM_OWNER,
+            middlewares=(
+                MiddlewareRegistration(
+                    name="debug-all-messages",
+                    scope=MiddlewareScope.MESSAGE,
+                    factory=DebugAllMessages,
+                    debug_only=True,
+                ),
+                MiddlewareRegistration(
+                    name="telegram-boundary",
+                    scope=MiddlewareScope.UPDATE,
+                    factory=TelegramBoundaryMiddleware,
+                ),
+                MiddlewareRegistration(
+                    name="expired-callback",
+                    scope=MiddlewareScope.UPDATE,
+                    factory=ExpiredCallbackMiddleware,
+                ),
+                MiddlewareRegistration(
+                    name="user-sync",
+                    scope=MiddlewareScope.UPDATE,
+                    factory=UserSyncMiddleware,
+                ),
+            ),
+            prepare_hooks=(
+                PrepareHook("user-entrypoints", _configure_user_entrypoints),
+            ),
+            description="Global Telegram boundary and user lifecycle middleware.",
+        ),
+        _feature(
+            "admin.navigation",
+            RoutePriority.SYSTEM_OWNER,
+            admin_navigation_router,
+            callbacks=("admin_nav",),
+            description="Owner/admin navigation entrypoints.",
+        ),
+        _feature(
+            "admin.system",
+            RoutePriority.SYSTEM_OWNER,
+            admin_panel_system_router,
+            commands=("admin", "admin_panel", "system", "supervisor", "restart", "restart_userbot"),
+            callbacks=("system",),
+            description="Owner-only process and Supervisor controls.",
+        ),
+        _feature(
+            "schedule.setup.fields",
+            RoutePriority.SETUP_FSM,
+            schedule_setup_fields_router,
+            callbacks=("schedule_setup_fields",),
+            description="Narrow field-editing stages for schedule setup.",
+        ),
+        _feature(
+            "schedule.setup.restart",
+            RoutePriority.SETUP_FSM,
+            schedule_setup_restart_router,
+            callbacks=("schedule_setup_restart",),
+            description="Restart/recovery transitions for schedule setup.",
+        ),
+        _feature(
+            "schedule.setup.temporary",
+            RoutePriority.SETUP_FSM,
+            schedule_setup_temp_router,
+            callbacks=("schedule_setup_temp",),
+            description="Temporary schedule setup stages.",
+        ),
+        _feature(
+            "schedule.setup.base",
+            RoutePriority.SETUP_FSM,
+            schedule_setup_router,
+            dependencies=(
+                "schedule.setup.fields",
+                "schedule.setup.restart",
+                "schedule.setup.temporary",
+            ),
+            callbacks=("schedule_setup",),
+            description="Broad base setup FSM, deliberately after its narrow stages.",
+        ),
+        _feature(
+            "users.access-control",
+            RoutePriority.EXACT_COMMANDS,
+            user_access_control_router,
+            callbacks=("user_access",),
+            description="Administrative user access controls.",
+        ),
+        _feature(
+            "auctions.schedule",
+            RoutePriority.EXACT_COMMANDS,
+            auction_schedule_router,
+            callbacks=("auction_schedule",),
+            description="Auction schedule selection and publication entrypoints.",
+        ),
+        _feature(
+            "users.menu",
+            RoutePriority.EXACT_COMMANDS,
+            user_menu_router,
+            commands=("start",),
+            callbacks=(
+                "user_menu",
+                "user_day",
+                "user_schedule",
+                "user_exchange",
+                "user_notify",
+                "notify_toggle",
+            ),
+            description="Canonical private-user menu and exact /start entrypoint.",
+        ),
+        _feature(
+            "users.profile",
+            RoutePriority.EXACT_COMMANDS,
+            profile_router,
+            callbacks=("profile",),
+            description="User profile actions.",
+        ),
+        _feature(
+            "users.core",
+            RoutePriority.EXACT_COMMANDS,
+            users_router,
+            callbacks=("users",),
+            description="User lots and account commands.",
+        ),
+        _feature(
+            "auctions.submission-recovery",
+            RoutePriority.EXACT_COMMANDS,
+            submission_recovery_router,
+            callbacks=("submission_recovery",),
+            description="Recovery before broad auction submission handlers.",
+        ),
+        _feature(
+            "auctions.core",
+            RoutePriority.EXACT_COMMANDS,
+            auctions_router,
+            callbacks=("auction",),
+            hooks=(
+                PrepareHook(
+                    "auctions-extension-handlers",
+                    _register_auction_extension_handlers,
+                ),
+            ),
+            description="Core auction commands plus registry-managed legacy extensions.",
+        ),
+        _feature(
+            "exchange.catalog",
+            RoutePriority.EXACT_COMMANDS,
+            auction_exchange_router,
+            callbacks=("exchange", "ex_view"),
+            description="Exchange submission and approved-offer browsing.",
+        ),
+        _feature(
+            "emoji.setup",
+            RoutePriority.EXACT_COMMANDS,
+            emoji_setup_router,
+            callbacks=("emoji_setup",),
+            description="Exact emoji setup entrypoints.",
+        ),
+        _feature(
+            "auctions.bidding",
+            RoutePriority.CALLBACKS,
+            auction_bidding_router,
+            callbacks=("bid",),
+            description="Bid placement callbacks.",
+        ),
+        _feature(
+            "auctions.autobid",
+            RoutePriority.CALLBACKS,
+            auction_autobid_router,
+            callbacks=("autobid",),
+            description="Automatic bidding callbacks.",
+        ),
+        _feature(
+            "auctions.admin-lifecycle",
+            RoutePriority.CALLBACKS,
+            auction_admin_lifecycle_router,
+            callbacks=("auction_admin",),
+            description="Moderation and lifecycle callbacks for auctions.",
+        ),
+        _feature(
+            "auctions.warnings",
+            RoutePriority.CALLBACKS,
+            auction_warnings_router,
+            callbacks=("auction_warning",),
+            description="Auction warning and confirmation callbacks.",
+        ),
+        _feature(
+            "auctions.winner-manual",
+            RoutePriority.CALLBACKS,
+            auction_winner_manual_router,
+            callbacks=("winner_manual",),
+            description="Manual winner processing.",
+        ),
+        _feature(
+            "auctions.winner-exchange",
+            RoutePriority.CALLBACKS,
+            auction_winner_exchange_router,
+            callbacks=("winner_exchange",),
+            description="Exchange winner processing.",
+        ),
+        _feature(
+            "auctions.winner-print",
+            RoutePriority.CALLBACKS,
+            auction_winner_print_router,
+            callbacks=("winner_print",),
+            description="Winner printable output.",
+        ),
+        _feature(
+            "auctions.comments",
+            RoutePriority.CALLBACKS,
+            comments_router,
+            callbacks=("auction_comments",),
+            description="Auction comment callbacks.",
+        ),
+        _feature(
+            "admin.outbox",
+            RoutePriority.CALLBACKS,
+            outbox_admin_router,
+            callbacks=("outbox",),
+            description="Transactional outbox diagnostics.",
+        ),
+        _feature(
+            "admin.media-assets",
+            RoutePriority.CALLBACKS,
+            media_assets_router,
+            callbacks=("media_assets",),
+            description="Media asset administration.",
+        ),
+        _feature(
+            "admin.panel",
+            RoutePriority.CALLBACKS,
+            admin_panel_router,
+            callbacks=("admin_panel",),
+            hooks=(
+                PrepareHook(
+                    "admin-extension-handlers",
+                    _register_admin_extension_handlers,
+                ),
+            ),
+            description="Main admin panel and registry-managed extension handlers.",
+        ),
+        _feature(
+            "admin.card-economy",
+            RoutePriority.CALLBACKS,
+            card_economy_router,
+            parent="admin.panel",
+            callbacks=("card_economy",),
+            description="Nested card economy routes owned by the admin panel.",
+        ),
+        _feature(
+            "admin.moderation",
+            RoutePriority.CALLBACKS,
+            moderation_router,
+            callbacks=("moderation",),
+            description="General moderation callbacks.",
+        ),
+        _feature(
+            "admin.appeals",
+            RoutePriority.CALLBACKS,
+            admin_appeals_router,
+            callbacks=("appeals",),
+            description="Appeal review callbacks.",
+        ),
+        _feature(
+            "schedule.luxury",
+            RoutePriority.CALLBACKS,
+            luxury_schedule_router,
+            callbacks=("luxsched",),
+            description="Luxury schedule callbacks.",
+        ),
+        _feature(
+            "market.core",
+            RoutePriority.CALLBACKS,
+            market_router,
+            callbacks=("market",),
+            description="Market administration root.",
+        ),
+        _feature(
+            "market.add-flow",
+            RoutePriority.CALLBACKS,
+            market_flow,
+            dependencies=("market.core",),
+            callbacks=("market_add",),
+            description="Market item creation flow.",
+        ),
+        _feature(
+            "market.diamonds",
+            RoutePriority.CALLBACKS,
+            market_diamonds,
+            dependencies=("market.core",),
+            callbacks=("market_diamonds",),
+            description="Diamond market flow.",
+        ),
+        _feature(
+            "market.manage",
+            RoutePriority.CALLBACKS,
+            market_manage,
+            dependencies=("market.core",),
+            callbacks=("market_manage",),
+            description="Market management flow.",
+        ),
+        _feature(
+            "admin.stats-posts",
+            RoutePriority.CALLBACKS,
+            stats_posts_router,
+            callbacks=("stats_posts",),
+            description="Statistics publication callbacks.",
+        ),
+        _feature(
+            "uid.user-verification",
+            RoutePriority.CALLBACKS,
+            uid_verification_router,
+            callbacks=("uid_verify",),
+            description="User UID verification flow.",
+        ),
+        _feature(
+            "uid.admin-verification",
+            RoutePriority.CALLBACKS,
+            uid_verification_admin_router,
+            callbacks=("uid_admin",),
+            description="Administrative UID verification flow.",
+        ),
+    )
+    return RouterRegistry(features)
+
+
+def register_all_routers(dispatcher: Dispatcher, *, debug_messages: bool = False) -> None:
+    """Validate and install every feature exactly once."""
+
+    get_router_registry().install(dispatcher, debug_messages=debug_messages)
+
+
+def route_inventory_json(*, indent: int | None = 2) -> str:
+    """Return the operator/CI route inventory without mutating a dispatcher."""
+
+    return get_router_registry().inventory_json(indent=indent)
+
+
+__all__ = ["get_router_registry", "register_all_routers", "route_inventory_json"]
