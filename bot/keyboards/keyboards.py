@@ -10,7 +10,7 @@ from aiogram.types import (
 
 USER_MENU_ADD_LOT = "🎴 Подать лот"
 USER_MENU_MY_LOTS = "📦 Мои лоты"
-USER_MENU_SCHEDULE = "📅 Расписание"
+USER_MENU_SCHEDULE = "📆 Расписание"
 USER_MENU_EXCHANGE = "🛍 Биржа"
 USER_MENU_NOTIFICATIONS = "🔔 Уведомления"
 USER_MENU_SUBSCRIPTIONS = "🃏 Подписки"
