@@ -42,6 +42,8 @@ from bot.handlers.emoji_setup import router as emoji_setup_router
 from bot.handlers.helper.appeals import router as admin_appeals_router
 from bot.handlers.profile import router as profile_router
 from bot.handlers.uid_verification import router as uid_verification_router
+from bot.handlers.uid_verification_admin import router as uid_verification_admin_router
+from bot.handlers.user_menu import router as user_menu_router
 from bot.handlers.users import router as users_router
 from bot.middlewares.debug import DebugAllMessages
 from bot.middlewares.expired_callback import ExpiredCallbackMiddleware
@@ -71,6 +73,7 @@ def register_all_routers(dispatcher: Dispatcher, *, debug_messages: bool = False
     dispatcher.include_router(schedule_setup_router)
 
     dispatcher.include_router(auction_schedule_router)
+    dispatcher.include_router(user_menu_router)
     dispatcher.include_router(profile_router)
     dispatcher.include_router(users_router)
     dispatcher.include_router(submission_recovery_router)
