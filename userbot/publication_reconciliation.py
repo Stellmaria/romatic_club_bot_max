@@ -44,28 +44,35 @@ async def reconcile_recent_auction_publications(
     if target is None:
         return 0
 
+    scan_limit = max(1, int(limit))
     recovery = service or await AuctionPublicationRecoveryService.create()
+    remaining = set(
+        await recovery.recoverable_auction_ids(limit=scan_limit)
+    )
+    if not remaining:
+        return 0
+
     recovered = 0
-    async for message in telegram_client.iter_messages(
-        target,
-        limit=max(1, int(limit)),
-    ):
+    async for message in telegram_client.iter_messages(target, limit=scan_limit):
         message_id = int(getattr(message, "id", 0) or 0)
         if message_id <= 0:
             continue
         auction_id = extract_auction_id(getattr(message, "message", None))
-        if auction_id is None:
+        if auction_id is None or auction_id not in remaining:
             continue
         if await recovery.confirm_channel_post(
             auction_id,
             message_id=message_id,
         ):
             recovered += 1
+            remaining.discard(auction_id)
             logger.warning(
                 "Recovered auction %s from Telegram channel message %s",
                 auction_id,
                 message_id,
             )
+            if not remaining:
+                break
     return recovered
 
 
