@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from bot.bootstrap.routers import get_router_registry
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -93,8 +95,8 @@ def test_day_query_is_pinned_to_moscow_calendar_date() -> None:
 
 
 def test_priority_command_routers_precede_stateful_auction_router() -> None:
-    source = (ROOT / "bot/bootstrap/routers.py").read_text(encoding="utf-8")
-    schedule = source.index("include_router(auction_schedule_router)")
-    users = source.index("include_router(users_router)")
-    auctions = source.index("include_router(auctions_router)")
+    names = [feature.name for feature in get_router_registry().ordered_features]
+    schedule = names.index("auctions.schedule")
+    users = names.index("users.core")
+    auctions = names.index("auctions.core")
     assert schedule < users < auctions
