@@ -25,8 +25,7 @@ class AuctionFinalizationRepository:
                         SELECT auction_id
                         FROM public.auctions
                         WHERE status='active'
-                          AND date_trunc('minute', end_time)
-                              + INTERVAL '1 minute' <= $1
+                          AND date_trunc('minute', end_time) <= $1
                         ORDER BY end_time, auction_id
                         FOR UPDATE SKIP LOCKED
                         LIMIT $2

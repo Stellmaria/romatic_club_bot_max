@@ -1,9 +1,4 @@
-"""Bot process lifecycle.
-
-The module is safe to import. Runtime dependencies that still use the temporary
-legacy adapter are imported only after the validated process configuration has
-been installed by :func:`run_bot`.
-"""
+"""Bot process lifecycle and concrete composition root."""
 
 from __future__ import annotations
 
@@ -55,7 +50,7 @@ async def _run_polling_with_worker_monitor(
 
 
 async def run_bot(config: BotProcessSettings) -> None:
-    """Run the bot from one explicitly constructed process configuration."""
+    """Run the bot from explicitly constructed configuration and adapters."""
 
     bot_settings = config.bot
     configure_logging(
@@ -69,9 +64,8 @@ async def run_bot(config: BotProcessSettings) -> None:
     configure_legacy_config(config)
     configure_uid_crypto(bot_settings.uid_hash_key, bot_settings.uid_enc_key)
 
-    # Delayed imports keep importing this module independent from runtime
-    # configuration while the legacy migration remains in progress.
     from bot.bootstrap import build_background_task_specs, register_all_routers
+    from bot.bootstrap.container import ApplicationContainer
     from bot.telegram.protection import patch_bot_protect_content
     from db.admin import is_admin
     from db.lifecycle import close_db, init_db
@@ -86,13 +80,21 @@ async def run_bot(config: BotProcessSettings) -> None:
         await init_db(database_runtime)
         logger.info("Database startup complete")
 
+        container = ApplicationContainer.build(
+            pool=database_runtime.require_pool(),
+            storage_root=config.runtime_dir / "files",
+        )
+
         if supervisor_client is not None:
             await supervisor_client.start()
             logger.info("Supervisor client session initialized")
 
         telegram_bot = Bot(token=bot_settings.bot_token)
         patch_bot_protect_content(telegram_bot, is_admin=is_admin)
-        dispatcher = Dispatcher(supervisor_client=supervisor_client)
+        dispatcher = Dispatcher(
+            supervisor_client=supervisor_client,
+            application_container=container,
+        )
         register_all_routers(
             dispatcher,
             debug_messages=bot_settings.debug_middleware,
@@ -130,9 +132,7 @@ async def run_bot(config: BotProcessSettings) -> None:
             cleanup_steps.append(("Telegram bot session", telegram_bot.session.close))
         if supervisor_client is not None:
             cleanup_steps.append(("Supervisor client session", supervisor_client.close))
-        cleanup_steps.append(
-            ("database runtime", lambda: close_db(database_runtime))
-        )
+        cleanup_steps.append(("database runtime", lambda: close_db(database_runtime)))
 
         cleanup_error: BaseException | None = None
         for resource_name, cleanup in cleanup_steps:
