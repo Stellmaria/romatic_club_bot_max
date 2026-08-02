@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 
 from telethon import events
@@ -19,6 +20,8 @@ from userbot.schedule_review_service import (
     get_schedule_review,
     schedule_review_snapshot,
 )
+
+logger = logging.getLogger("userbot.schedule_admin")
 
 
 async def _is_authorized(event: object) -> bool:
@@ -72,7 +75,21 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
 
     if command == "/schedule_preview":
         target_date = datetime.now(MOSCOW).date() + timedelta(days=1)
-        rendered = await preview_schedule_announcement(target_date, config=legacy_config)
+        try:
+            rendered = await preview_schedule_announcement(
+                target_date,
+                config=legacy_config,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to render manual schedule preview for %s",
+                target_date,
+            )
+            await event.reply(
+                "❌ Не удалось собрать превью расписания. "
+                "Ошибка записана в журнал userbot."
+            )
+            return
         if rendered is None:
             await event.reply(f"На {target_date:%d.%m.%Y} нет живых лотов.")
             return
