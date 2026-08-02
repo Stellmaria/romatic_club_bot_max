@@ -87,7 +87,7 @@ def test_admin_lifecycle_router_is_extracted_and_registered() -> None:
     assert moved <= extracted_functions
     lifecycle = features["auctions.admin-lifecycle"]
     assert lifecycle.router is not None
-    assert lifecycle.router.name == "bot.handlers.auction.admin_lifecycle"
+    assert lifecycle.router.name == "auction-admin-lifecycle"
     assert lifecycle.callback_namespaces == ("auction_admin",)
 
 
