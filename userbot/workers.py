@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from bot.core.legacy_config import legacy_config
 from db.auctions import list_autobids
 from userbot.autobid_engine import maybe_place_autobid
+from userbot.publication_reconciliation import publication_reconciliation_watchdog
 from userbot.schedule_publication import schedule_announcement_watchdog
 
 if TYPE_CHECKING:
@@ -34,4 +35,8 @@ async def autobid_watchdog(telegram_client: TelegramClient) -> None:
         await asyncio.sleep(15)
 
 
-__all__ = ["autobid_watchdog", "schedule_announcement_watchdog"]
+__all__ = [
+    "autobid_watchdog",
+    "publication_reconciliation_watchdog",
+    "schedule_announcement_watchdog",
+]
