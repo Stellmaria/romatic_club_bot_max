@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Iterable
 
 from bot.domain.auctions.enums import Currency, normalize_currency_choices
@@ -24,14 +24,14 @@ class BidOffer:
 
 
 def auction_bidding_closes_at(end_time: datetime) -> datetime:
-    """Return the exclusive deadline shown in the auction caption.
+    """Return the exclusive deadline after the displayed bidding minute.
 
-    A displayed end time of 18:30 accepts bids strictly before 18:30:00.
-    Persisted legacy seconds are ignored so rows stored as 18:30:59 follow the
-    same public contract instead of silently accepting bids until 18:31.
+    A displayed bidding minute of 18:30 accepts bids through
+    18:30:59.999999 and closes at 18:31:00. Stored seconds are deliberately
+    ignored because the public contract is minute-based.
     """
 
-    return end_time.replace(second=0, microsecond=0)
+    return end_time.replace(second=0, microsecond=0) + timedelta(minutes=1)
 
 
 def comparison_multiplier(currency: Currency) -> int:
