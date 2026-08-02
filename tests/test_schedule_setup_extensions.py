@@ -59,6 +59,7 @@ def test_restart_only_resets_review_flags(monkeypatch) -> None:
 
     async def fake_execute(query: str, *args: object):
         captured["query"] = query
+        captured["args"] = args
         return "OK"
 
     monkeypatch.setattr(schedule_setup_extensions, "execute", fake_execute)
@@ -67,6 +68,45 @@ def test_restart_only_resets_review_flags(monkeypatch) -> None:
     assert "verified = false" in query
     assert "DELETE" not in query.upper()
     assert "custom_emoji_id" not in query
+    assert captured["args"] == ()
+
+
+def test_restart_can_be_limited_to_selected_deck(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_execute(query: str, *args: object):
+        captured["query"] = query
+        captured["args"] = args
+        return "OK"
+
+    monkeypatch.setattr(schedule_setup_extensions, "execute", fake_execute)
+    asyncio.run(schedule_setup_extensions.restart_schedule_card_reviews(23))
+    query = str(captured["query"])
+    assert "verified = false" in query
+    assert "FROM public.cards" in query
+    assert "WHERE deck_id = $1" in query
+    assert captured["args"] == (23,)
+
+
+def test_selected_deck_scope_is_persisted_and_cleared(monkeypatch) -> None:
+    calls: list[tuple[str, tuple[object, ...]]] = []
+
+    async def fake_execute(query: str, *args: object):
+        calls.append((query, args))
+        return "OK"
+
+    async def fake_fetchrow(query: str, *args: object):
+        calls.append((query, args))
+        return {"deck_id": 23}
+
+    monkeypatch.setattr(schedule_setup_extensions, "execute", fake_execute)
+    monkeypatch.setattr(schedule_setup_extensions, "fetchrow", fake_fetchrow)
+    asyncio.run(schedule_setup_extensions.set_schedule_deck_scope(42, 23))
+    assert asyncio.run(schedule_setup_extensions.get_schedule_deck_scope(42)) == 23
+    asyncio.run(schedule_setup_extensions.clear_schedule_deck_scope(42))
+    sql = "\n".join(query for query, _ in calls)
+    assert "INSERT INTO public.schedule_setup_deck_scopes" in sql
+    assert "DELETE FROM public.schedule_setup_deck_scopes" in sql
 
 
 def test_extension_modules_and_migration_contract() -> None:
@@ -81,10 +121,14 @@ def test_extension_modules_and_migration_contract() -> None:
 
     assert 'Command("schedule_setup_restart")' in restart
     assert 'Command("schedule_audit")' in restart
+    assert "schsetup:restart:all" in restart
+    assert "set_schedule_deck_scope" in restart
     assert 'Command("schedule_temp")' in temp
     assert "schtmpreplace:" in temp
     assert "schcard:fields:" in fields
     assert "update_schedule_card_field" in fields
+    assert "get_schedule_deck_scope" in ui
+    assert "_show_next_scoped_card" in ui
     assert "base._show_next_step = show_next" in ui
     assert "_CARD_FIELDS" in persistence and "_DECK_FIELDS" in persistence
     for name in ("schedule_setup_fields_router", "schedule_setup_restart_router", "schedule_setup_temp_router"):
@@ -94,3 +138,5 @@ def test_extension_modules_and_migration_contract() -> None:
         )
     assert "CREATE TABLE IF NOT EXISTS public.schedule_temporary_emoji_marks" in migration
     assert "PRIMARY KEY (scope, entity_key)" in migration
+    assert "CREATE TABLE IF NOT EXISTS public.schedule_setup_deck_scopes" in migration
+    assert "user_id bigint PRIMARY KEY" in migration
