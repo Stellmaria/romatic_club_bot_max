@@ -1,0 +1,44 @@
+diff --git a/bot/handlers/admin/uid_verification_admin.py b/bot/handlers/admin/uid_verification_admin.py
+index 72aefb4..2cf81ea 100644
+--- a/bot/handlers/admin/uid_verification_admin.py
++++ b/bot/handlers/admin/uid_verification_admin.py
+@@ -18,6 +18,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
+ from bot.handlers.admin.helper.new.keyboards import menu_keyboard
+ from bot.handlers.admin.helper.new.wrapper import admin_only
+ from bot.handlers.admin.logs_admin import send_admin_log
++from bot.services.uid_verification import (
++    approve_uid_verification_request,
++    reject_uid_verification_request,
++)
+ from bot.telegram.states import ModActionFSM, UIDVerificationRevisionFSM
+ 
+ from . import master_ban
+diff --git a/bot/handlers/auction/exchange/submission.py b/bot/handlers/auction/exchange/submission.py
+index e3f8de7..b006f55 100644
+--- a/bot/handlers/auction/exchange/submission.py
++++ b/bot/handlers/auction/exchange/submission.py
+@@ -480,7 +480,7 @@ async def _finalize_exchange_request(
+         submit_many=service.submit_many,
+     )
+     try:
+-        result = await use_case.execute(
++        result = await use_case.run(
+             SubmitExchangeCommand(
+                 user_id=user_id,
+                 deck_id=deck_id_i,
+diff --git a/bot/use_cases/exchange_submission.py b/bot/use_cases/exchange_submission.py
+index 1955647..0a70196 100644
+--- a/bot/use_cases/exchange_submission.py
++++ b/bot/use_cases/exchange_submission.py
+@@ -52,6 +52,11 @@ class SubmitExchangeUseCase:
+         self._price_for_deck = price_for_deck
+         self._submit_many = submit_many
+ 
++    async def run(self, command: SubmitExchangeCommand) -> SubmittedExchange:
++        """Execute the submission without colliding with SQL-driver call names."""
++
++        return await self.execute(command)
++
+     async def execute(self, command: SubmitExchangeCommand) -> SubmittedExchange:
+         card_ids = tuple(dict.fromkeys(int(card_id) for card_id in command.card_ids))
+         mode = (command.mode or "card").strip().lower()
