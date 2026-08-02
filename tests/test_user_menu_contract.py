@@ -14,7 +14,7 @@ def test_user_keyboard_exposes_all_primary_sections() -> None:
     for label in (
         "🎴 Подать лот",
         "📦 Мои лоты",
-        "📅 Расписание",
+        "📆 Расписание",
         "🛍 Биржа",
         "🔔 Уведомления",
         "🃏 Подписки",
@@ -53,9 +53,18 @@ def test_user_menu_has_universal_home_and_button_help() -> None:
 
     assert 'callback_data="user_menu|home"' in source
     assert "await state.clear()" in source
+    assert "user=call.from_user" in source
     assert "Здесь всё работает через кнопки" in source
     assert "Как пользоваться ботом" in source
     assert "Кнопка «🏠 Меню»" in source
+
+
+def test_user_schedule_label_does_not_collide_with_priority_admin_router() -> None:
+    keyboard = _source("bot/keyboards/keyboards.py")
+    admin_navigation = _source("bot/handlers/admin/admin_navigation.py")
+
+    assert 'USER_MENU_SCHEDULE = "📆 Расписание"' in keyboard
+    assert 'F.text == "📅 Расписание"' in admin_navigation
 
 
 def test_user_menu_precedes_legacy_user_routers() -> None:
