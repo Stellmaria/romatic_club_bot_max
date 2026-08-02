@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
+from bot.core.time import to_moscow
+from bot.domain.auctions import auction_bidding_closes_at
 from bot.repositories.admin_auctions import AdminAuctionRepository
 from db.pool import get_db_pool
+
+
+def _auction_close_label(value: object) -> str | None:
+    if not isinstance(value, datetime):
+        return None
+    return to_moscow(auction_bidding_closes_at(value)).strftime("%H:%M")
 
 
 class AdminAuctionContextService:
@@ -33,6 +42,7 @@ class AdminAuctionContextService:
                 "start_price": row["start_price"],
                 "currency": row["currency"],
                 "end_time": row["end_time"],
+                "end_time_str": _auction_close_label(row.get("end_time")),
                 "comment": row["comment"],
                 "status": row["status"],
                 "owners_count": row["owners_count"],
