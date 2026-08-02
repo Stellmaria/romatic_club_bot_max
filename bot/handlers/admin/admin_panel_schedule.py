@@ -52,21 +52,19 @@ from bot.handlers.admin.helper.admin_keyboards import (
     months_keyboard,
 )
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
-from db.auctions import (
+from bot.services.handler_persistence import (
     get_auctions_by_date_with_owners,
     get_lot_by_id,
     get_lot_owners,
+    get_user,
+    is_luxury_user,
+    log_audit_action,
 )
 from bot.handlers.admin.helper.admin_service import (
     get_free_slots_and_schedule_for_lot,
     parse_auction_and_date_from_callback,
 )
 from bot.services.admin_owners import get_lot_owners_text
-from db.users import (
-    get_user,
-    is_luxury_user,
-)
-from db.admin import log_audit_action
 from bot.handlers.admin.action_support.exchange import safe_answer_photo
 from bot.services.admin_logging import send_admin_log
 from bot.handlers.admin.logs_admin import (

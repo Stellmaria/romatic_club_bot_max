@@ -20,7 +20,13 @@ from bot.use_cases.common import ApplicationError
 from bot.use_cases.exchange_submission import SubmitExchangeCommand, SubmitExchangeUseCase
 from bot.services.exchange_submission import ExchangeSubmissionQueries
 from bot.telegram.media import answer_media_any as _answer_media_any
-from db.legacy import get_card_by_id, get_cards_by_ids, get_cards_ids_by_deck, get_deck_by_id, is_luxury_user
+from bot.services.handler_persistence import (
+    get_card_by_id,
+    get_cards_by_ids,
+    get_cards_ids_by_deck,
+    get_deck_by_id,
+    is_luxury_user,
+)
 from bot.legacy_fsm import ExchangeFSM, UserAddLotFSM
 
 router = Router(name="auction_exchange_submission")

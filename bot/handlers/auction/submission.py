@@ -38,21 +38,17 @@ from bot.use_cases.common import ApplicationPermissionDenied, ApplicationValidat
 from bot.services.luxury import get_user_luxury_level
 from bot.telegram.media import answer_media_any as _answer_media_any
 from bot.core.legacy_config import legacy_config
-from db.cards import (
-    get_all_decks,
-    get_cards_by_deck,
-    get_card_by_id,
-)
-from db.admin import log_admin_action
-from db.users import (
-    is_luxury_user,
-    get_user,
-)
-from db.auctions import (
-    get_lots_by_owner,
-    has_pending_lot,
+from bot.services.handler_persistence import (
     count_sold_by_card_id,
     count_sold_same_card,
+    get_all_decks,
+    get_card_by_id,
+    get_cards_by_deck,
+    get_lots_by_owner,
+    get_user,
+    has_pending_lot,
+    is_luxury_user,
+    log_admin_action,
 )
 from bot.telegram.states import ExchangeFSM, UserAddLotFSM
 

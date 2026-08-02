@@ -28,7 +28,7 @@ from bot.services.auction_workflows import AuctionOwnerService
 from bot.use_cases.common import ApplicationError, ApplicationInvalidState
 from bot.use_cases.auction_cancellation import CancelOwnedAuctionCommand, CancelOwnedAuctionUseCase
 from bot.use_cases.user_lot_edit import EditOwnedLotCommand, EditOwnedLotUseCase
-from db.legacy import (
+from bot.services.handler_persistence import (
     add_delete_request,
     get_auctions_by_date,
     get_lot_by_id,

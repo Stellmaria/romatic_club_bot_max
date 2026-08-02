@@ -83,21 +83,19 @@ from bot.handlers.admin.helper.new.formatting import (
     format_pending_lot,
     get_lot_owners_with_levels,
 )
-from db.auctions import (
+from bot.services.handler_persistence import (
     get_auctions_by_date,
     get_auctions_by_date_with_owners,
     get_delete_request,
     get_lot_by_id,
     get_lot_owners,
+    get_user,
+    is_luxury_user,
+    log_audit_action,
     update_delete_request_status,
 )
 from bot.handlers.admin.helper.admin_service import get_free_slots_and_schedule_for_lot
 from bot.services.admin_owners import get_lot_owners_text
-from db.users import (
-    get_user,
-    is_luxury_user,
-)
-from db.admin import log_audit_action
 from bot.handlers.helper.helpers_users import notify_lot_owner
 from bot.handlers.admin.action_support.transport import (
     owner_or_secret_required,

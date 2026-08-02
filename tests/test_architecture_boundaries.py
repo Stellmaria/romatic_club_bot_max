@@ -152,3 +152,27 @@ def test_production_uses_package_modules_not_root_compatibility_facades() -> Non
             violations[path.relative_to(ROOT).as_posix()] = legacy
 
     assert violations == {}
+
+
+def test_issue30_critical_handlers_do_not_import_database_modules() -> None:
+    critical_handlers = (
+        "bot/handlers/admin/admin_panel_schedule.py",
+        "bot/handlers/admin/moderation_lots.py",
+        "bot/handlers/admin/uid_verification_review.py",
+        "bot/handlers/auction/exchange/moderation.py",
+        "bot/handlers/auction/exchange/submission.py",
+        "bot/handlers/auction/publication.py",
+        "bot/handlers/auction/submission.py",
+        "bot/handlers/users.py",
+        "bot/handlers/admin/action_support/roles.py",
+    )
+    violations: dict[str, list[str]] = {}
+    for relative in critical_handlers:
+        imported = sorted(
+            name
+            for name in _imports(ROOT / relative)
+            if name == "db" or name.startswith("db.") or name == "database" or name.startswith("database.")
+        )
+        if imported:
+            violations[relative] = imported
+    assert violations == {}

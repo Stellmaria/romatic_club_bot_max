@@ -25,7 +25,11 @@ from bot.services.auction_workflows import AuctionPublicationService
 from bot.use_cases.auction_publication import PublishAuctionCommand, PublishAuctionUseCase
 from bot.telegram.media import bot_send_media_any
 from bot.core.legacy_config import legacy_config
-from db.legacy import count_sold_by_card_id, count_sold_same_card, list_auctions
+from bot.services.handler_persistence import (
+    count_sold_by_card_id,
+    count_sold_same_card,
+    list_auctions,
+)
 
 logger = logging.getLogger("auction_bot.publication")
 
