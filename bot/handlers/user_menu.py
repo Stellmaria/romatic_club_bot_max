@@ -30,9 +30,6 @@ from bot.handlers.auction.schedule import (
     REG_START,
     WORK_END,
     WORK_START,
-    _format_blocks,
-    _format_slots,
-    _slot_iter_range,
 )
 from bot.handlers.constants import USER_MESSAGES
 from bot.handlers.helper.appeals import appeal_start
@@ -80,6 +77,7 @@ router = Router(name="user-menu")
 logger = logging.getLogger(__name__)
 
 _SCHEDULE_PAGE_SIZE = 8
+_SLOT = timedelta(minutes=30)
 _WEEKDAYS_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 _NOTIFY_DEFAULTS = {
     "notify_auction_start": True,
@@ -113,6 +111,59 @@ def _as_bool(value: object, default: bool = False) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "да", "on"}
     return default
+
+
+def _slot_iter_range(day: date, start: time, end: time) -> list[datetime]:
+    current = datetime.combine(day, start)
+    last = datetime.combine(day, end)
+    result: list[datetime] = []
+    while current <= last:
+        result.append(current)
+        current += _SLOT
+    return result
+
+
+def _contiguous_blocks(slots: list[datetime]) -> list[tuple[datetime, datetime]]:
+    if not slots:
+        return []
+    ordered = sorted(slots)
+    result: list[tuple[datetime, datetime]] = []
+    block_start = previous = ordered[0]
+    for current in ordered[1:]:
+        if current - previous == _SLOT:
+            previous = current
+            continue
+        result.append((block_start, previous + _SLOT))
+        block_start = previous = current
+    result.append((block_start, previous + _SLOT))
+    return result
+
+
+def _format_slots(slots: list[datetime]) -> str:
+    if not slots:
+        return "0 слотов — —"
+    count = len(slots)
+    n10, n100 = count % 10, count % 100
+    if n10 == 1 and n100 != 11:
+        word = "слот"
+    elif n10 in (2, 3, 4) and not 12 <= n100 <= 14:
+        word = "слота"
+    else:
+        word = "слотов"
+    return f"{count} {word} — {', '.join(slot.strftime('%H:%M') for slot in slots)}"
+
+
+def _format_blocks(slots: list[datetime]) -> list[str]:
+    result: list[str] = []
+    for start, end in _contiguous_blocks(slots):
+        left = start.strftime("%H:%M")
+        right = (end - _SLOT).strftime("%H:%M")
+        result.append(left if left == right else f"{left}–{right}")
+    return result
+
+
+async def _has_luxury_access(user_id: int) -> bool:
+    return await is_admin(user_id) or await is_luxury_user(user_id)
 
 
 def user_main_text(*, full_name: str | None = None, status_line: str | None = None) -> str:
@@ -418,7 +469,7 @@ def build_luxury_keyboard(*, is_luxury: bool) -> InlineKeyboardMarkup:
 
 
 async def show_luxury_menu(message: Message, *, user_id: int, bot: Bot) -> None:
-    is_luxury = await check_luxury(user_id, bot)
+    is_luxury = await is_admin(user_id) or await check_luxury(user_id, bot)
     text = "👑 <b>Лакшери-раздел</b>\n\n" + (
         "Статус подтверждён. Доступны расширенное расписание, свободные слоты и поиск карт."
         if is_luxury
@@ -466,7 +517,7 @@ async def show_gap_days(message: Message, *, page: int = 0) -> None:
 
 
 async def show_day_gaps(message: Message, *, user_id: int, target_day: date) -> None:
-    if not (await is_admin(user_id) or await is_luxury_user(user_id)):
+    if not await _has_luxury_access(user_id):
         await message.answer("Эта функция доступна только Лакшери-пользователям.")
         return
     range_start = datetime.combine(target_day, time())
@@ -504,7 +555,7 @@ async def show_day_gaps(message: Message, *, user_id: int, target_day: date) -> 
 
 
 async def show_card_schedule_search(message: Message, *, user_id: int, query: str) -> None:
-    if not (await is_admin(user_id) or await is_luxury_user(user_id)):
+    if not await _has_luxury_access(user_id):
         await message.answer("Эта функция доступна только Лакшери-пользователям.")
         return
     lots = await get_auctions_by_card_ref(
@@ -792,7 +843,7 @@ async def user_luxury_refresh(call: CallbackQuery, bot: Bot) -> None:
 
 @router.callback_query(F.data == "user_luxury|schedule")
 async def user_luxury_schedule(call: CallbackQuery, state: FSMContext) -> None:
-    if not await is_luxury_user(call.from_user.id):
+    if not await _has_luxury_access(call.from_user.id):
         await call.answer("Доступно только Лакшери-пользователям.", show_alert=True)
         return
     await state.clear()
@@ -807,7 +858,7 @@ async def user_luxury_schedule(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "user_luxury|gaps")
 async def user_luxury_gaps(call: CallbackQuery) -> None:
-    if not await is_luxury_user(call.from_user.id):
+    if not await _has_luxury_access(call.from_user.id):
         await call.answer("Доступно только Лакшери-пользователям.", show_alert=True)
         return
     await call.answer()
@@ -838,7 +889,7 @@ async def user_luxury_gap_day(call: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "user_luxury|when")
 async def user_luxury_when(call: CallbackQuery, state: FSMContext) -> None:
-    if not await is_luxury_user(call.from_user.id):
+    if not await _has_luxury_access(call.from_user.id):
         await call.answer("Доступно только Лакшери-пользователям.", show_alert=True)
         return
     await state.clear()
