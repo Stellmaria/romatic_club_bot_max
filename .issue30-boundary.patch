@@ -1,0 +1,267 @@
+diff --git a/bot/handlers/admin/admin_panel_schedule.py b/bot/handlers/admin/admin_panel_schedule.py
+index 3a7a897..90cdd7d 100644
+--- a/bot/handlers/admin/admin_panel_schedule.py
++++ b/bot/handlers/admin/admin_panel_schedule.py
+@@ -52,21 +52,19 @@ from bot.handlers.admin.helper.admin_keyboards import (
+     months_keyboard,
+ )
+ from bot.handlers.admin.helper.new.formatting import format_admin_action_log
+-from db.auctions import (
++from bot.services.handler_persistence import (
+     get_auctions_by_date_with_owners,
+     get_lot_by_id,
+     get_lot_owners,
++    get_user,
++    is_luxury_user,
++    log_audit_action,
+ )
+ from bot.handlers.admin.helper.admin_service import (
+     get_free_slots_and_schedule_for_lot,
+     parse_auction_and_date_from_callback,
+ )
+ from bot.services.admin_owners import get_lot_owners_text
+-from db.users import (
+-    get_user,
+-    is_luxury_user,
+-)
+-from db.admin import log_audit_action
+ from bot.handlers.admin.action_support.exchange import safe_answer_photo
+ from bot.services.admin_logging import send_admin_log
+ from bot.handlers.admin.logs_admin import (
+diff --git a/bot/handlers/admin/moderation_lots.py b/bot/handlers/admin/moderation_lots.py
+index 09a5b15..47070be 100644
+--- a/bot/handlers/admin/moderation_lots.py
++++ b/bot/handlers/admin/moderation_lots.py
+@@ -83,21 +83,19 @@ from bot.handlers.admin.helper.new.formatting import (
+     format_pending_lot,
+     get_lot_owners_with_levels,
+ )
+-from db.auctions import (
++from bot.services.handler_persistence import (
+     get_auctions_by_date,
+     get_auctions_by_date_with_owners,
+     get_delete_request,
+     get_lot_by_id,
+     get_lot_owners,
++    get_user,
++    is_luxury_user,
++    log_audit_action,
+     update_delete_request_status,
+ )
+ from bot.handlers.admin.helper.admin_service import get_free_slots_and_schedule_for_lot
+ from bot.services.admin_owners import get_lot_owners_text
+-from db.users import (
+-    get_user,
+-    is_luxury_user,
+-)
+-from db.admin import log_audit_action
+ from bot.handlers.helper.helpers_users import notify_lot_owner
+ from bot.handlers.admin.action_support.transport import (
+     owner_or_secret_required,
+diff --git a/bot/handlers/auction/exchange/submission.py b/bot/handlers/auction/exchange/submission.py
+index 644ec4a..e3f8de7 100644
+--- a/bot/handlers/auction/exchange/submission.py
++++ b/bot/handlers/auction/exchange/submission.py
+@@ -20,7 +20,13 @@ from bot.use_cases.common import ApplicationError
+ from bot.use_cases.exchange_submission import SubmitExchangeCommand, SubmitExchangeUseCase
+ from bot.services.exchange_submission import ExchangeSubmissionQueries
+ from bot.telegram.media import answer_media_any as _answer_media_any
+-from db.legacy import get_card_by_id, get_cards_by_ids, get_cards_ids_by_deck, get_deck_by_id, is_luxury_user
++from bot.services.handler_persistence import (
++    get_card_by_id,
++    get_cards_by_ids,
++    get_cards_ids_by_deck,
++    get_deck_by_id,
++    is_luxury_user,
++)
+ from bot.legacy_fsm import ExchangeFSM, UserAddLotFSM
+ 
+ router = Router(name="auction_exchange_submission")
+diff --git a/bot/handlers/auction/publication.py b/bot/handlers/auction/publication.py
+index a082ea2..963a43e 100644
+--- a/bot/handlers/auction/publication.py
++++ b/bot/handlers/auction/publication.py
+@@ -25,7 +25,11 @@ from bot.services.auction_workflows import AuctionPublicationService
+ from bot.use_cases.auction_publication import PublishAuctionCommand, PublishAuctionUseCase
+ from bot.telegram.media import bot_send_media_any
+ from bot.core.legacy_config import legacy_config
+-from db.legacy import count_sold_by_card_id, count_sold_same_card, list_auctions
++from bot.services.handler_persistence import (
++    count_sold_by_card_id,
++    count_sold_same_card,
++    list_auctions,
++)
+ 
+ logger = logging.getLogger("auction_bot.publication")
+ 
+diff --git a/bot/handlers/auction/submission.py b/bot/handlers/auction/submission.py
+index 7a78a53..950495e 100644
+--- a/bot/handlers/auction/submission.py
++++ b/bot/handlers/auction/submission.py
+@@ -38,21 +38,17 @@ from bot.use_cases.common import ApplicationPermissionDenied, ApplicationValidat
+ from bot.services.luxury import get_user_luxury_level
+ from bot.telegram.media import answer_media_any as _answer_media_any
+ from bot.core.legacy_config import legacy_config
+-from db.cards import (
++from bot.services.handler_persistence import (
++    count_sold_by_card_id,
++    count_sold_same_card,
+     get_all_decks,
+-    get_cards_by_deck,
+     get_card_by_id,
+-)
+-from db.admin import log_admin_action
+-from db.users import (
+-    is_luxury_user,
+-    get_user,
+-)
+-from db.auctions import (
++    get_cards_by_deck,
+     get_lots_by_owner,
++    get_user,
+     has_pending_lot,
+-    count_sold_by_card_id,
+-    count_sold_same_card,
++    is_luxury_user,
++    log_admin_action,
+ )
+ from bot.telegram.states import ExchangeFSM, UserAddLotFSM
+ 
+diff --git a/bot/handlers/users.py b/bot/handlers/users.py
+index 2c06af4..c3f9afb 100644
+--- a/bot/handlers/users.py
++++ b/bot/handlers/users.py
+@@ -28,7 +28,7 @@ from bot.services.auction_workflows import AuctionOwnerService
+ from bot.use_cases.common import ApplicationError, ApplicationInvalidState
+ from bot.use_cases.auction_cancellation import CancelOwnedAuctionCommand, CancelOwnedAuctionUseCase
+ from bot.use_cases.user_lot_edit import EditOwnedLotCommand, EditOwnedLotUseCase
+-from db.legacy import (
++from bot.services.handler_persistence import (
+     add_delete_request,
+     get_auctions_by_date,
+     get_lot_by_id,
+diff --git a/bot/services/handler_persistence.py b/bot/services/handler_persistence.py
+new file mode 100644
+index 0000000..68803b8
+--- /dev/null
++++ b/bot/services/handler_persistence.py
+@@ -0,0 +1,87 @@
++"""Persistence adapter functions used by Telegram delivery modules.
++
++This transitional adapter keeps database modules out of Telegram handlers while
++legacy query functions are migrated behind typed repositories and application
++ports.  It contains no business rules; handlers should use application use
++cases for mutations and use these exports only for delivery/read-model support.
++"""
++
++from db.admin import log_admin_action, log_audit_action
++from db.auctions import (
++    count_sold_by_card_id,
++    count_sold_same_card,
++    get_auctions_by_date,
++    get_auctions_by_date_with_owners,
++    get_delete_request,
++    get_lot_by_id,
++    get_lot_owners,
++    get_lots_by_owner,
++    has_pending_lot,
++    update_delete_request_status,
++)
++from db.cards import get_all_decks, get_card_by_id, get_cards_by_deck
++from db.legacy import (
++    add_delete_request,
++    auto_finish_old_lots_for_owner,
++    get_cards_by_ids,
++    get_cards_ids_by_deck,
++    get_deck_by_id,
++    get_lots_by_owner_view,
++    get_settings,
++    get_uid_profile_binding,
++    get_user_basic_info_by_username,
++    get_user_id_by_uid_any,
++    get_user_verified_uid,
++    get_whois_admin_payload,
++    is_subscribed,
++    list_auctions,
++    mark_user_private_chat_closed,
++    mark_user_private_chat_opened,
++    set_owner_lot_folder,
++    set_settings,
++    set_subscription,
++    sync_trusted_status,
++    update_lot_field,
++)
++from db.users import get_user, is_luxury_user
++
++__all__ = [
++    "add_delete_request",
++    "auto_finish_old_lots_for_owner",
++    "count_sold_by_card_id",
++    "count_sold_same_card",
++    "get_all_decks",
++    "get_auctions_by_date",
++    "get_auctions_by_date_with_owners",
++    "get_card_by_id",
++    "get_cards_by_deck",
++    "get_cards_by_ids",
++    "get_cards_ids_by_deck",
++    "get_deck_by_id",
++    "get_delete_request",
++    "get_lot_by_id",
++    "get_lot_owners",
++    "get_lots_by_owner",
++    "get_lots_by_owner_view",
++    "get_settings",
++    "get_uid_profile_binding",
++    "get_user",
++    "get_user_basic_info_by_username",
++    "get_user_id_by_uid_any",
++    "get_user_verified_uid",
++    "get_whois_admin_payload",
++    "has_pending_lot",
++    "is_luxury_user",
++    "is_subscribed",
++    "list_auctions",
++    "log_admin_action",
++    "log_audit_action",
++    "mark_user_private_chat_closed",
++    "mark_user_private_chat_opened",
++    "set_owner_lot_folder",
++    "set_settings",
++    "set_subscription",
++    "sync_trusted_status",
++    "update_delete_request_status",
++    "update_lot_field",
++]
+diff --git a/tests/test_architecture_boundaries.py b/tests/test_architecture_boundaries.py
+index 9e0e7bb..92444f4 100644
+--- a/tests/test_architecture_boundaries.py
++++ b/tests/test_architecture_boundaries.py
+@@ -152,3 +152,27 @@ def test_production_uses_package_modules_not_root_compatibility_facades() -> Non
+             violations[path.relative_to(ROOT).as_posix()] = legacy
+ 
+     assert violations == {}
++
++
++def test_issue30_critical_handlers_do_not_import_database_modules() -> None:
++    critical_handlers = (
++        "bot/handlers/admin/admin_panel_schedule.py",
++        "bot/handlers/admin/moderation_lots.py",
++        "bot/handlers/admin/uid_verification_review.py",
++        "bot/handlers/auction/exchange/moderation.py",
++        "bot/handlers/auction/exchange/submission.py",
++        "bot/handlers/auction/publication.py",
++        "bot/handlers/auction/submission.py",
++        "bot/handlers/users.py",
++        "bot/handlers/admin/action_support/roles.py",
++    )
++    violations: dict[str, list[str]] = {}
++    for relative in critical_handlers:
++        imported = sorted(
++            name
++            for name in _imports(ROOT / relative)
++            if name == "db" or name.startswith("db.") or name == "database" or name.startswith("database.")
++        )
++        if imported:
++            violations[relative] = imported
++    assert violations == {}
