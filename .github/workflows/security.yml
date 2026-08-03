@@ -34,7 +34,7 @@ jobs:
       - name: Enforce license policy
         run: python scripts/check_dependency_licenses.py requirements.lock
       - name: Upload Python SBOM
-        uses: actions/upload-artifact@4cec3d8a65e61c6641258a07e53a3284a5c87d7d # v4.6.0
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: python-sbom
           path: python-sbom.cdx.json
@@ -81,7 +81,7 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
       - name: Upload image SBOM
-        uses: actions/upload-artifact@4cec3d8a65e61c6641258a07e53a3284a5c87d7d # v4.6.0
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: image-sbom
           path: image-sbom.cdx.json
