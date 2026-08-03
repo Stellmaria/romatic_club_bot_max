@@ -78,10 +78,7 @@ def test_metrics_registry_renders_prometheus_values_and_histograms() -> None:
 
     assert 'updates_total{result="ok"} 1' in rendered
     assert 'outbox_backlog{queue="telegram"} 3' in rendered
-    assert (
-        'update_latency_seconds_bucket{update_type="message",le="0.25"} 1'
-        in rendered
-    )
+    assert 'update_latency_seconds_bucket{update_type="message",le="0.25"} 1' in rendered
     assert 'update_latency_seconds_count{update_type="message"} 1' in rendered
     assert 'update_latency_seconds_sum{update_type="message"} 0.2' in rendered
 
@@ -120,15 +117,11 @@ async def test_update_middleware_binds_context_and_records_latency() -> None:
     }
     assert correlation_id_var.get() == ""
     rendered = metrics.render_prometheus()
-    assert (
-        'telegram_updates_total{action="/start",update_type="message"} 1'
-        in rendered
-    )
+    assert 'telegram_updates_total{action="/start",update_type="message"} 1' in rendered
     assert "private text" not in rendered
     assert (
         "telegram_update_latency_seconds_count"
-        '{action="/start",update_type="message"} 1'
-        in rendered
+        '{action="/start",update_type="message"} 1' in rendered
     )
 
 
