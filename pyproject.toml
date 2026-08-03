@@ -41,23 +41,71 @@ dependencies = { file = ["requirements.txt"] }
 minversion = "9.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --cov=bot --cov=db --cov=userbot --cov-report=term-missing:skip-covered --cov-report=json:var/coverage.json"
 asyncio_mode = "auto"
 markers = [
   "integration: destructive tests requiring POSTGRES_INTEGRATION_CONFIRM=1 and disposable PostgreSQL 17",
 ]
 
+[tool.coverage.run]
+branch = true
+parallel = true
+source = ["bot", "db", "userbot"]
+omit = [
+  "*/__main__.py",
+  "*/migrations/*",
+  "tests/*",
+]
+
+[tool.coverage.report]
+fail_under = 35
+show_missing = true
+skip_covered = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "@(abc\\.)?abstractmethod",
+]
+
 [tool.ruff]
 target-version = "py313"
 line-length = 100
-extend-exclude = [".venv", "var", "private"]
+extend-exclude = [".venv", "var", "private", "db/migrations"]
 
 [tool.ruff.lint]
-# The legacy codebase is migrated incrementally. CI starts with correctness
-# errors; style families can be enabled per package as monoliths are split.
+# The full legacy tree remains on a correctness baseline. scripts/quality.py
+# applies the stronger families below to files changed against the base branch.
 select = ["E9", "F63", "F7", "F82"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bot", "database", "db", "userbot"]
 
 [tool.black]
 target-version = ["py313"]
 line-length = 100
 extend-exclude = "(/migrations/|/var/|/private/)"
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+strict_equality = true
+show_error_codes = true
+pretty = true
+exclude = "(^tests/|^db/migrations/|^var/|^private/)"
+
+[[tool.mypy.overrides]]
+module = [
+  "aiogram.*",
+  "asyncpg.*",
+  "telethon.*",
+  "cryptography.*",
+  "dateutil.*",
+]
+ignore_missing_imports = true
