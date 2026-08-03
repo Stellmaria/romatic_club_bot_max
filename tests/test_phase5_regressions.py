@@ -36,12 +36,31 @@ def test_auction_notifications_are_transactionally_enqueued() -> None:
 
 def test_outbox_worker_avoids_blind_retry_after_unknown_delivery() -> None:
     worker = (ROOT / "bot/telegram/outbox.py").read_text(encoding="utf-8")
-    workers = (ROOT / "bot/bootstrap/workers.py").read_text(encoding="utf-8")
+    workers_source = (ROOT / "bot/bootstrap/workers.py").read_text(encoding="utf-8")
+    workers_tree = ast.parse(workers_source)
+    outbox_specs = [
+        node
+        for node in ast.walk(workers_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "BackgroundTaskSpec"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "telegram-outbox"
+    ]
+
     assert "except TelegramRetryAfter" in worker
     assert "delivery outcome unknown; manual review required" in worker
     assert "repository.mark_failed" in worker
-    assert 'BackgroundTaskSpec("telegram-outbox"' in workers
-    assert "telegram_outbox_loop(bot)" in workers
+    assert len(outbox_specs) == 1
+    spec = outbox_specs[0]
+    assert any(
+        keyword.arg is None
+        and isinstance(keyword.value, ast.Name)
+        and keyword.value.id == "critical"
+        for keyword in spec.keywords
+    )
+    assert "telegram_outbox_loop(bot)" in ast.unparse(spec)
 
 
 def test_phase5_migration_converts_legacy_moscow_times_and_creates_outbox() -> None:
