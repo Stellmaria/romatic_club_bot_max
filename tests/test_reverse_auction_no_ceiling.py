@@ -85,10 +85,10 @@ def test_submission_routes_reverse_to_starting_ceiling() -> None:
     assert old_shortcut not in source
 
 
-def test_finalizer_closes_at_displayed_minute() -> None:
+def test_finalizer_waits_until_next_minute() -> None:
     source = (ROOT / "bot/repositories/auctions.py").read_text(encoding="utf-8")
-    assert "date_trunc('minute', end_time) <= $1" in source
-    assert "+ INTERVAL '1 minute' <= $1" not in source
+    assert "date_trunc('minute', end_time) + INTERVAL '1 minute' <= $1" in source
+    assert "date_trunc('minute', end_time) <= $1" not in source
 
 
 def test_bid_currency_migration_is_packaged() -> None:
