@@ -1,31 +1,22 @@
-name: Apply Time Policy CI Fixes
+name: Export Time Policy CI Fixes
 
 on:
-  push:
-    branches: [codex/issue-37-time-policy]
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: apply-time-policy-ci-fixes
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  apply:
-    if: github.actor != 'github-actions[bot]'
+  export:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: codex/issue-37-time-policy
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Apply deterministic CI fixes
+      - name: Build deterministic CI fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -56,11 +47,8 @@ jobs:
                   raise SystemExit(f'{old!r} missing from {path}')
               path.write_text(text.replace(old, new), encoding='utf-8')
           PY
-          rm -f .github/workflows/apply-time-policy-ci-fixes.yml
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- \
-            .github/workflows/apply-time-policy-ci-fixes.yml \
+          mkdir -p var/time-policy-ci-fixes
+          cp --parents \
             .github/workflows/ci.yml \
             bot/application_models.py \
             bot/repositories/auction_workflows.py \
@@ -68,7 +56,12 @@ jobs:
             scripts/check_time_policy.py \
             tests/integration/test_migrations_postgres.py \
             tests/test_auction_domain.py \
-            tests/test_runtime_schedule_migration.py
-          git diff --cached --check
-          git commit -m 'fix(time): satisfy formatting and migration contracts'
-          git push origin HEAD:codex/issue-37-time-policy
+            tests/test_runtime_schedule_migration.py \
+            var/time-policy-ci-fixes/
+      - name: Upload deterministic CI fixes
+        uses: actions/upload-artifact@v4
+        with:
+          name: time-policy-ci-fixes
+          path: var/time-policy-ci-fixes
+          if-no-files-found: error
+          retention-days: 1
