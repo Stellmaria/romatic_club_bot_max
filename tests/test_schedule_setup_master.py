@@ -24,9 +24,7 @@ def test_card_economy_matrix_matches_rarity() -> None:
     assert expected_reward("gold", "diamonds") == 80
     assert expected_reward("эпик", "tea") == 12
 
-    ok, _ = validate_card_economy(
-        {"rarity": "gold", "obtain_type": "tea", "obtain_amount": 8}
-    )
+    ok, _ = validate_card_economy({"rarity": "gold", "obtain_type": "tea", "obtain_amount": 8})
     assert ok is True
 
     ok, reason = validate_card_economy(
@@ -136,15 +134,13 @@ def test_configuration_audit_blocks_unverified_card_and_missing_deck_emoji() -> 
 
 
 def test_source_contract_has_preview_approval_and_topic_target() -> None:
-    announcements = (ROOT / "userbot" / "schedule_announcements.py").read_text(
-        encoding="utf-8"
-    )
+    announcements = (ROOT / "userbot" / "schedule_announcements.py").read_text(encoding="utf-8")
     handler = (ROOT / "bot" / "handlers" / "admin" / "schedule_setup.py").read_text(
         encoding="utf-8"
     )
-    migration = (
-        ROOT / "db" / "migrations" / "011_schedule_setup_master.sql"
-    ).read_text(encoding="utf-8")
+    migration = (ROOT / "db" / "migrations" / "011_schedule_setup_master.sql").read_text(
+        encoding="utf-8"
+    )
 
     assert "_PREVIEW_HOUR = 22" in announcements
     assert "_PREVIEW_MINUTE = 30" in announcements
