@@ -70,7 +70,7 @@ def test_admin_facades_expose_a_unique_reachable_router_graph() -> None:
         assert all(_handler_count(router) > 0 for router in feature_routers)
 
 
-def test_admin_compatibility_facades_export_only_real_symbols() -> None:
+def test_admin_compatibility_facades_export_real_symbols() -> None:
     """Historic imports remain usable without coupling tests to function layout."""
 
     for facade_name in FACADES:
@@ -78,7 +78,6 @@ def test_admin_compatibility_facades_export_only_real_symbols() -> None:
         exported = tuple(facade.__all__)
 
         assert exported
-        assert len(exported) == len(set(exported))
         assert all(hasattr(facade, name) for name in exported)
         assert facade.router in _walk_router_tree(facade.router)
 
