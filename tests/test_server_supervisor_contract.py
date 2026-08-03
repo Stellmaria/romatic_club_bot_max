@@ -131,10 +131,15 @@ def test_deploy_keeps_backup_health_and_rollback_gates() -> None:
 def test_postgres_image_matches_production_major_version() -> None:
     compose = source("compose.yaml")
     env_example = source(".env.example")
+    postgres_dockerfile = source("Dockerfile.postgres")
 
-    assert "${POSTGRES_IMAGE:-postgres:17-alpine@sha256:" in compose
-    assert "POSTGRES_IMAGE=postgres:17-alpine@sha256:" in env_example
+    assert "${POSTGRES_IMAGE:-romatic-postgres:17-alpine-hardened}" in compose
+    assert "dockerfile: Dockerfile.postgres" in compose
+    assert "POSTGRES_IMAGE=romatic-postgres:17-alpine-hardened" in env_example
+    assert postgres_dockerfile.startswith("FROM postgres:17-alpine@sha256:")
+    assert "PG_MAJOR=17" in postgres_dockerfile
     assert "postgres:16-alpine" not in compose
+    assert "postgres:16-alpine" not in postgres_dockerfile
 
 
 def test_systemd_runtime_stays_unprivileged() -> None:
