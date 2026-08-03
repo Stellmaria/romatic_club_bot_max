@@ -1,0 +1,39 @@
+name: Regenerate runtime lockfiles
+
+on:
+  push:
+    branches:
+      - "dependabot/pip/requirements/telegram-runtime-303c98910d"
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "dependabot/pip/requirements/telegram-runtime-303c98910d"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+      - name: Regenerate runtime lockfiles
+        run: |
+          uv pip compile --python-version 3.13 --python-platform linux --generate-hashes --output-file requirements/bot.lock requirements/bot.in
+          uv pip compile --python-version 3.13 --python-platform linux --generate-hashes --output-file requirements/userbot.lock requirements/userbot.in
+      - name: Commit regenerated lockfiles
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements/bot.lock requirements/userbot.lock
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore(deps): regenerate runtime lockfiles"
+          git push
