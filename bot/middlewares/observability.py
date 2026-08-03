@@ -18,6 +18,8 @@ from bot.core.observability import (
 
 logger = logging.getLogger("auction_bot.telegram_updates")
 
+type UpdateMetadata = tuple[str, int | None, int | None, int | None, str]
+
 
 class ObservabilityMiddleware(BaseMiddleware):
     """Bind one correlation context and record bounded update metadata."""
@@ -46,16 +48,22 @@ class ObservabilityMiddleware(BaseMiddleware):
         return None if update is None else update.callback_query
 
     @classmethod
-    def _metadata(cls, event: Any) -> tuple[str, int | None, int | None, int | None, str]:
+    def _metadata(cls, event: Any) -> UpdateMetadata:
         update = cls._update(event)
         update_id = None if update is None else int(update.update_id)
         callback = cls._callback(event)
         if callback is not None:
             payload = callback.data or ""
             action = payload.split(":", 1)[0].split("|", 1)[0][:32] or "callback"
-            message = callback.message
-            chat_id = getattr(getattr(message, "chat", None), "id", None)
-            return "callback_query", update_id, int(callback.from_user.id), chat_id, action
+            raw_chat_id = getattr(getattr(callback.message, "chat", None), "id", None)
+            chat_id = int(raw_chat_id) if isinstance(raw_chat_id, int) else None
+            return (
+                "callback_query",
+                update_id,
+                int(callback.from_user.id),
+                chat_id,
+                action,
+            )
 
         message = cls._message(event)
         if message is not None:
@@ -107,7 +115,8 @@ class ObservabilityMiddleware(BaseMiddleware):
         )
         try:
             result = await handler(event, data)
-        except Exception as error:
+        # This is the outer adapter boundary: record the failure, then re-raise it.
+        except Exception as error:  # noqa: BLE001
             if registry is not None:
                 registry.increment(
                     "telegram_update_errors_total",
