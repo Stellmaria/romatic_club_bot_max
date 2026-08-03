@@ -30,7 +30,7 @@ jobs:
         run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Print exact Black diff
         run: |
-          python -m black --diff --color=false \
+          python -m black --diff --no-color \
             bot/core/logging.py \
             bot/core/observability.py \
             tests/test_observability.py || true
