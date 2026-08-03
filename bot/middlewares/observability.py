@@ -116,7 +116,7 @@ class ObservabilityMiddleware(BaseMiddleware):
         try:
             result = await handler(event, data)
         # This is the outer adapter boundary: record the failure, then re-raise it.
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             if registry is not None:
                 registry.increment(
                     "telegram_update_errors_total",
