@@ -4,7 +4,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: lock-refresh-${{ github.event.pull_request.number }}
@@ -17,7 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: true
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.13"
@@ -26,14 +27,19 @@ jobs:
           version: "0.11.16"
           enable-cache: true
           cache-dependency-glob: requirements/*.lock
-      - name: Compile current lock graph
+      - name: Compile and commit current lock graph
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           mkdir generated-locks
           scripts/compile_locks.sh generated-locks
-      - name: Upload generated locks
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: generated-locks
-          path: generated-locks/*.lock
-          if-no-files-found: error
-          retention-days: 1
+          cp generated-locks/*.lock requirements/
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- requirements/bot.lock requirements/userbot.lock requirements/tools.lock requirements/dev.lock
+          if git diff --cached --quiet; then
+            echo "Dependency locks are already current"
+          else
+            git commit -m "build: refresh reproducible dependency locks"
+            git push origin "HEAD:${HEAD_BRANCH}"
+          fi
