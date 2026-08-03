@@ -6,6 +6,7 @@ from pathlib import Path
 
 from aiogram import Router
 
+# fmt: off
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_DIR = ROOT / "bot" / "handlers" / "admin"
@@ -119,3 +120,5 @@ def test_support_modules_remain_framework_agnostic() -> None:
             and node.decorator_list
             for node in tree.body
         ), path
+
+# fmt: on
