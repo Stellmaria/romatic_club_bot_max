@@ -16,7 +16,8 @@ def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
     assert "image: postgres:17-alpine" in workflow
     assert 'POSTGRES_INTEGRATION_CONFIRM: "1"' in workflow
     assert "python -m pytest -q -m integration tests/integration" in workflow
-    assert 'python -m pytest -q -m "not integration"' in workflow
+    assert "timeout --signal=TERM --kill-after=15s 300s python -m pytest" in workflow
+    assert '-m "not integration"' in workflow
     assert "actions/upload-artifact@v4" in workflow
     assert "postgres-integration-diagnostics" in workflow
 
