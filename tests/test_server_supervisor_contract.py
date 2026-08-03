@@ -54,7 +54,7 @@ def test_supervisor_guards_resident_source_before_invoking_deploy() -> None:
     )
 
 
-def test_update_builds_and_starts_proxy_with_both_application_services() -> None:
+def test_update_rebuilds_hardened_postgres_and_application_services() -> None:
     runtime = source("scripts/server_supervisor.py")
     deploy = source("deploy/server/deploy.sh")
 
@@ -62,7 +62,7 @@ def test_update_builds_and_starts_proxy_with_both_application_services() -> None
     deploy_invocation = runtime.index('["bash", "deploy/server/deploy.sh"]', target_guard)
     target_environment = runtime.index('"ROMATIC_DEPLOY_TARGET_SHA": target_sha', deploy_invocation)
     assert target_guard < deploy_invocation < target_environment
-    assert "build --pull bot userbot supervisor-proxy" in deploy
+    assert "build --pull postgres bot userbot supervisor-proxy" in deploy
     assert "up -d --remove-orphans postgres supervisor-proxy bot userbot" in deploy
     assert "wait_service bot" in deploy
     assert "wait_service userbot" in deploy
@@ -100,7 +100,7 @@ def test_proxy_is_isolated_from_docker_and_checkout() -> None:
     assert "ports:" not in service
 
 
-def test_restart_targets_are_separate_but_update_rebuilds_both() -> None:
+def test_restart_targets_are_separate_but_update_rebuilds_runtime_images() -> None:
     runtime = source("scripts/server_supervisor.py")
     deploy = source("deploy/server/deploy.sh")
 
@@ -109,7 +109,7 @@ def test_restart_targets_are_separate_but_update_rebuilds_both() -> None:
     assert "def _restart_userbot()" in runtime
     assert '_compose("restart", "userbot")' in runtime
     assert '"/v1/restart-userbot": ("userbot-restart", _restart_userbot)' in runtime
-    assert "build --pull bot userbot supervisor-proxy" in deploy
+    assert "build --pull postgres bot userbot supervisor-proxy" in deploy
     assert "up -d --remove-orphans postgres supervisor-proxy bot userbot" in deploy
 
 
