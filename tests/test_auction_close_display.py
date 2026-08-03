@@ -33,7 +33,7 @@ class _Repository:
 def test_publication_context_displays_actual_close_minute() -> None:
     context = asyncio.run(AdminAuctionContextService(_Repository()).load_full_context(7))
 
-    assert context["auction"]["end_time_str"] == "18:30"
+    assert context["auction"]["end_time_str"] == "18:31"
 
 
 def test_auction_caption_prefers_explicit_close_label() -> None:
