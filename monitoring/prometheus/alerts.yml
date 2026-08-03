@@ -1,0 +1,75 @@
+{
+  "groups": [
+    {
+      "name": "romatic-club-slo",
+      "rules": [
+        {
+          "alert": "BotCoreLatencyP95High",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(telegram_update_latency_seconds_bucket[5m]))) > 2",
+          "for": "10m",
+          "labels": {"severity": "critical", "component": "core"},
+          "annotations": {
+            "summary": "Core update latency p95 exceeds 2 seconds",
+            "slo_url": "docs/slo.md#core-latency",
+            "runbook_url": "docs/runbooks/observability-alerts.md#botcorelatencyp95high"
+          }
+        },
+        {
+          "alert": "UserbotLatencyP95High",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(userbot_operation_latency_seconds_bucket[5m]))) > 5",
+          "for": "10m",
+          "labels": {"severity": "critical", "component": "userbot"},
+          "annotations": {
+            "summary": "Userbot operation latency p95 exceeds 5 seconds",
+            "slo_url": "docs/slo.md#userbot-latency",
+            "runbook_url": "docs/runbooks/observability-alerts.md#userbotlatencyp95high"
+          }
+        },
+        {
+          "alert": "BotCoreErrorRateHigh",
+          "expr": "sum(rate(telegram_update_errors_total[5m])) / clamp_min(sum(rate(telegram_updates_total[5m])), 1) > 0.05",
+          "for": "5m",
+          "labels": {"severity": "critical", "component": "core"},
+          "annotations": {
+            "summary": "Core error rate exceeds 5 percent",
+            "slo_url": "docs/slo.md#error-rate",
+            "runbook_url": "docs/runbooks/observability-alerts.md#botcoreerrorratehigh"
+          }
+        },
+        {
+          "alert": "UserbotErrorRateHigh",
+          "expr": "sum(rate(userbot_operation_errors_total[5m])) / clamp_min(sum(rate(userbot_operations_total[5m])), 1) > 0.05",
+          "for": "5m",
+          "labels": {"severity": "critical", "component": "userbot"},
+          "annotations": {
+            "summary": "Userbot error rate exceeds 5 percent",
+            "slo_url": "docs/slo.md#error-rate",
+            "runbook_url": "docs/runbooks/observability-alerts.md#userboterrorratehigh"
+          }
+        },
+        {
+          "alert": "BotSchedulerLagHigh",
+          "expr": "max(scheduler_lag_seconds{component=\"core\"}) > 30",
+          "for": "5m",
+          "labels": {"severity": "critical", "component": "core"},
+          "annotations": {
+            "summary": "Scheduler lag exceeds 30 seconds",
+            "slo_url": "docs/slo.md#scheduler-lag",
+            "runbook_url": "docs/runbooks/observability-alerts.md#botschedulerlaghigh"
+          }
+        },
+        {
+          "alert": "UserbotQueueDepthHigh",
+          "expr": "max(userbot_queue_depth) > 100",
+          "for": "10m",
+          "labels": {"severity": "critical", "component": "userbot"},
+          "annotations": {
+            "summary": "Userbot queue depth exceeds 100 items",
+            "slo_url": "docs/slo.md#userbot-queue-depth",
+            "runbook_url": "docs/runbooks/observability-alerts.md#userbotqueuedepthhigh"
+          }
+        }
+      ]
+    }
+  ]
+}
