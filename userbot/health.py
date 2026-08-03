@@ -77,10 +77,7 @@ def write_health(path: Path, payload: Mapping[str, Any]) -> None:
 def readiness_status(task_manager: BackgroundTaskManager, *, connected: bool) -> str:
     if not connected:
         return "failed"
-    health = task_manager.health()
-    if any(item.state is WorkerState.FAILED for item in health):
-        return "degraded"
-    if any(item.state is WorkerState.STOPPED for item in health):
+    if any(item.state is not WorkerState.RUNNING for item in task_manager.health()):
         return "degraded"
     return "ready"
 
