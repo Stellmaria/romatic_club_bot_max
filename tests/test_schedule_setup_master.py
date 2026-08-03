@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from bot.services.schedule_setup import expected_reward, validate_card_economy
 from userbot.schedule_announcements import schedule_configuration_issues
 from userbot.schedule_publication import render_schedule_announcement
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,7 +19,7 @@ def _entity_text(text, entity) -> str:
 
 def test_card_economy_matrix_matches_rarity() -> None:
     assert expected_reward("bronze", "diamonds") == 20
-    assert expected_reward("серебро", "tea") == 4
+    assert expected_reward("серебро", "tea") == 4  # noqa: RUF001 - Russian rarity alias
     assert expected_reward("gold", "diamonds") == 80
     assert expected_reward("эпик", "tea") == 12
 
@@ -43,7 +42,7 @@ def test_enriched_schedule_template_uses_card_rarity_deck_and_rewards() -> None:
                 "card_id": 101,
                 "card_name": "Ава",
                 "hero_name": "Ава",
-                "start_time": datetime(2026, 8, 2, 8, 0, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 2, 8, 0, tzinfo=UTC),
                 "rarity": "gold",
                 "obtain_type": "diamonds",
                 "obtain_amount": 80,
@@ -57,7 +56,7 @@ def test_enriched_schedule_template_uses_card_rarity_deck_and_rewards() -> None:
                 "auction_id": 2,
                 "card_name": "Вся 20 колода",
                 "hero_name": "",
-                "start_time": datetime(2026, 8, 2, 14, 0, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 2, 14, 0, tzinfo=UTC),
                 "whole_deck": True,
                 "resolved_deck_id": 20,
                 "deck_emoji_id": 2020,
