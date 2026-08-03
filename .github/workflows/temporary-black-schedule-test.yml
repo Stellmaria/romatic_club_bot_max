@@ -1,0 +1,39 @@
+name: Temporary Black schedule contract
+
+on:
+  push:
+    branches: [ci/velvet-style-test-acceleration]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ci/velvet-style-test-acceleration
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+      - name: Format exact file
+        run: |
+          uv pip install --system black==25.11.0 ruff==0.14.7
+          python -m black tests/test_schedule_setup_master.py
+          python -m black --check tests/test_schedule_setup_master.py
+          python -m ruff check tests/test_schedule_setup_master.py
+      - name: Commit exact file and remove helper
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/temporary-black-schedule-test.yml
+          git add -- tests/test_schedule_setup_master.py
+          git diff --cached --check
+          git commit -m "style(ci): format schedule renderer contract"
+          git push origin HEAD:ci/velvet-style-test-acceleration
