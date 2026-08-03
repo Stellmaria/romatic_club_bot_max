@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from bot.services.schedule_setup import expected_reward, validate_card_economy
-from userbot.schedule_announcements import (
-    render_schedule_announcement,
-    schedule_configuration_issues,
-)
-
+from userbot.schedule_announcements import schedule_configuration_issues
+from userbot.schedule_publication import render_schedule_announcement
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,13 +19,11 @@ def _entity_text(text, entity) -> str:
 
 def test_card_economy_matrix_matches_rarity() -> None:
     assert expected_reward("bronze", "diamonds") == 20
-    assert expected_reward("серебро", "tea") == 4
+    assert expected_reward("серебро", "tea") == 4  # noqa: RUF001 - Russian rarity alias
     assert expected_reward("gold", "diamonds") == 80
     assert expected_reward("эпик", "tea") == 12
 
-    ok, _ = validate_card_economy(
-        {"rarity": "gold", "obtain_type": "tea", "obtain_amount": 8}
-    )
+    ok, _ = validate_card_economy({"rarity": "gold", "obtain_type": "tea", "obtain_amount": 8})
     assert ok is True
 
     ok, reason = validate_card_economy(
@@ -47,7 +42,7 @@ def test_enriched_schedule_template_uses_card_rarity_deck_and_rewards() -> None:
                 "card_id": 101,
                 "card_name": "Ава",
                 "hero_name": "Ава",
-                "start_time": datetime(2026, 8, 2, 8, 0, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 2, 8, 0, tzinfo=UTC),
                 "rarity": "gold",
                 "obtain_type": "diamonds",
                 "obtain_amount": 80,
@@ -61,7 +56,7 @@ def test_enriched_schedule_template_uses_card_rarity_deck_and_rewards() -> None:
                 "auction_id": 2,
                 "card_name": "Вся 20 колода",
                 "hero_name": "",
-                "start_time": datetime(2026, 8, 2, 14, 0, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 2, 14, 0, tzinfo=UTC),
                 "whole_deck": True,
                 "resolved_deck_id": 20,
                 "deck_emoji_id": 2020,
@@ -138,15 +133,13 @@ def test_configuration_audit_blocks_unverified_card_and_missing_deck_emoji() -> 
 
 
 def test_source_contract_has_preview_approval_and_topic_target() -> None:
-    announcements = (ROOT / "userbot" / "schedule_announcements.py").read_text(
-        encoding="utf-8"
-    )
+    announcements = (ROOT / "userbot" / "schedule_announcements.py").read_text(encoding="utf-8")
     handler = (ROOT / "bot" / "handlers" / "admin" / "schedule_setup.py").read_text(
         encoding="utf-8"
     )
-    migration = (
-        ROOT / "db" / "migrations" / "011_schedule_setup_master.sql"
-    ).read_text(encoding="utf-8")
+    migration = (ROOT / "db" / "migrations" / "011_schedule_setup_master.sql").read_text(
+        encoding="utf-8"
+    )
 
     assert "_PREVIEW_HOUR = 22" in announcements
     assert "_PREVIEW_MINUTE = 30" in announcements
