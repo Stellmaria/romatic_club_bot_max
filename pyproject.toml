@@ -35,7 +35,7 @@ database = ["*.sql", "README.md"]
 db = ["migrations/*.sql"]
 
 [tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
+dependencies = { file = ["requirements/bot.in", "requirements/userbot.in"] }
 
 [tool.pytest.ini_options]
 minversion = "9.0"
