@@ -20,5 +20,21 @@ def test_python_313_is_the_only_supported_runtime() -> None:
     assert (ROOT / "Dockerfile.server-supervisor-proxy").read_text(
         encoding="utf-8"
     ).startswith("FROM python:3.13-alpine")
-    assert ci.count('python-version: "3.13"') == 2
+
+    python_jobs = (
+        "server-supervisor-contract",
+        "test",
+        "postgres-integration",
+    )
+    for index, job_name in enumerate(python_jobs):
+        start = ci.index(f"  {job_name}:")
+        end = (
+            ci.index(f"  {python_jobs[index + 1]}:")
+            if index + 1 < len(python_jobs)
+            else len(ci)
+        )
+        job = ci[start:end]
+        assert job.count('python-version: "3.13"') == 1
+
+    assert ci.count('python-version: "3.13"') == len(python_jobs)
     assert "matrix.python-version" not in ci
