@@ -135,13 +135,19 @@ def optional_int(row: Mapping[str, object], key: str) -> int | None:
         return None
     if isinstance(value, bool):
         raise RecordMappingError(f"field {key!r} must be int or None")
-    try:
-        return int(value)
-    except (TypeError, ValueError) as exc:
-        raise RecordMappingError(f"field {key!r} must be int or None") from exc
+    if isinstance(value, int):
+        return value
+    if isinstance(value, (str, bytes, bytearray)):
+        try:
+            return int(value)
+        except ValueError as exc:
+            raise RecordMappingError(f"field {key!r} must be int or None") from exc
+    raise RecordMappingError(f"field {key!r} must be int or None")
 
 
 def map_auction(row: Mapping[str, object]) -> AuctionRecord:
+    start_time = row.get("start_time")
+    end_time = row.get("end_time")
     return AuctionRecord(
         auction_id=int(required(row, "auction_id", int)),
         status=required(row, "status", str),
@@ -151,8 +157,8 @@ def map_auction(row: Mapping[str, object]) -> AuctionRecord:
         card_id=optional_int(row, "card_id"),
         card_name=str(row["card_name"]) if row.get("card_name") is not None else None,
         hero_name=str(row["hero_name"]) if row.get("hero_name") is not None else None,
-        start_time=row.get("start_time") if isinstance(row.get("start_time"), datetime) else None,
-        end_time=row.get("end_time") if isinstance(row.get("end_time"), datetime) else None,
+        start_time=start_time if isinstance(start_time, datetime) else None,
+        end_time=end_time if isinstance(end_time, datetime) else None,
         message_id=optional_int(row, "message_id"),
         comment=str(row.get("comment") or ""),
     )
