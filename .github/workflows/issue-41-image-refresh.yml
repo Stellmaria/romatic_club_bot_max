@@ -1,0 +1,113 @@
+name: Temporary issue 41 image refresh
+
+on:
+  push:
+    branches:
+      - security/issue-41-supply-chain
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: security/issue-41-supply-chain
+          fetch-depth: 0
+
+      - name: Resolve current official digests
+        id: images
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolve() {
+            local tag="$1"
+            docker pull "$tag" >/dev/null
+            local repository_digest
+            repository_digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$tag")"
+            printf '%s@%s\n' "$tag" "${repository_digest#*@}"
+          }
+          echo "python_slim=$(resolve python:3.13.13-slim)" >> "$GITHUB_OUTPUT"
+          echo "python_alpine=$(resolve python:3.13-alpine)" >> "$GITHUB_OUTPUT"
+          echo "postgres=$(resolve postgres:17-alpine)" >> "$GITHUB_OUTPUT"
+
+      - name: Update immutable references and contracts
+        env:
+          PYTHON_SLIM: ${{ steps.images.outputs.python_slim }}
+          PYTHON_ALPINE: ${{ steps.images.outputs.python_alpine }}
+          POSTGRES: ${{ steps.images.outputs.postgres }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          slim = os.environ["PYTHON_SLIM"]
+          alpine = os.environ["PYTHON_ALPINE"]
+          postgres = os.environ["POSTGRES"]
+
+          replacements = {
+              "Dockerfile": [(r"python:3\.13\.13-slim@sha256:[0-9a-f]{64}", slim)],
+              "Dockerfile.server-supervisor-proxy": [
+                  (r"python:3\.13-alpine@sha256:[0-9a-f]{64}", alpine)
+              ],
+              "compose.yaml": [(r"postgres:17-alpine@sha256:[0-9a-f]{64}", postgres)],
+              ".env.example": [(r"(?m)^POSTGRES_IMAGE=.*$", f"POSTGRES_IMAGE={postgres}")],
+              "scripts/run_postgres_integration.py": [
+                  (r'(?m)^DEFAULT_IMAGE = ".*"$', f'DEFAULT_IMAGE = "{postgres}"')
+              ],
+          }
+          for filename, rules in replacements.items():
+              path = Path(filename)
+              content = path.read_text(encoding="utf-8")
+              for pattern, replacement in rules:
+                  content, count = re.subn(pattern, replacement, content)
+                  if count != 1:
+                      raise SystemExit(f"{filename}: expected one replacement for {pattern}, got {count}")
+              path.write_text(content, encoding="utf-8")
+
+          Path("security/base-image-digests.txt").write_text(
+              f"{slim}\n{alpine}\n{postgres}\n", encoding="utf-8"
+          )
+
+          server_test = Path("tests/test_server_supervisor_contract.py")
+          content = server_test.read_text(encoding="utf-8")
+          content = content.replace(
+              '    assert "${POSTGRES_IMAGE:-postgres:17-alpine}" in compose\n'
+              '    assert "POSTGRES_IMAGE=postgres:17-alpine" in env_example\n',
+              '    assert "${POSTGRES_IMAGE:-postgres:17-alpine@sha256:" in compose\n'
+              '    assert "POSTGRES_IMAGE=postgres:17-alpine@sha256:" in env_example\n',
+          )
+          server_test.write_text(content, encoding="utf-8")
+
+          integration_test = Path("tests/test_postgres_integration_contract.py")
+          content = integration_test.read_text(encoding="utf-8")
+          content = content.replace(
+              '    assert "image: postgres:17-alpine" in workflow\n',
+              '    assert "image: postgres:17-alpine@sha256:" in workflow\n',
+          ).replace(
+              '    assert \'DEFAULT_IMAGE = "postgres:17-alpine"\' in integration_runner\n',
+              '    assert \'DEFAULT_IMAGE = "postgres:17-alpine@sha256:\' in integration_runner\n',
+          )
+          integration_test.write_text(content, encoding="utf-8")
+          PY
+
+      - name: Format and commit
+        run: |
+          python -m pip install 'ruff>=0.14.7,<1' 'black>=26.3.1,<27'
+          python -m ruff check --fix --unsafe-fixes tests/test_server_supervisor_contract.py tests/test_postgres_integration_contract.py scripts/run_postgres_integration.py
+          python -m black tests/test_server_supervisor_contract.py tests/test_postgres_integration_contract.py scripts/run_postgres_integration.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Dockerfile Dockerfile.server-supervisor-proxy compose.yaml .env.example \
+            scripts/run_postgres_integration.py security/base-image-digests.txt \
+            tests/test_server_supervisor_contract.py tests/test_postgres_integration_contract.py
+          if git diff --cached --quiet; then
+            echo 'No image refresh changes.'
+            exit 0
+          fi
+          git commit -m 'security: refresh immutable base image digests'
+          git push origin HEAD:security/issue-41-supply-chain
