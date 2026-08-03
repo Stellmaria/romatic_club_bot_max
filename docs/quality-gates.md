@@ -9,6 +9,8 @@ python -m pip install -r requirements-dev.txt
 python scripts/quality.py all --base origin/main
 ```
 
+CI устанавливает полностью зафиксированный граф зависимостей из `requirements.lock` через `uv`. После изменения `requirements.txt` или `requirements-dev.txt` lock-файл нужно обновить в том же PR.
+
 Для destructive integration suite нужен disposable PostgreSQL 17 и переменные из integration test contract:
 
 ```bash
@@ -16,6 +18,27 @@ python scripts/quality.py all --base origin/main --include-integration
 ```
 
 Отдельные команды: `changed`, `typing`, `architecture`, `security`, `coverage`, `unit`, `integration`.
+
+## Sharded unit and coverage pipeline
+
+Pull request запускает unit/regression suite один раз в четырёх детерминированных matrix shards. `scripts/ci_test_shard.py` распределяет все non-integration test-файлы по размеру исходников, проверяет отсутствие пропусков и дубликатов и запускает каждый shard сразу с branch-aware coverage.
+
+Каждый shard публикует собственный JUnit XML и `.coverage.<index>`. После успешного завершения всех shards job `coverage` объединяет файлы через `scripts/ci_coverage_report.py`, формирует общие метрики и применяет существующий coverage ratchet. Отдельного повторного запуска полного suite ради coverage нет.
+
+Job `test` остаётся стабильным агрегатором для branch protection: он проверяет успешность `preflight` и всей shard-матрицы. Имена required checks `test` и `coverage` не меняются.
+
+Workflow запускается для `pull_request` и для push только в `main`, поэтому один commit ветки PR не создаёт дублирующий push-run. `concurrency.cancel-in-progress` отменяет устаревшие прогоны после новых commit.
+
+## Preflight
+
+Перед завершением shard-матрицы отдельный preflight проверяет:
+
+- полноту shard-плана;
+- компиляцию Python-исходников и тестов;
+- сборку и установку wheel;
+- Ruff и project-specific persistence/database/Telegram/handler contracts.
+
+Ошибки упаковки, импорта и статических границ обнаруживаются без ожидания полного набора тестов.
 
 ## Changed-file ratchet
 
@@ -51,13 +74,13 @@ Time-policy contract запускает `scripts/check_time_policy.py`: новы
 
 ## Duration and flaky rate
 
-Unit, coverage и PostgreSQL integration команды создают JUnit XML и JSON metrics в `var/quality`. Метрики содержат количество тестов, failures/errors/skips, длительность suite, число rerun/flaky markers и flaky rate. GitHub Actions публикует их как artifacts на 14 дней.
+Shard JUnit-файлы объединяются в общие unit metrics. Coverage и PostgreSQL integration также создают JSON metrics в `var/quality`. Метрики содержат количество тестов, failures/errors/skips, суммарную длительность suite, число rerun/flaky markers и flaky rate. GitHub Actions публикует их как artifacts.
 
-Heavy integration и static security jobs отделены от fast changed-code gate. Все Python jobs используют `setup-python` pip cache с dependency files как cache key input.
+Dependency-heavy Python jobs используют `uv` cache с `requirements.lock` как ключом. Deployment build использует Docker Buildx GitHub Actions layer cache.
 
 ## Required checks
 
-После стабилизации workflow ветка `main` должна требовать успешные checks:
+Ветка `main` требует успешные checks:
 
 - `changed-code-quality`;
 - `typing-and-architecture`;
