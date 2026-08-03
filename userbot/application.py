@@ -148,11 +148,6 @@ async def run_userbot_application(
             project_root=config.project_root,
             client_factory=client_factory,
         )
-        register_handlers(telegram_client)
-        register_schedule_handlers(telegram_client)
-
-        await init_db(database_runtime)
-        database_started = True
         await telegram_client.connect()
         if not await telegram_client.is_user_authorized():
             raise UserbotSessionError(
@@ -160,6 +155,13 @@ async def run_userbot_application(
                 "Run `auction-userbot-provision authorize` outside the production process."
             )
         authorized = True
+
+        # Session readiness is checked before database initialization so an
+        # absent or revoked credential fails fast with the correct diagnosis.
+        await init_db(database_runtime)
+        database_started = True
+        register_handlers(telegram_client)
+        register_schedule_handlers(telegram_client)
 
         task_manager = BackgroundTaskManager()
         task_manager.start(
