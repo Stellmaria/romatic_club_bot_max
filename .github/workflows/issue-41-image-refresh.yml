@@ -80,10 +80,7 @@ jobs:
                   (r"(?m)^POSTGRES_IMAGE=.*$", f"POSTGRES_IMAGE={postgres}"),
               ],
               "scripts/run_postgres_integration.py": [
-                  (
-                      r'(?m)^DEFAULT_IMAGE = "postgres:17-alpine@sha256:[0-9a-f]{64}"$',
-                      f'DEFAULT_IMAGE = "{postgres}"',
-                  ),
+                  (r"postgres:17-alpine@sha256:[0-9a-f]{64}", postgres),
               ],
               ".github/workflows/ci.yml": [
                   (r"postgres:17-alpine@sha256:[0-9a-f]{64}", postgres),
