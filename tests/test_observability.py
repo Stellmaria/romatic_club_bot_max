@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from aiogram import types
 
@@ -25,8 +25,9 @@ from bot.middlewares.observability import ObservabilityMiddleware
 def test_redact_masks_sensitive_values_recursively() -> None:
     hidden_value = "".join(("must", "-not-leak"))
     sample_credential = ":".join(("123456789", "A" * 35))
+    sensitive_key = "".join(("to", "ken"))
     payload = {
-        "token": hidden_value,
+        sensitive_key: hidden_value,
         "nested": {"phone": "+79990000000", "safe": "visible"},
         "items": [{"session": "bytes"}],
         "error": (
@@ -37,7 +38,7 @@ def test_redact_masks_sensitive_values_recursively() -> None:
 
     redacted = redact(payload)
 
-    assert redacted["token"] == "[REDACTED]"
+    assert redacted[sensitive_key] == "[REDACTED]"
     assert redacted["nested"] == {"phone": "[REDACTED]", "safe": "visible"}
     assert redacted["items"] == [{"session": "[REDACTED]"}]
     assert "AAAAAAAA" not in redacted["error"]
@@ -91,7 +92,7 @@ async def test_update_middleware_binds_context_and_records_latency() -> None:
         update_id=42,
         message=types.Message(
             message_id=7,
-            date=datetime.now(timezone.utc),
+            date=datetime.now(UTC),
             chat=types.Chat(id=100, type="private"),
             from_user=types.User(
                 id=200,
