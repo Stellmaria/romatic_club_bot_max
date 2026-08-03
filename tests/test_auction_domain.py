@@ -63,28 +63,29 @@ def test_bid_minimum_and_step_are_validated_from_start_price() -> None:
         )
 
 
-def test_auction_closes_at_displayed_bidding_minute() -> None:
-    displayed_deadline = datetime(2026, 8, 1, 18, 30)
+def test_auction_accepts_entire_displayed_bidding_minute() -> None:
+    displayed_bidding_minute = datetime(2026, 8, 1, 18, 30)
+    close_instant = displayed_bidding_minute + timedelta(minutes=1)
     auction = Auction(
         auction_id=1,
         status="active",
         currency=Currency.DIAMONDS,
         start_price=100,
-        start_time=displayed_deadline - timedelta(minutes=30),
-        end_time=displayed_deadline.replace(second=59),
+        start_time=displayed_bidding_minute - timedelta(minutes=30),
+        end_time=displayed_bidding_minute.replace(second=59),
     )
 
-    assert auction_bidding_closes_at(auction.end_time) == displayed_deadline
-    assert auction.is_active_at(displayed_deadline - timedelta(microseconds=1)) is True
-    assert auction.is_active_at(displayed_deadline) is False
-    assert auction.has_ended_at(displayed_deadline - timedelta(microseconds=1)) is False
-    assert auction.has_ended_at(displayed_deadline) is True
+    assert auction_bidding_closes_at(auction.end_time) == close_instant
+    assert auction.is_active_at(close_instant - timedelta(microseconds=1)) is True
+    assert auction.is_active_at(close_instant) is False
+    assert auction.has_ended_at(close_instant - timedelta(microseconds=1)) is False
+    assert auction.has_ended_at(close_instant) is True
 
 
-def test_finalization_claim_uses_displayed_minute_boundary() -> None:
+def test_finalization_claim_waits_until_next_minute_boundary() -> None:
     source = (ROOT / "bot/repositories/auctions.py").read_text(encoding="utf-8")
-    assert "date_trunc('minute', end_time) <= $1" in source
-    assert "+ INTERVAL '1 minute' <= $1" not in source
+    assert "date_trunc('minute', end_time) + INTERVAL '1 minute' <= $1" in source
+    assert "date_trunc('minute', end_time) <= $1" not in source
 
 
 def test_mixed_currency_offer_requires_marker_and_uses_project_rate() -> None:
