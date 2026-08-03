@@ -25,16 +25,13 @@ jobs:
           git apply --check /tmp/issue41.patch
           git apply /tmp/issue41.patch
           chmod +x scripts/compile_locks.sh
-      - name: Commit patch
+      - name: Commit non-workflow changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- \
             .env.bot.example \
             .env.userbot.example \
-            .github/workflows/ci.yml \
-            .github/workflows/quality.yml \
-            .github/workflows/security.yml \
             Dockerfile \
             Dockerfile.server-supervisor-proxy \
             bot/application.py \
