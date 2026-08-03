@@ -31,7 +31,9 @@ def test_optional_int_rejects_ambiguous_values(value: object) -> None:
 
 
 def test_map_auction_preserves_typed_instants_and_optional_ids() -> None:
-    local_start = datetime(2026, 8, 3, 16, 30, tzinfo=timezone(timedelta(hours=3)))
+    local_start = datetime(
+        2026, 8, 3, 16, 30, tzinfo=timezone(timedelta(hours=3))
+    )
     record = map_auction(
         {
             "auction_id": 4,
