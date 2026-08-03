@@ -4,6 +4,7 @@ import ast
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from telethon import events
 
 from bot.core.legacy_config import configure_legacy_config, reset_legacy_config_for_testing
@@ -15,6 +16,7 @@ from userbot.application import (
     resolve_userbot_session,
 )
 from userbot.handlers import register_handlers
+from userbot.session import UserbotSessionError, prepare_session_storage, secure_session_files
 
 ROOT = Path(__file__).resolve().parents[1]
 FERNET_KEY = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
@@ -35,6 +37,12 @@ def _config(tmp_path: Path) -> UserbotSettings:
     )
 
 
+def _private_session(path: Path) -> None:
+    session_file = prepare_session_storage(path)
+    session_file.write_bytes(b"sqlite")
+    secure_session_files(path)
+
+
 def test_entrypoint_has_no_import_time_client_or_environment_bootstrap() -> None:
     source = (ROOT / "userbot/entrypoint.py").read_text(encoding="utf-8")
     application_source = (ROOT / "userbot/application.py").read_text(encoding="utf-8")
@@ -42,8 +50,8 @@ def test_entrypoint_has_no_import_time_client_or_environment_bootstrap() -> None
 
     assert "load_dotenv" not in source
     assert "os.getenv" not in source
-    assert 'password = input(' not in application_source
-    assert 'password = getpass(' in application_source
+    assert "input(" not in application_source
+    assert "getpass" not in application_source
     assert not any(isinstance(node, ast.Raise) for node in tree.body)
     assert not any(
         isinstance(node, ast.Expr)
@@ -97,7 +105,7 @@ def test_register_handlers_preserves_count_order_and_chat_filters(tmp_path: Path
         reset_legacy_config_for_testing()
 
 
-def test_client_factory_uses_typed_settings_without_connecting(tmp_path: Path) -> None:
+def test_client_factory_uses_private_existing_session_without_connecting(tmp_path: Path) -> None:
     calls: list[tuple[str, int, str]] = []
     sentinel = object()
 
@@ -105,15 +113,17 @@ def test_client_factory_uses_typed_settings_without_connecting(tmp_path: Path) -
         calls.append((session, api_id, api_hash))
         return sentinel
 
-    config = replace(_config(tmp_path), session="custom-session")
+    configured = tmp_path / "sessions" / "custom"
+    _private_session(configured)
+    config = replace(_config(tmp_path), session=str(configured))
     result = create_userbot_client(
         config,
         project_root=tmp_path,
         client_factory=factory,
-        environ={"USERBOT_SESSION": "custom-session"},
+        environ={"USERBOT_SESSION": str(configured)},
     )
     assert result is sentinel
-    assert calls == [("custom-session", 12345, "secret-hash")]
+    assert calls == [(str(configured), 12345, "secret-hash")]
 
 
 def test_invalid_manual_configuration_fails_before_client_construction(tmp_path: Path) -> None:
@@ -125,25 +135,23 @@ def test_invalid_manual_configuration_fails_before_client_construction(tmp_path:
         return object()
 
     config = replace(_config(tmp_path), api_id=0, api_hash="", discussion_chat_id=0)
-    try:
+    with pytest.raises(UserbotConfigurationError) as captured:
         create_userbot_client(
             config,
             project_root=tmp_path,
             client_factory=factory,
             environ={},
         )
-    except UserbotConfigurationError as exc:
-        error_message = str(exc)
-    else:  # pragma: no cover
-        raise AssertionError("invalid userbot configuration was accepted")
+    error_message = str(captured.value)
     assert constructed is False
     assert "USERBOT_API_ID" in error_message
     assert "USERBOT_API_HASH" in error_message
     assert "DISCUSSION_CHAT_ID" in error_message
 
 
-def test_default_session_falls_back_to_existing_legacy_root(tmp_path: Path) -> None:
-    (tmp_path / "userbot_session.session").touch()
+def test_default_session_does_not_use_legacy_root_fallback(tmp_path: Path) -> None:
+    legacy = tmp_path / "userbot_session.session"
+    legacy.touch(mode=0o600)
     runtime_dir = tmp_path / "var"
     config = replace(
         _config(tmp_path),
@@ -151,11 +159,12 @@ def test_default_session_falls_back_to_existing_legacy_root(tmp_path: Path) -> N
         session=str(runtime_dir / "userbot_session"),
     )
     result = resolve_userbot_session(config, environ={}, project_root=tmp_path)
-    assert result == str(tmp_path / "userbot_session")
+    assert result == str(runtime_dir / "userbot_session")
+    with pytest.raises(UserbotSessionError, match="directory does not exist"):
+        create_userbot_client(config, project_root=tmp_path, client_factory=lambda *_: object())
 
 
-def test_explicit_session_never_uses_legacy_fallback(tmp_path: Path) -> None:
-    (tmp_path / "userbot_session.session").touch()
+def test_explicit_session_is_returned_unchanged(tmp_path: Path) -> None:
     configured = tmp_path / "sessions" / "named"
     config = replace(_config(tmp_path), session=str(configured))
     result = resolve_userbot_session(
@@ -166,5 +175,5 @@ def test_explicit_session_never_uses_legacy_fallback(tmp_path: Path) -> None:
     assert result == str(configured)
 
 
-def test_entrypoint_exports_only_composition_functions() -> None:
-    assert entrypoint.__all__ == ["main", "run"]
+def test_entrypoint_exports_only_run() -> None:
+    assert entrypoint.__all__ == ["run"]
