@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: pip
-    directory: /
+    directory: /requirements
     schedule:
       interval: weekly
       day: monday
@@ -21,6 +21,14 @@ updates:
           - asyncpg
           - cryptg
           - cryptography
+      web-and-utilities:
+        patterns:
+          - flask
+          - requests
+          - python-dotenv
+          - python-dateutil
+          - pytz
+          - pandas
       quality-tooling:
         dependency-type: development
         patterns:
@@ -29,6 +37,7 @@ updates:
           - ruff
           - black
           - mypy
+          - types-*
     labels:
       - dependencies
       - security
