@@ -10,9 +10,11 @@ permissions:
 jobs:
   export:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -22,7 +24,7 @@ jobs:
             requirements-dev.txt
       - name: Install development dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Apply deterministic lint fixes
+      - name: Apply and validate deterministic fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -44,134 +46,162 @@ jobs:
             tests/test_time_boundaries.py
             tests/test_time_policy_checker.py
           )
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("bot/application_models.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace("from typing import Mapping, TypeVar\n", "from collections.abc import Mapping\n")
+          text = text.replace("from typing import TypeVar\n", "")
+          text = text.replace("\nT = TypeVar(\"T\")\n", "")
+          text = text.replace(
+              "def required(row: Mapping[str, object], key: str, expected: type[T]) -> T:",
+              "def required[T](row: Mapping[str, object], key: str, expected: type[T]) -> T:",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("bot/application_ports.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "from typing import AsyncContextManager, Protocol, TypeVar, runtime_checkable\n",
+              "from contextlib import AbstractAsyncContextManager\n"
+              "from typing import Protocol, TypeVar, runtime_checkable\n",
+          )
+          text = text.replace("AsyncContextManager[object]", "AbstractAsyncContextManager[object]")
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("bot/domain/auctions/models.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "        if self.end_time is not None and current_utc >= auction_bidding_closes_at(self.end_time):\n"
+              "            return False\n"
+              "        return True\n",
+              "        return self.end_time is None or current_utc < auction_bidding_closes_at(self.end_time)\n",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("bot/repositories/auction_workflows.py")
+          text = path.read_text(encoding="utf-8")
+          moderatable = '''                row = await conn.fetchrow(
+                    f"""
+                    UPDATE public.auctions
+                    SET {assignments}
+                    WHERE auction_id = $1
+                      AND status IN (
+                          'draft', 'moderation', 'pending', 'approved',
+                          'scheduled', 'publication_failed'
+                      )
+                      AND message_id IS NULL
+                    RETURNING *
+                    """,
+                    int(auction_id),
+                    *values,
+                )'''
+          moderatable_replacement = '''                update_sql = (
+                    "UPDATE public.auctions "
+                    f"SET {assignments} "  # noqa: S608 - names come from _MODERATABLE_FIELDS
+                    "WHERE auction_id = $1 "
+                    "AND status IN ('draft', 'moderation', 'pending', 'approved', "
+                    "'scheduled', 'publication_failed') "
+                    "AND message_id IS NULL RETURNING *"
+                )
+                row = await conn.fetchrow(update_sql, int(auction_id), *values)'''
+          owner = '''            row = await conn.fetchrow(
+                f"""
+                UPDATE public.auctions a
+                SET {assignments}
+                WHERE a.auction_id = $1
+                  AND a.status = 'pending'
+                  AND a.message_id IS NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM public.auction_owners ao
+                      WHERE ao.auction_id = a.auction_id
+                        AND ao.user_id = ${owner_parameter}
+                  )
+                RETURNING a.*
+                """,
+                int(auction_id),
+                *values,
+                int(owner_id),
+            )'''
+          owner_replacement = '''            update_sql = (
+                "UPDATE public.auctions a "
+                f"SET {assignments} "  # noqa: S608 - names come from _OWNER_EDITABLE_FIELDS
+                "WHERE a.auction_id = $1 AND a.status = 'pending' "
+                "AND a.message_id IS NULL AND EXISTS ("
+                "SELECT 1 FROM public.auction_owners ao "
+                "WHERE ao.auction_id = a.auction_id "
+                f"AND ao.user_id = ${owner_parameter}) "  # noqa: S608 - derived index
+                "RETURNING a.*"
+            )
+            row = await conn.fetchrow(update_sql, int(auction_id), *values, int(owner_id))'''
+          if moderatable not in text or owner not in text:
+              raise SystemExit("allowlisted dynamic UPDATE statements not found")
+          text = text.replace(moderatable, moderatable_replacement, 1)
+          text = text.replace(owner, owner_replacement, 1)
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("bot/use_cases/auction_moderation.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "        except Exception:\n            return ()\n",
+              "        except Exception:  # noqa: BLE001 - optional owner enrichment is best-effort\n"
+              "            return ()\n",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("tests/integration/test_migrations_postgres.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "        journal_count = await connection.fetchval(f\"SELECT count(*) FROM public.{MIGRATION_TABLE}\")\n",
+              "        journal_sql = (\n"
+              "            f\"SELECT count(*) FROM public.{MIGRATION_TABLE}\"  # noqa: S608\n"
+              "        )\n"
+              "        journal_count = await connection.fetchval(journal_sql)\n",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("tests/test_auction_domain.py")
+          text = path.read_text(encoding="utf-8")
+          root_line = "ROOT = Path(__file__).resolve().parents[1]\n\n"
+          if root_line in text:
+              text = text.replace(root_line, "", 1)
+              marker = "\n\ndef test_"
+              text = text.replace(
+                  marker,
+                  "\n\nROOT = Path(__file__).resolve().parents[1]\n\n\ndef test_",
+                  1,
+              )
+          path.write_text(text, encoding="utf-8")
+          PY
           ruff_args=(
             --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG
             --ignore S101,S603,S607
           )
-          python -m ruff check --fix "${ruff_args[@]}" "${files[@]}" || true
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('bot/application_models.py')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace('from typing import TypeVar\n', '')
-          text = text.replace('\nT = TypeVar("T")\n', '')
-          text = text.replace('def required(row:', 'def required[T](row:')
-          path.write_text(text, encoding='utf-8')
-
-          path = Path('bot/application_ports.py')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace(
-              'from typing import AsyncContextManager, Protocol, TypeVar, runtime_checkable\n',
-              'from contextlib import AbstractAsyncContextManager\n'
-              'from typing import Protocol, TypeVar, runtime_checkable\n',
-          )
-          text = text.replace('AsyncContextManager[object]', 'AbstractAsyncContextManager[object]')
-          path.write_text(text, encoding='utf-8')
-
-          path = Path('bot/domain/auctions/models.py')
-          text = path.read_text(encoding='utf-8')
-          needle = (
-              '        if self.end_time is not None and current_utc >= '
-              'auction_bidding_closes_at(self.end_time):\n'
-              '            return False\n'
-              '        return True\n'
-          )
-          replacement = (
-              '        return self.end_time is None or current_utc < '
-              'auction_bidding_closes_at(self.end_time)\n'
-          )
-          if needle not in text:
-              raise SystemExit('active-auction end condition not found')
-          path.write_text(text.replace(needle, replacement), encoding='utf-8')
-
-          path = Path('bot/repositories/auction_workflows.py')
-          text = path.read_text(encoding='utf-8')
-
-          def extract_allowlisted_query(source: str, marker: str, rationale: str) -> str:
-              marker_pos = source.index(marker)
-              call_pos = source.rfind('row = await conn.fetchrow(\n', 0, marker_pos)
-              string_pos = source.index('f"""', call_pos, marker_pos)
-              close_pos = source.index('""",', marker_pos)
-              line_start = source.rfind('\n', 0, call_pos) + 1
-              indent = source[line_start:call_pos]
-              query = source[string_pos:close_pos + 3]
-              replacement = (
-                  f'{indent}# {rationale}\n'
-                  f'{indent}query = {query}  # noqa: S608\n'
-                  f'{indent}row = await conn.fetchrow(\n'
-                  f'{indent}    query,'
-              )
-              return source[:line_start] + replacement + source[close_pos + 4:]
-
-          text = extract_allowlisted_query(
-              text,
-              'SET {assignments}',
-              'Column names are restricted by _MODERATABLE_FIELDS.',
-          )
-          text = extract_allowlisted_query(
-              text,
-              'SET {assignments}',
-              'Column names are restricted by _OWNER_EDITABLE_FIELDS.',
-          )
-          path.write_text(text, encoding='utf-8')
-
-          path = Path('bot/use_cases/auction_moderation.py')
-          text = path.read_text(encoding='utf-8')
-          needle = '        except Exception:\n            return ()\n'
-          replacement = (
-              '        except Exception:  # noqa: BLE001 - optional owner enrichment is best-effort\n'
-              '            return ()\n'
-          )
-          if needle not in text:
-              raise SystemExit('best-effort owner exception handler not found')
-          path.write_text(text.replace(needle, replacement), encoding='utf-8')
-
-          path = Path('tests/integration/test_migrations_postgres.py')
-          text = path.read_text(encoding='utf-8')
-          needle = (
-              '        journal_count = await connection.fetchval('
-              'f"SELECT count(*) FROM public.{MIGRATION_TABLE}")\n'
-          )
-          replacement = (
-              '        journal_sql = '
-              'f"SELECT count(*) FROM public.{MIGRATION_TABLE}"  # noqa: S608\n'
-              '        journal_count = await connection.fetchval(journal_sql)\n'
-          )
-          if needle not in text:
-              raise SystemExit('migration journal query not found')
-          path.write_text(text.replace(needle, replacement), encoding='utf-8')
-
-          path = Path('tests/test_auction_domain.py')
-          text = path.read_text(encoding='utf-8')
-          root_line = 'ROOT = Path(__file__).resolve().parents[1]\n\n'
-          if root_line not in text:
-              raise SystemExit('ROOT declaration not found')
-          text = text.replace(root_line, '', 1)
-          marker = '\n\ndef test_'
-          if marker not in text:
-              raise SystemExit('first test marker not found')
-          text = text.replace(
-              marker,
-              '\n\nROOT = Path(__file__).resolve().parents[1]\n\n\ndef test_',
-              1,
-          )
-          path.write_text(text, encoding='utf-8')
-          PY
           python -m ruff check --fix "${ruff_args[@]}" "${files[@]}"
           python -m black "${files[@]}"
-          python -m ruff check \
-            "${ruff_args[@]}" \
-            --output-format=concise \
-            "${files[@]}"
+          python -m ruff check --fix "${ruff_args[@]}" "${files[@]}"
+          python -m ruff check "${ruff_args[@]}" --output-format=concise "${files[@]}"
           python scripts/check_time_policy.py
           python -m pytest -q -m 'not integration'
           mkdir -p var/time-policy-ruff-fixes
           cp --parents "${files[@]}" var/time-policy-ruff-fixes/
+          git diff --binary > var/time-policy-ruff-fixes.patch
+      - name: Run coverage ratchet
+        run: python scripts/quality.py coverage
+        env:
+          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          UID_HASH_KEY: ci-only-hmac-key
+          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       - name: Upload validated fixes
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: time-policy-ruff-fixes
-          path: var/time-policy-ruff-fixes
-          if-no-files-found: error
+          path: |
+            var/time-policy-ruff-fixes
+            var/time-policy-ruff-fixes.patch
+            var/quality
+          if-no-files-found: warn
           retention-days: 1
