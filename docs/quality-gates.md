@@ -29,6 +29,12 @@ Job `test` остаётся стабильным агрегатором для b
 
 Workflow запускается для `pull_request` и для push только в `main`, поэтому один commit ветки PR не создаёт дублирующий push-run. `concurrency.cancel-in-progress` отменяет устаревшие прогоны после новых commit.
 
+## Проверенный результат
+
+Контрольный PR-прогон выполнил 603 unit/regression теста в четырёх shards без повторного coverage suite: 0 failures, 0 errors, 2 skips и 0 flaky. Суммарное время тестов по JUnit составило 60,563 секунды, а самый медленный измеренный shard выполнил 140 тестов за 12,32 секунды. Объединение четырёх coverage-файлов сохранило ratchet на уровне 23,89% overall и 79,39% domain/application.
+
+Установка полного графа из 65 пакетов через прогретый `uv` cache заняла около 2,9 секунды внутри shard job, включая resolution, preparation и installation. Эти числа являются наблюдаемым результатом GitHub-hosted runner, а не постоянным SLA: очередь Actions и холодный cache всё ещё способны проявить человеческий характер.
+
 ## Preflight
 
 Перед завершением shard-матрицы отдельный preflight проверяет:
