@@ -82,64 +82,39 @@ jobs:
 
           path = Path("bot/repositories/auction_workflows.py")
           text = path.read_text(encoding="utf-8")
-          moderatable = '''                row = await conn.fetchrow(
-                    f"""
-                    UPDATE public.auctions
-                    SET {assignments}
-                    WHERE auction_id = $1
-                      AND status IN (
-                          'draft', 'moderation', 'pending', 'approved',
-                          'scheduled', 'publication_failed'
-                      )
-                      AND message_id IS NULL
-                    RETURNING *
-                    """,
-                    int(auction_id),
-                    *values,
-                )'''
-          moderatable_replacement = '''                update_sql = (
-                    "UPDATE public.auctions "
-                    f"SET {assignments} "  # noqa: S608 - names come from _MODERATABLE_FIELDS
-                    "WHERE auction_id = $1 "
-                    "AND status IN ('draft', 'moderation', 'pending', 'approved', "
-                    "'scheduled', 'publication_failed') "
-                    "AND message_id IS NULL RETURNING *"
-                )
-                row = await conn.fetchrow(update_sql, int(auction_id), *values)'''
-          owner = '''            row = await conn.fetchrow(
-                f"""
-                UPDATE public.auctions a
-                SET {assignments}
-                WHERE a.auction_id = $1
-                  AND a.status = 'pending'
-                  AND a.message_id IS NULL
-                  AND EXISTS (
-                      SELECT 1
-                      FROM public.auction_owners ao
-                      WHERE ao.auction_id = a.auction_id
-                        AND ao.user_id = ${owner_parameter}
-                  )
-                RETURNING a.*
-                """,
-                int(auction_id),
-                *values,
-                int(owner_id),
-            )'''
-          owner_replacement = '''            update_sql = (
-                "UPDATE public.auctions a "
-                f"SET {assignments} "  # noqa: S608 - names come from _OWNER_EDITABLE_FIELDS
-                "WHERE a.auction_id = $1 AND a.status = 'pending' "
-                "AND a.message_id IS NULL AND EXISTS ("
-                "SELECT 1 FROM public.auction_owners ao "
-                "WHERE ao.auction_id = a.auction_id "
-                f"AND ao.user_id = ${owner_parameter}) "  # noqa: S608 - derived index
-                "RETURNING a.*"
-            )
-            row = await conn.fetchrow(update_sql, int(auction_id), *values, int(owner_id))'''
-          if moderatable not in text or owner not in text:
-              raise SystemExit("allowlisted dynamic UPDATE statements not found")
-          text = text.replace(moderatable, moderatable_replacement, 1)
-          text = text.replace(owner, owner_replacement, 1)
+
+          def extract_query(source: str, method: str, rationale: str) -> str:
+              method_start = source.index(f"    async def {method}(")
+              method_end = source.find("\n    async def ", method_start + 1)
+              if method_end < 0:
+                  method_end = len(source)
+              marker = source.index("SET {assignments}", method_start, method_end)
+              call_start = source.rfind("row = await conn.fetchrow(\n", method_start, marker)
+              if call_start < 0:
+                  raise SystemExit(f"fetchrow call not found in {method}")
+              string_start = source.index('f"""', call_start, marker)
+              string_end = source.index('""",', marker, method_end)
+              line_start = source.rfind("\n", method_start, call_start) + 1
+              indent = source[line_start:call_start]
+              query = source[string_start : string_end + 3]
+              replacement = (
+                  f"{indent}# {rationale}\n"
+                  f"{indent}update_sql = {query}  # noqa: S608\n"
+                  f"{indent}row = await conn.fetchrow(\n"
+                  f"{indent}    update_sql,"
+              )
+              return source[:line_start] + replacement + source[string_end + 4 :]
+
+          text = extract_query(
+              text,
+              "update_moderatable_fields",
+              "Column names are restricted by _MODERATABLE_FIELDS.",
+          )
+          text = extract_query(
+              text,
+              "update_owner_fields",
+              "Column names are restricted by _OWNER_EDITABLE_FIELDS.",
+          )
           path.write_text(text, encoding="utf-8")
 
           path = Path("bot/use_cases/auction_moderation.py")
