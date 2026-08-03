@@ -7,9 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    integration_runner = (ROOT / "scripts/run_postgres_integration.py").read_text(
-        encoding="utf-8"
-    )
+    integration_runner = (ROOT / "scripts/run_postgres_integration.py").read_text(encoding="utf-8")
     quality_runner = (ROOT / "scripts/quality.py").read_text(encoding="utf-8")
 
     assert "postgres-integration:" in workflow
@@ -36,13 +34,9 @@ def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
 
 def test_parallel_unit_plan_keeps_required_check_names_and_single_execution() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    quality_workflow = (ROOT / ".github/workflows/quality.yml").read_text(
-        encoding="utf-8"
-    )
+    quality_workflow = (ROOT / ".github/workflows/quality.yml").read_text(encoding="utf-8")
     sharder = (ROOT / "scripts/ci_test_shard.py").read_text(encoding="utf-8")
-    coverage_reporter = (ROOT / "scripts/ci_coverage_report.py").read_text(
-        encoding="utf-8"
-    )
+    coverage_reporter = (ROOT / "scripts/ci_coverage_report.py").read_text(encoding="utf-8")
 
     assert "name: test" in workflow
     assert "name: coverage" in workflow
