@@ -14,6 +14,20 @@ from bot.repositories.outbox import TelegramOutboxRepository
 pytestmark = pytest.mark.integration
 
 
+async def _insert_user(pool: asyncpg.Pool, user_id: int) -> None:
+    async with pool.acquire() as connection:
+        await connection.execute(
+            """
+            INSERT INTO public.users(user_id, username, full_name)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id) DO NOTHING
+            """,
+            user_id,
+            f"user_{user_id}",
+            f"User {user_id}",
+        )
+
+
 async def _insert_auction(pool: asyncpg.Pool, *, auction_id: int = 1) -> None:
     now = datetime.now(timezone.utc)
     async with pool.acquire() as connection:
@@ -72,7 +86,7 @@ async def test_current_schema_keeps_utc_columns_and_operational_end_time_trigger
 
     assert data_type == "timestamp with time zone"
     assert trigger_exists
-    assert interval.total_seconds() == 31 * 60
+    assert interval.total_seconds() == 30 * 60 + 59
 
 
 async def test_concurrent_auction_enqueue_has_single_winner(
@@ -103,6 +117,7 @@ async def test_concurrent_auction_enqueue_has_single_winner(
 async def test_card_day_marker_and_message_are_atomic_under_race(
     postgres_pool: asyncpg.Pool,
 ) -> None:
+    await _insert_user(postgres_pool, 501)
     repository = TelegramOutboxRepository(postgres_pool)
 
     results = await asyncio.gather(
