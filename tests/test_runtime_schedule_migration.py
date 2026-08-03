@@ -9,7 +9,7 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     versions = [migration.version for migration in migrations]
 
     assert len(versions) == len(set(versions))
-    assert filenames[-1] == "016_auction_processing_leases.sql"
+    assert filenames[-1] == "017_query_performance_indexes.sql"
 
     schedule_migration = next(
         migration
@@ -55,7 +55,17 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     assert "delivery_state" in delivery_contract.sql
     assert "copy_message" in delivery_contract.sql
 
-    processing_contract = migrations[-1]
+    processing_contract = next(
+        migration
+        for migration in migrations
+        if migration.filename == "016_auction_processing_leases.sql"
+    )
     assert "publication_started_at" in processing_contract.sql
     assert "finalization_started_at" in processing_contract.sql
     assert "ix_auctions_publication_due" in processing_contract.sql
+
+    performance_contract = migrations[-1]
+    assert "ix_users_username_ci" in performance_contract.sql
+    assert "ix_users_trusted_username_ci" in performance_contract.sql
+    assert "ix_exchange_batches_status_created" in performance_contract.sql
+    assert "ix_telegram_outbox_pending" in performance_contract.sql
