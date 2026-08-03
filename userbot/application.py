@@ -6,7 +6,6 @@ import asyncio
 import logging
 import os
 from collections.abc import Mapping
-from contextlib import suppress
 from getpass import getpass
 from pathlib import Path
 from typing import Any, Callable
@@ -15,6 +14,12 @@ from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
 from bot.core.settings import UserbotProcessSettings, UserbotSettings
+from bot.core.tasks import (
+    BackgroundTaskManager,
+    BackgroundTaskSpec,
+    RestartPolicy,
+    WorkerCriticality,
+)
 
 ClientFactory = Callable[[str, int, str], Any]
 logger = logging.getLogger("userbot")
@@ -82,8 +87,39 @@ def create_userbot_client(
     return client_factory(session, config.api_id, config.api_hash)
 
 
+async def _run_client_with_worker_monitor(
+    telegram_client: TelegramClient,
+    task_manager: BackgroundTaskManager,
+) -> None:
+    disconnected = asyncio.create_task(
+        telegram_client.run_until_disconnected(),
+        name="userbot-disconnected-monitor",
+    )
+    worker_monitor = asyncio.create_task(
+        task_manager.wait_for_failure(),
+        name="userbot-worker-monitor",
+    )
+    try:
+        done, _ = await asyncio.wait(
+            {disconnected, worker_monitor},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if worker_monitor in done:
+            disconnected.cancel()
+            await asyncio.gather(disconnected, return_exceptions=True)
+            await worker_monitor
+        worker_monitor.cancel()
+        await asyncio.gather(worker_monitor, return_exceptions=True)
+        await disconnected
+    finally:
+        for task in (disconnected, worker_monitor):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(disconnected, worker_monitor, return_exceptions=True)
+
+
 async def run_userbot_application(config: UserbotProcessSettings) -> None:
-    """Run authorization, handlers and workers with deterministic cleanup."""
+    """Run authorization, handlers and supervised workers with deterministic cleanup."""
 
     logging.basicConfig(level=logging.INFO)
 
@@ -106,7 +142,7 @@ async def run_userbot_application(config: UserbotProcessSettings) -> None:
     )
     register_handlers(telegram_client)
     register_schedule_handlers(telegram_client)
-    worker_tasks: list[asyncio.Task[None]] = []
+    task_manager: BackgroundTaskManager | None = None
 
     try:
         await init_db(database_runtime)
@@ -121,31 +157,39 @@ async def run_userbot_application(config: UserbotProcessSettings) -> None:
                 password = getpass("Введите пароль 2FA: ").strip()
                 await telegram_client.sign_in(phone=phone, password=password)
 
-        worker_tasks.extend(
-            (
-                asyncio.create_task(
-                    autobid_watchdog(telegram_client),
-                    name="userbot-autobid-watchdog",
+        task_manager = BackgroundTaskManager()
+        task_manager.start(
+            [
+                BackgroundTaskSpec(
+                    "userbot-autobid-watchdog",
+                    lambda _context: autobid_watchdog(telegram_client),
+                    criticality=WorkerCriticality.CRITICAL,
+                    restart_policy=RestartPolicy.ON_FAILURE,
+                    max_failures=4,
+                    max_backoff=30.0,
+                    shutdown_timeout=20.0,
                 ),
-                asyncio.create_task(
-                    schedule_announcement_watchdog(
+                BackgroundTaskSpec(
+                    "userbot-schedule-announcement-watchdog",
+                    lambda _context: schedule_announcement_watchdog(
                         telegram_client,
                         config=userbot_settings,
                     ),
-                    name="userbot-schedule-announcement-watchdog",
+                    criticality=WorkerCriticality.RECOVERABLE,
+                    restart_policy=RestartPolicy.ALWAYS,
+                    max_failures=8,
+                    max_backoff=60.0,
+                    shutdown_timeout=20.0,
                 ),
-            )
+            ]
         )
         current_user = await telegram_client.get_me()
         logger.info("Userbot logged in as @%s", current_user.username or current_user.id)
         logger.info("Listening discussion chat for bids/moderation/rules…")
-        await telegram_client.run_until_disconnected()
+        await _run_client_with_worker_monitor(telegram_client, task_manager)
     finally:
-        for task in worker_tasks:
-            task.cancel()
-        for task in worker_tasks:
-            with suppress(asyncio.CancelledError):
-                await task
+        if task_manager is not None:
+            await task_manager.stop()
         try:
             if telegram_client.is_connected():
                 await telegram_client.disconnect()
