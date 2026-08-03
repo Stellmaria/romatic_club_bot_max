@@ -5,15 +5,18 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from aiogram import Bot, Dispatcher
 
 from bot.core.logging import configure_logging
-from bot.core.observability import HealthProbeServer, MetricsRegistry
 from bot.core.settings import BotProcessSettings
 from bot.core.supervisor_client import SupervisorClient
 from bot.core.tasks import BackgroundTaskManager
 from bot.middlewares.observability import ObservabilityMiddleware
+
+if TYPE_CHECKING:
+    from bot.core.observability import HealthProbeServer
 
 logger = logging.getLogger("auction_bot")
 
@@ -73,6 +76,7 @@ async def run_bot(config: BotProcessSettings) -> None:
 
     from bot.bootstrap import build_background_task_specs, register_all_routers
     from bot.bootstrap.container import ApplicationContainer
+    from bot.core.observability import HealthProbeServer, MetricsRegistry
     from bot.telegram.protection import patch_bot_protect_content
     from db.admin import is_admin
     from db.lifecycle import close_db, init_db
