@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+!.env.bot.example
+!.env.userbot.example
 
 # Python
 __pycache__/
@@ -26,10 +28,15 @@ Thumbs.db
 # Telegram sessions and runtime files
 *.session
 *.session-journal
+*.session-shm
+*.session-wal
 *.log
 hs_err_pid*.log
 /var/schedule_announcements.json
 /var/schedule_announcements.json.tmp
+/var/userbot-health.json
+/var/userbot-health.json.tmp
+/server-data/
 
 # Backups and exports
 backups/
