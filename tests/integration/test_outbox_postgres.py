@@ -28,6 +28,36 @@ async def _insert_user(pool: asyncpg.Pool, user_id: int) -> None:
         )
 
 
+async def _insert_card(pool: asyncpg.Pool, card_id: int) -> None:
+    async with pool.acquire() as connection:
+        await connection.execute(
+            """
+            INSERT INTO public.decks(id, name)
+            VALUES ($1, $2)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            card_id,
+            f"Integration Deck {card_id}",
+        )
+        await connection.execute(
+            """
+            INSERT INTO public.cards(
+                card_id,
+                deck_id,
+                num,
+                hero_name,
+                rarity,
+                story,
+                card_name
+            )
+            VALUES ($1, $1, 1, 'Integration Hero', 'common', 'Integration', $2)
+            ON CONFLICT (card_id) DO NOTHING
+            """,
+            card_id,
+            f"Integration Card {card_id}",
+        )
+
+
 async def _insert_auction(pool: asyncpg.Pool, *, auction_id: int = 1) -> None:
     now = datetime.now(timezone.utc)
     async with pool.acquire() as connection:
@@ -118,6 +148,7 @@ async def test_card_day_marker_and_message_are_atomic_under_race(
     postgres_pool: asyncpg.Pool,
 ) -> None:
     await _insert_user(postgres_pool, 501)
+    await _insert_card(postgres_pool, 77)
     repository = TelegramOutboxRepository(postgres_pool)
 
     results = await asyncio.gather(
