@@ -18,7 +18,9 @@ from bot.domain.auctions.enums import AuctionKind, Currency
         (bytearray(b"10"), 10),
     ],
 )
-def test_optional_int_accepts_supported_persistence_values(value: object, expected: int | None) -> None:
+def test_optional_int_accepts_supported_persistence_values(
+    value: object, expected: int | None
+) -> None:
     assert optional_int({"value": value}, "value") == expected
 
 
