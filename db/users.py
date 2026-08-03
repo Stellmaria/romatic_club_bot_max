@@ -58,7 +58,7 @@ async def add_user(user_id: int, username: str, full_name: str) -> None:
         async with track_database_query("users.profile.add", pool=db_pool.pool):
             await conn.execute(
                 """
-                INSERT INTO public.users (user_id, username, full_name)
+                INSERT INTO users (user_id, username, full_name)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (user_id) DO UPDATE
                 SET username = EXCLUDED.username,
