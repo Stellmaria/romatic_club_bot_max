@@ -42,7 +42,7 @@ python_files = ["test_*.py"]
 addopts = "-ra --strict-markers"
 asyncio_mode = "auto"
 markers = [
-  "integration: requires explicitly confirmed disposable external services",
+  "integration: destructive tests requiring POSTGRES_INTEGRATION_CONFIRM=1 and disposable PostgreSQL 17",
 ]
 
 [tool.ruff]
