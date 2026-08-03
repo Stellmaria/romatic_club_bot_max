@@ -167,7 +167,7 @@ class MetricsRegistry:
             )
             for upper_bound, bucket_count in buckets:
                 rendered_bound = "+Inf" if math.isinf(upper_bound) else f"{upper_bound:g}"
-                bucket_labels = tuple((*labels, ("le", rendered_bound)))
+                bucket_labels = (*labels, ("le", rendered_bound))
                 lines.append(f"{name}_bucket{_render_labels(bucket_labels)} {bucket_count}")
             lines.append(f"{name}_count{_render_labels(labels)} {count}")
             lines.append(
