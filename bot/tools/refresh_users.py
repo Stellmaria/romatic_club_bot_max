@@ -2,24 +2,29 @@ import asyncio
 import logging
 import sys
 from time import perf_counter
+from typing import TypedDict
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
-from bot.core.environment import load_project_environment, resolve_project_root
 from bot.core.legacy_config import configure_legacy_config, legacy_config
-from bot.core.settings import BotProcessSettings, ConfigurationError
+from bot.core.settings import BotProcessSettings
 from bot.uid_crypto import configure_uid_crypto
 from db.core import close_db, init_db
 from db.legacy import (
-    fetch,
-    execute,
     add_user,
-    set_subscription,
+    execute,
+    fetch,
     set_luxury_status,
+    set_subscription,
 )
 
 log = logging.getLogger("refresh_users")
+
+
+class UserPayload(TypedDict):
+    username: str | None
+    full_name: str | None
 
 
 def _clean_username(username: str | None) -> str | None:
@@ -41,8 +46,7 @@ async def _normalize_users_defaults() -> None:
     Подчищаем NULL-ы и приводим users к ожидаемым дефолтам, чтобы дальше
     не было сюрпризов типа bool(None) -> False.
     """
-    await execute(
-        """
+    await execute("""
         UPDATE public.users
         SET
             is_subscribed = COALESCE(is_subscribed, TRUE),
@@ -53,20 +57,17 @@ async def _normalize_users_defaults() -> None:
             created_at = COALESCE(created_at, CURRENT_TIMESTAMP),
             uid_verif_confirmed_count = COALESCE(uid_verif_confirmed_count, 0),
             uid_verif_rejected_count = COALESCE(uid_verif_rejected_count, 0)
-        """
-    )
+        """)
 
     # Если pm_opened=TRUE, но timestamps пустые (бывает после миграций) – заполним только NULL.
-    await execute(
-        """
+    await execute("""
         UPDATE public.users
         SET
             first_pm_at = COALESCE(first_pm_at, NOW()),
             last_pm_at  = COALESCE(last_pm_at, NOW())
         WHERE COALESCE(pm_opened, FALSE) = TRUE
           AND (first_pm_at IS NULL OR last_pm_at IS NULL)
-        """
-    )
+        """)
 
 
 async def _recompute_warnings_count() -> None:
@@ -74,8 +75,7 @@ async def _recompute_warnings_count() -> None:
     warnings_count = фактическое кол-во записей в user_warnings (если таблица есть).
     """
     try:
-        await execute(
-            """
+        await execute("""
             WITH agg AS (
                 SELECT user_id, COUNT(*)::int AS cnt
                 FROM public.user_warnings
@@ -90,11 +90,12 @@ async def _recompute_warnings_count() -> None:
             SET warnings_count = r.cnt
             FROM all_rows r
             WHERE u.user_id = r.user_id
-            """
-        )
+            """)
         log.info("Recomputed warnings_count from user_warnings.")
     except Exception:
-        log.warning("Skip recompute warnings_count (no user_warnings or schema mismatch).", exc_info=True)
+        log.warning(
+            "Skip recompute warnings_count (no user_warnings or schema mismatch).", exc_info=True
+        )
 
 
 async def _recompute_uid_verif_stats() -> None:
@@ -103,8 +104,7 @@ async def _recompute_uid_verif_stats() -> None:
     инкременты идут по counterparty_user_id при confirmed/rejected).
     """
     try:
-        await execute(
-            """
+        await execute("""
             WITH agg AS (
                 SELECT
                     counterparty_user_id AS user_id,
@@ -134,11 +134,13 @@ async def _recompute_uid_verif_stats() -> None:
                 uid_verif_last_rejected_at  = r.last_rejected_at
             FROM all_rows r
             WHERE u.user_id = r.user_id
-            """
-        )
+            """)
         log.info("Recomputed uid_verif_* from uid_verification_confirmations.")
     except Exception:
-        log.warning("Skip recompute uid_verif_* (no uid_verification_confirmations or schema mismatch).", exc_info=True)
+        log.warning(
+            "Skip recompute uid_verif_* (no uid_verification_confirmations or schema mismatch).",
+            exc_info=True,
+        )
 
 
 async def try_refresh_from_pm(bot: Bot, user_id: int) -> bool:
@@ -150,7 +152,9 @@ async def try_refresh_from_pm(bot: Bot, user_id: int) -> bool:
     try:
         chat = await bot.get_chat(chat_id=user_id)
         username = _clean_username(getattr(chat, "username", None))
-        full_name = make_full_name(getattr(chat, "first_name", None), getattr(chat, "last_name", None))
+        full_name = make_full_name(
+            getattr(chat, "first_name", None), getattr(chat, "last_name", None)
+        )
 
         await add_user(user_id, username, full_name)
 
@@ -170,7 +174,9 @@ async def try_refresh_from_pm(bot: Bot, user_id: int) -> bool:
         return False
 
 
-async def probe_chat_member(bot: Bot, chat_id: int, user_id: int) -> tuple[bool | None, dict | None]:
+async def probe_chat_member(
+    bot: Bot, chat_id: int, user_id: int
+) -> tuple[bool | None, UserPayload | None]:
     """
     Возвращает:
       - is_member: True/False если удалось проверить, None если не удалось
@@ -180,7 +186,9 @@ async def probe_chat_member(bot: Bot, chat_id: int, user_id: int) -> tuple[bool 
         member = await bot.get_chat_member(chat_id=chat_id, user_id=user_id)
         u = member.user
 
-        status = getattr(member, "status", None)  # member/administrator/creator/restricted/left/kicked
+        status = getattr(
+            member, "status", None
+        )  # member/administrator/creator/restricted/left/kicked
         is_member = None
         if status is not None:
             is_member = status not in ("left", "kicked")
@@ -202,7 +210,11 @@ async def main(config: BotProcessSettings) -> None:
     )
 
     configure_legacy_config(config)
-    configure_uid_crypto(config.bot.uid_hash_key, config.bot.uid_enc_key)
+    configure_uid_crypto(
+        config.bot.uid_hash_key,
+        config.bot.uid_enc_key,
+        (config.bot.uid_enc_key_previous,),
+    )
 
     await init_db(config.database)
     bot = Bot(config.bot.bot_token)
@@ -216,8 +228,7 @@ async def main(config: BotProcessSettings) -> None:
         log.info("Fetching users from DB...")
         t0 = perf_counter()
         rows = await asyncio.wait_for(
-            fetch(
-                """
+            fetch("""
                 SELECT
                     user_id,
                     COALESCE(is_subscribed, TRUE) AS is_subscribed,
@@ -225,8 +236,7 @@ async def main(config: BotProcessSettings) -> None:
                     COALESCE(pm_opened, FALSE)    AS pm_opened
                 FROM public.users
                 ORDER BY user_id
-                """
-            ),
+                """),
             timeout=60,
         )
         dt = perf_counter() - t0
@@ -258,7 +268,9 @@ async def main(config: BotProcessSettings) -> None:
                 row["pm_opened"] = True
 
             # 2) Проверка подписки (discussion)
-            is_sub, user_payload = await probe_chat_member(bot, legacy_config.DISCUSSION_CHAT_ID, uid)
+            is_sub, user_payload = await probe_chat_member(
+                bot, legacy_config.DISCUSSION_CHAT_ID, uid
+            )
             if user_payload is not None:
                 await add_user(uid, user_payload["username"], user_payload["full_name"])
                 names_updated += 1
@@ -309,7 +321,7 @@ async def main(config: BotProcessSettings) -> None:
             total,
         )
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         log.exception("DB fetch timed out (60s). Database/pool/query is stuck.")
         raise
     finally:
@@ -318,4 +330,4 @@ async def main(config: BotProcessSettings) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main(BotProcessSettings.from_env()))

@@ -90,10 +90,13 @@ CONFIG_SCHEMA: Final[tuple[ConfigField, ...]] = (
     ConfigField("DATABASE_POOL_MAX_SIZE", ("bot", "userbot"), "database", default="5"),
     ConfigField("UID_HASH_KEY", ("bot", "userbot"), "identity", required=True, secret=True),
     ConfigField("UID_ENC_KEY", ("bot", "userbot"), "identity", required=True, secret=True),
+    ConfigField("UID_ENC_KEY_PREVIOUS", ("bot", "userbot"), "identity", secret=True),
     ConfigField("RUNTIME_DIR", ("bot", "userbot"), "paths", default="var"),
     ConfigField("USERBOT_API_ID", ("userbot",), "userbot", required=True),
     ConfigField("USERBOT_API_HASH", ("userbot",), "userbot", required=True, secret=True),
-    ConfigField("USERBOT_SESSION", ("userbot",), "userbot", default="var/userbot_session", secret=True),
+    ConfigField(
+        "USERBOT_SESSION", ("userbot",), "userbot", default="var/userbot_session", secret=True
+    ),
     ConfigField("TG_API_ID", ("userbot",), "backfill"),
     ConfigField("TG_API_HASH", ("userbot",), "backfill", secret=True),
     ConfigField("TG_SESSION", ("userbot",), "backfill", default="var/backfill", secret=True),
@@ -101,8 +104,15 @@ CONFIG_SCHEMA: Final[tuple[ConfigField, ...]] = (
     ConfigField("SCHEDULE_ANNOUNCEMENTS_ENABLED", ("userbot",), "schedule", default="true"),
     ConfigField("SCHEDULE_ANNOUNCEMENTS_HOUR", ("userbot",), "schedule", default="23"),
     ConfigField("SCHEDULE_ANNOUNCEMENTS_MINUTE", ("userbot",), "schedule", default="0"),
-    ConfigField("SCHEDULE_ANNOUNCEMENTS_REQUIRE_CUSTOM_EMOJI", ("userbot",), "schedule", default="true"),
-    ConfigField("SCHEDULE_ANNOUNCEMENT_STATE_FILE", ("userbot",), "schedule", default="var/schedule_announcements.json"),
+    ConfigField(
+        "SCHEDULE_ANNOUNCEMENTS_REQUIRE_CUSTOM_EMOJI", ("userbot",), "schedule", default="true"
+    ),
+    ConfigField(
+        "SCHEDULE_ANNOUNCEMENT_STATE_FILE",
+        ("userbot",),
+        "schedule",
+        default="var/schedule_announcements.json",
+    ),
     ConfigField("WINNER_NOTIFY_DEADLINE_MINUTES", ("bot", "userbot"), "auction", default="5"),
     ConfigField("LOG_LEVEL", ("bot",), "runtime", default="INFO"),
     ConfigField("AIOGRAM_DEBUG", ("bot",), "runtime", default="false"),
@@ -346,7 +356,7 @@ class DatabaseSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "DatabaseSettings":
+    ) -> DatabaseSettings:
         reader = _Reader(
             os.environ if environ is None else environ,
             resolve_project_root(project_root),
@@ -370,7 +380,7 @@ class SupervisorClientSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "SupervisorClientSettings":
+    ) -> SupervisorClientSettings:
         reader = _Reader(
             os.environ if environ is None else environ,
             resolve_project_root(project_root),
@@ -394,6 +404,7 @@ class BotSettings:
     luxury_chat_id_lvl2: int
     uid_hash_key: str
     uid_enc_key: str
+    uid_enc_key_previous: str
     winner_notify_deadline_minutes: int
     log_level: LogLevel
     aiogram_debug: bool
@@ -411,7 +422,7 @@ class BotSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "BotSettings":
+    ) -> BotSettings:
         reader = _Reader(
             os.environ if environ is None else environ,
             resolve_project_root(project_root),
@@ -437,6 +448,7 @@ class UserbotSettings:
     luxury_chat_id_lvl2: int
     uid_hash_key: str
     uid_enc_key: str
+    uid_enc_key_previous: str
     runtime_dir: Path
     backfill_api_id: int
     backfill_api_hash: str
@@ -457,7 +469,7 @@ class UserbotSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "UserbotSettings":
+    ) -> UserbotSettings:
         root = resolve_project_root(project_root)
         reader = _Reader(os.environ if environ is None else environ, root)
         runtime_dir = reader.path("RUNTIME_DIR", default=root / "var")
@@ -480,7 +492,7 @@ class BotProcessSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "BotProcessSettings":
+    ) -> BotProcessSettings:
         root = resolve_project_root(project_root)
         reader = _Reader(os.environ if environ is None else environ, root)
         runtime_dir = reader.path("RUNTIME_DIR", default=root / "var")
@@ -488,7 +500,13 @@ class BotProcessSettings:
         bot = _parse_bot(reader)
         supervisor = _parse_supervisor(reader)
         reader.raise_if_invalid()
-        return cls(bot=bot, database=database, supervisor=supervisor, project_root=root, runtime_dir=runtime_dir)
+        return cls(
+            bot=bot,
+            database=database,
+            supervisor=supervisor,
+            project_root=root,
+            runtime_dir=runtime_dir,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -504,7 +522,7 @@ class UserbotProcessSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "UserbotProcessSettings":
+    ) -> UserbotProcessSettings:
         root = resolve_project_root(project_root)
         reader = _Reader(os.environ if environ is None else environ, root)
         runtime_dir = reader.path("RUNTIME_DIR", default=root / "var")
@@ -535,7 +553,7 @@ class Settings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "Settings":
+    ) -> Settings:
         root = resolve_project_root(project_root)
         reader = _Reader(os.environ if environ is None else environ, root)
         runtime_dir = reader.path("RUNTIME_DIR", default=root / "var")
@@ -568,6 +586,7 @@ class Settings:
             "database_pool_max_size": (self.database, "pool_max_size"),
             "uid_hash_key": (self.bot, "uid_hash_key"),
             "uid_enc_key": (self.bot, "uid_enc_key"),
+            "uid_enc_key_previous": (self.bot, "uid_enc_key_previous"),
             "admin_log_chats": (self.bot, "admin_log_chats"),
             "log_chat_id": (self.bot, "log_chat_id"),
             "luxury_chat_id": (self.bot, "luxury_chat_id"),
@@ -589,7 +608,10 @@ class Settings:
             "schedule_announcements_enabled": (self.userbot, "schedule_announcements_enabled"),
             "schedule_announcements_hour": (self.userbot, "schedule_announcements_hour"),
             "schedule_announcements_minute": (self.userbot, "schedule_announcements_minute"),
-            "schedule_announcements_require_custom_emoji": (self.userbot, "schedule_announcements_require_custom_emoji"),
+            "schedule_announcements_require_custom_emoji": (
+                self.userbot,
+                "schedule_announcements_require_custom_emoji",
+            ),
             "schedule_announcement_state_file": (self.userbot, "schedule_announcement_state_file"),
             "legacy_bridge_secret": (self.bot, "legacy_bridge_secret"),
             "legacy_bridge_max_skew_seconds": (self.bot, "legacy_bridge_max_skew_seconds"),
@@ -603,24 +625,39 @@ class Settings:
         return getattr(*target)
 
 
+def _validate_fernet_key(reader: _Reader, name: str, value: str) -> None:
+    if not value:
+        return
+    try:
+        decoded = base64.urlsafe_b64decode(value.encode("ascii"))
+    except (ValueError, UnicodeEncodeError):
+        reader.issue(name, "must be a URL-safe base64 Fernet key")
+    else:
+        if len(decoded) != 32:
+            reader.issue(name, "must decode to exactly 32 bytes")
 
-def _validate_identity_keys(reader: _Reader, hash_key: str, encryption_key: str) -> None:
+
+def _validate_identity_keys(
+    reader: _Reader,
+    hash_key: str,
+    encryption_key: str,
+    previous_encryption_key: str = "",
+) -> None:
     if hash_key and len(hash_key.encode("utf-8")) < 16:
         reader.issue("UID_HASH_KEY", "must contain at least 16 bytes")
-    if encryption_key:
-        try:
-            decoded = base64.urlsafe_b64decode(encryption_key.encode("ascii"))
-        except (ValueError, UnicodeEncodeError):
-            reader.issue("UID_ENC_KEY", "must be a URL-safe base64 Fernet key")
-        else:
-            if len(decoded) != 32:
-                reader.issue("UID_ENC_KEY", "must decode to exactly 32 bytes")
+    _validate_fernet_key(reader, "UID_ENC_KEY", encryption_key)
+    _validate_fernet_key(reader, "UID_ENC_KEY_PREVIOUS", previous_encryption_key)
+    if encryption_key and previous_encryption_key == encryption_key:
+        reader.issue("UID_ENC_KEY_PREVIOUS", "must differ from UID_ENC_KEY")
+
 
 def _parse_database(reader: _Reader) -> DatabaseSettings:
     minimum = reader.integer("DATABASE_POOL_MIN_SIZE", default=1, minimum=1)
     maximum = reader.integer("DATABASE_POOL_MAX_SIZE", default=5, minimum=1)
     if maximum < minimum:
-        reader.issue("DATABASE_POOL_MAX_SIZE", "must be greater than or equal to DATABASE_POOL_MIN_SIZE")
+        reader.issue(
+            "DATABASE_POOL_MAX_SIZE", "must be greater than or equal to DATABASE_POOL_MIN_SIZE"
+        )
     return DatabaseSettings(
         url=reader.string("DATABASE_URL", required=True),
         auto_migrate=reader.boolean("DB_AUTO_MIGRATE", default=True),
@@ -632,7 +669,8 @@ def _parse_database(reader: _Reader) -> DatabaseSettings:
 def _parse_bot(reader: _Reader) -> BotSettings:
     hash_key = reader.string("UID_HASH_KEY", required=True)
     encryption_key = reader.string("UID_ENC_KEY", required=True)
-    _validate_identity_keys(reader, hash_key, encryption_key)
+    previous_encryption_key = reader.string("UID_ENC_KEY_PREVIOUS")
+    _validate_identity_keys(reader, hash_key, encryption_key, previous_encryption_key)
     return BotSettings(
         bot_token=reader.string("BOT_TOKEN", required=True),
         admins=reader.int_list("ADMINS"),
@@ -646,23 +684,33 @@ def _parse_bot(reader: _Reader) -> BotSettings:
         luxury_chat_id_lvl2=reader.integer("LUXURY_CHAT_ID_LVL2", default=0),
         uid_hash_key=hash_key,
         uid_enc_key=encryption_key,
-        winner_notify_deadline_minutes=reader.integer("WINNER_NOTIFY_DEADLINE_MINUTES", default=5, minimum=1),
+        uid_enc_key_previous=previous_encryption_key,
+        winner_notify_deadline_minutes=reader.integer(
+            "WINNER_NOTIFY_DEADLINE_MINUTES", default=5, minimum=1
+        ),
         log_level=reader.choice("LOG_LEVEL", LogLevel, default=LogLevel.INFO),
         aiogram_debug=reader.boolean("AIOGRAM_DEBUG", default=False),
         debug_middleware=reader.boolean("DEBUG_MW", default=False),
         drop_pending_updates=reader.boolean("DROP_PENDING_UPDATES", default=True),
-        bid_validation_mode=reader.choice("BID_VALIDATION_MODE", BidValidationMode, default=BidValidationMode.USERBOT),
+        bid_validation_mode=reader.choice(
+            "BID_VALIDATION_MODE", BidValidationMode, default=BidValidationMode.USERBOT
+        ),
         userbot_bid_moderation=reader.boolean("USERBOT_BID_MODERATION", default=True),
         legacy_bridge_secret=reader.string("LEGACY_BRIDGE_SECRET"),
-        legacy_bridge_max_skew_seconds=reader.integer("LEGACY_BRIDGE_MAX_SKEW_SECONDS", default=300, minimum=1),
-        legacy_bridge_nonce_cache_size=reader.integer("LEGACY_BRIDGE_NONCE_CACHE_SIZE", default=4096, minimum=1),
+        legacy_bridge_max_skew_seconds=reader.integer(
+            "LEGACY_BRIDGE_MAX_SKEW_SECONDS", default=300, minimum=1
+        ),
+        legacy_bridge_nonce_cache_size=reader.integer(
+            "LEGACY_BRIDGE_NONCE_CACHE_SIZE", default=4096, minimum=1
+        ),
     )
 
 
 def _parse_userbot(reader: _Reader, runtime_dir: Path) -> UserbotSettings:
     hash_key = reader.string("UID_HASH_KEY", required=True)
     encryption_key = reader.string("UID_ENC_KEY", required=True)
-    _validate_identity_keys(reader, hash_key, encryption_key)
+    previous_encryption_key = reader.string("UID_ENC_KEY_PREVIOUS")
+    _validate_identity_keys(reader, hash_key, encryption_key, previous_encryption_key)
     api_id = reader.first_integer(
         ("USERBOT_API_ID", "TELETHON_API_ID", "TG_API_ID"),
         required_name="USERBOT_API_ID",
@@ -702,18 +750,31 @@ def _parse_userbot(reader: _Reader, runtime_dir: Path) -> UserbotSettings:
         luxury_chat_id_lvl2=reader.integer("LUXURY_CHAT_ID_LVL2", default=0),
         uid_hash_key=hash_key,
         uid_enc_key=encryption_key,
+        uid_enc_key_previous=previous_encryption_key,
         runtime_dir=runtime_dir,
         backfill_api_id=backfill_api_id,
         backfill_api_hash=backfill_api_hash,
         backfill_session=str(backfill_session),
         backfill_limit_posts=reader.integer("BACKFILL_LIMIT_POSTS", default=500, minimum=1),
-        winner_notify_deadline_minutes=reader.integer("WINNER_NOTIFY_DEADLINE_MINUTES", default=5, minimum=1),
-        bid_validation_mode=reader.choice("BID_VALIDATION_MODE", BidValidationMode, default=BidValidationMode.USERBOT),
+        winner_notify_deadline_minutes=reader.integer(
+            "WINNER_NOTIFY_DEADLINE_MINUTES", default=5, minimum=1
+        ),
+        bid_validation_mode=reader.choice(
+            "BID_VALIDATION_MODE", BidValidationMode, default=BidValidationMode.USERBOT
+        ),
         userbot_bid_moderation=reader.boolean("USERBOT_BID_MODERATION", default=True),
-        schedule_announcements_enabled=reader.boolean("SCHEDULE_ANNOUNCEMENTS_ENABLED", default=True),
-        schedule_announcements_hour=reader.integer("SCHEDULE_ANNOUNCEMENTS_HOUR", default=23, minimum=0, maximum=23),
-        schedule_announcements_minute=reader.integer("SCHEDULE_ANNOUNCEMENTS_MINUTE", default=0, minimum=0, maximum=59),
-        schedule_announcements_require_custom_emoji=reader.boolean("SCHEDULE_ANNOUNCEMENTS_REQUIRE_CUSTOM_EMOJI", default=True),
+        schedule_announcements_enabled=reader.boolean(
+            "SCHEDULE_ANNOUNCEMENTS_ENABLED", default=True
+        ),
+        schedule_announcements_hour=reader.integer(
+            "SCHEDULE_ANNOUNCEMENTS_HOUR", default=23, minimum=0, maximum=23
+        ),
+        schedule_announcements_minute=reader.integer(
+            "SCHEDULE_ANNOUNCEMENTS_MINUTE", default=0, minimum=0, maximum=59
+        ),
+        schedule_announcements_require_custom_emoji=reader.boolean(
+            "SCHEDULE_ANNOUNCEMENTS_REQUIRE_CUSTOM_EMOJI", default=True
+        ),
         schedule_announcement_state_file=schedule_state,
     )
 
@@ -744,10 +805,10 @@ def _parse_supervisor(reader: _Reader) -> SupervisorClientSettings:
 
 
 __all__ = (
+    "CONFIG_SCHEMA",
     "BidValidationMode",
     "BotProcessSettings",
     "BotSettings",
-    "CONFIG_SCHEMA",
     "ConfigField",
     "ConfigurationError",
     "ConfigurationIssue",

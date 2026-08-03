@@ -19,45 +19,45 @@ defaults:
 jobs:
   changed-code-quality:
     name: changed-code-quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           version: "0.11.16"
           enable-cache: true
-          cache-dependency-glob: requirements.lock
-      - name: Install pinned development dependencies
-        run: uv pip install --system -r requirements.lock
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Run changed-file quality ratchet
         run: python scripts/quality.py changed
 
   typing-and-architecture:
     name: typing-and-architecture
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           version: "0.11.16"
           enable-cache: true
-          cache-dependency-glob: requirements.lock
-      - name: Install pinned development dependencies
-        run: uv pip install --system -r requirements.lock
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Run strict package typing ratchet
         run: python scripts/quality.py typing
       - name: Run architecture gates
@@ -68,30 +68,163 @@ jobs:
         run: python scripts/quality.py architecture
       - name: Upload typing metrics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: typing-ratchet-results
           path: var/quality/mypy-results.json
           if-no-files-found: warn
           retention-days: 14
 
-  security-static:
-    name: security-static
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  security-boundary:
+    name: security-boundary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Verify immutable references
+        run: python scripts/check_immutable_references.py
+      - name: Validate bounded vulnerability exceptions
+        run: python scripts/check_vulnerability_exceptions.py
       - name: Run security boundary contracts
         run: python scripts/quality.py security
+      - name: Verify UID encryption rotation continuity
+        run: python -m pytest -q tests/test_uid_key_rotation.py tests/test_python_runtime_contract.py
+
+  dependency-security:
+    name: dependency-security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed security tooling
+        run: uv pip install --system --require-hashes --no-deps -r requirements/tools.lock
+      - name: Verify lock reproducibility
+        run: |
+          mkdir generated-locks
+          scripts/compile_locks.sh generated-locks
+          for group in bot userbot tools dev; do
+            diff -u "requirements/${group}.lock" "generated-locks/${group}.lock"
+          done
+      - name: Audit every locked dependency graph
+        run: |
+          read -r -a ignores <<< "$(python scripts/check_vulnerability_exceptions.py --format pip-audit)"
+          for lock in requirements/bot.lock requirements/userbot.lock requirements/tools.lock requirements/dev.lock; do
+            pip-audit --strict --progress-spinner=off --disable-pip --no-deps -r "$lock" "${ignores[@]}"
+          done
+      - name: Enforce dependency license policy
+        run: |
+          python -m venv .license-policy
+          .license-policy/bin/python scripts/check_dependency_licenses.py requirements/dev.lock
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan pull-request commits and repository history
+        uses: gitleaks/gitleaks-action@bcfb9cce635345aac9996cedc19b2de8e01b894f
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+
+  container-security:
+    name: container-security (${{ matrix.service }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [bot, userbot, supervisor, postgres]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build or select immutable image
+        id: image
+        env:
+          SERVICE: ${{ matrix.service }}
+          SHA: ${{ github.sha }}
+        run: |
+          case "$SERVICE" in
+            bot)
+              ref="romatic-bot:${SHA}"
+              docker build --pull=false --build-arg REQUIREMENTS_LOCK=requirements/bot.lock --tag "$ref" .
+              ;;
+            userbot)
+              ref="romatic-userbot:${SHA}"
+              docker build --pull=false --build-arg REQUIREMENTS_LOCK=requirements/userbot.lock --tag "$ref" .
+              ;;
+            supervisor)
+              ref="romatic-supervisor:${SHA}"
+              docker build --pull=false --file Dockerfile.server-supervisor-proxy --tag "$ref" .
+              ;;
+            postgres)
+              ref="romatic-postgres:${SHA}"
+              docker build --pull=false --file Dockerfile.postgres --tag "$ref" .
+              ;;
+            *) exit 2 ;;
+          esac
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - name: Materialize active Trivy exceptions
+        run: python scripts/check_vulnerability_exceptions.py --format trivy > .trivyignore
+      - name: Block fixed high and critical image vulnerabilities
+        uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8
+        with:
+          image-ref: ${{ steps.image.outputs.ref }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+  security-static:
+    name: security-static
+    if: always()
+    needs: [security-boundary, dependency-security, secret-scan, container-security]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verify all blocking supply-chain jobs
+        env:
+          BOUNDARY: ${{ needs.security-boundary.result }}
+          DEPENDENCIES: ${{ needs.dependency-security.result }}
+          SECRETS: ${{ needs.secret-scan.result }}
+          CONTAINERS: ${{ needs.container-security.result }}
+        run: |
+          test "$BOUNDARY" = success
+          test "$DEPENDENCIES" = success
+          test "$SECRETS" = success
+          test "$CONTAINERS" = success
 
   branch-protection-contract:
     name: branch-protection-contract
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Verify main required checks

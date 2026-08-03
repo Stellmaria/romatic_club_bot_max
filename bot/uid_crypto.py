@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from collections.abc import Iterable
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 
 
 class UIDCryptoNotConfigured(RuntimeError):
@@ -11,19 +12,30 @@ class UIDCryptoNotConfigured(RuntimeError):
 
 
 _uid_hash_key: bytes | None = None
-_fernet: Fernet | None = None
+_fernet: MultiFernet | None = None
 
 
-def configure_uid_crypto(hash_key: str, encryption_key: str) -> None:
-    """Install validated identity keys for the current process."""
+def configure_uid_crypto(
+    hash_key: str,
+    encryption_key: str,
+    previous_encryption_keys: Iterable[str] = (),
+) -> None:
+    """Install identity keys, encrypting with current and decrypting with all.
+
+    The first Fernet key is always the active write key. Previous keys are
+    decryption-only compatibility keys used during a bounded rotation window.
+    """
 
     global _uid_hash_key, _fernet
     if not hash_key:
         raise ValueError("UID_HASH_KEY is required")
     if not encryption_key:
         raise ValueError("UID_ENC_KEY is required")
+    keys = [encryption_key, *(key for key in previous_encryption_keys if key)]
+    if len(keys) != len(set(keys)):
+        raise ValueError("UID encryption keyring contains duplicates")
     _uid_hash_key = hash_key.encode("utf-8")
-    _fernet = Fernet(encryption_key.encode("utf-8"))
+    _fernet = MultiFernet([Fernet(key.encode("utf-8")) for key in keys])
 
 
 def reset_uid_crypto_for_testing() -> None:
@@ -38,7 +50,7 @@ def _require_hash_key() -> bytes:
     return _uid_hash_key
 
 
-def _require_fernet() -> Fernet:
+def _require_fernet() -> MultiFernet:
     if _fernet is None:
         raise UIDCryptoNotConfigured("UID crypto is not configured")
     return _fernet
@@ -60,6 +72,12 @@ def uid_encrypt(uid: str) -> str:
 
 def uid_decrypt(token: str) -> str:
     return _require_fernet().decrypt(token.encode("utf-8")).decode("utf-8")
+
+
+def uid_rotate_encryption(token: str) -> str:
+    """Re-encrypt a token with the active key while preserving its timestamp."""
+
+    return _require_fernet().rotate(token.encode("utf-8")).decode("utf-8")
 
 
 def uid_last4(uid: str) -> str:
@@ -90,4 +108,5 @@ __all__ = (
     "uid_encrypt",
     "uid_hash",
     "uid_last4",
+    "uid_rotate_encryption",
 )

@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _assigned_string(source: str, variable_name: str) -> str:
+    module = ast.parse(source)
+    for node in module.body:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if any(isinstance(target, ast.Name) and target.id == variable_name for target in targets):
+            value = ast.literal_eval(node.value)
+            if not isinstance(value, str):
+                raise AssertionError(f"{variable_name} must be a string")
+            return value
+    raise AssertionError(f"{variable_name} assignment not found")
 
 
 def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
@@ -11,18 +26,20 @@ def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
     quality_runner = (ROOT / "scripts/quality.py").read_text(encoding="utf-8")
 
     assert "postgres-integration:" in workflow
-    assert "image: postgres:17-alpine" in workflow
+    assert "image: postgres:17-alpine@sha256:" in workflow
     assert 'POSTGRES_INTEGRATION_CONFIRM: "1"' in workflow
     assert "python scripts/quality.py integration" in workflow
     assert "test-shards:" in workflow
     assert "python scripts/ci_test_shard.py" in workflow
     assert "python scripts/ci_coverage_report.py" in workflow
-    assert "actions/upload-artifact@v4" in workflow
+    assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow
     assert "postgres-integration-results" in workflow
     assert "test-coverage-shard-" in workflow
-    assert "uv pip install --system -r requirements.lock" in workflow
+    assert "uv pip install --system --require-hashes --no-deps -r requirements/dev.lock" in workflow
 
-    assert 'DEFAULT_IMAGE = "postgres:17-alpine"' in integration_runner
+    default_image = _assigned_string(integration_runner, "DEFAULT_IMAGE")
+    assert default_image.startswith("postgres:17-alpine@sha256:")
+    assert len(default_image.removeprefix("postgres:17-alpine@sha256:")) == 64
     assert '"POSTGRES_INTEGRATION_CONFIRM": "1"' in integration_runner
     assert '"tests/integration"' in integration_runner
     assert "_dump_failed_databases" in integration_runner

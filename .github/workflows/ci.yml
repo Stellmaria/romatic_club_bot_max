@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
       - name: Prepare non-secret Compose environment
@@ -36,9 +36,9 @@ jobs:
       - name: Validate Compose contract
         run: docker compose config -q
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - name: Build production images with shared layer cache
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@5be5f02ff8819ecd3092ea6b2e6261c31774f2b4
         with:
           files: compose.yaml
           targets: bot,userbot,supervisor-proxy
@@ -50,25 +50,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           version: "0.11.16"
           enable-cache: true
-          cache-dependency-glob: requirements.lock
-      - name: Install focused test dependencies
-        run: |
-          uv pip install --system \
-            aiogram==3.22.0 \
-            aiohttp==3.12.15 \
-            asyncpg==0.31.0 \
-            pytest==9.0.2 \
-            pytest-asyncio==1.3.0
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Compile Supervisor runtime
         run: |
           python -m py_compile \
@@ -101,20 +95,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           version: "0.11.16"
           enable-cache: true
-          cache-dependency-glob: requirements.lock
+          cache-dependency-glob: requirements/*.lock
       - name: Install pinned development dependencies
-        run: uv pip install --system -r requirements.lock
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Verify deterministic shard plan
         run: python scripts/ci_test_shard.py --total "$CI_TEST_SHARDS" --verify
       - name: Compile Python sources
@@ -147,20 +141,20 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           version: "0.11.16"
           enable-cache: true
-          cache-dependency-glob: requirements.lock
+          cache-dependency-glob: requirements/*.lock
           save-cache: ${{ matrix.shard == 0 }}
       - name: Install pinned development dependencies
-        run: uv pip install --system -r requirements.lock
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Run unit and coverage shard
         env:
           BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
@@ -175,7 +169,7 @@ jobs:
             --durations 25
       - name: Upload shard coverage and test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: test-coverage-shard-${{ matrix.shard }}
           path: |
@@ -210,23 +204,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           version: "0.11.16"
           enable-cache: true
-          cache-dependency-glob: requirements.lock
-      - name: Install coverage reporter
-        run: uv pip install --system coverage==7.15.3
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Download all shard results
         if: needs.test-shards.result == 'success'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: test-coverage-shard-*
           path: var/shard-results
@@ -239,7 +233,7 @@ jobs:
         run: exit 1
       - name: Upload combined coverage and duration metrics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: coverage-quality-results
           path: var/quality
@@ -251,7 +245,7 @@ jobs:
     timeout-minutes: 30
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
         env:
           POSTGRES_DB: integration_test
           POSTGRES_USER: integration
@@ -264,19 +258,19 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           version: "0.11.16"
           enable-cache: true
-          cache-dependency-glob: requirements.lock
+          cache-dependency-glob: requirements/*.lock
       - name: Install pinned development dependencies
-        run: uv pip install --system -r requirements.lock
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Compile integration harness
         run: |
           python -m py_compile scripts/run_postgres_integration.py
@@ -297,7 +291,7 @@ jobs:
           PGPASSWORD: integration_password
         run: |
           mkdir -p var/integration-artifacts
-          container_id="$(docker ps --filter ancestor=postgres:17-alpine --format '{{.ID}}' | head -n 1)"
+          container_id="$(docker ps --filter ancestor=postgres@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 --format '{{.ID}}' | head -n 1)"
           if [ -n "$container_id" ]; then
             docker logs "$container_id" > var/integration-artifacts/postgres.log 2>&1 || true
             docker exec "$container_id" \
@@ -317,7 +311,7 @@ jobs:
           fi
       - name: Upload PostgreSQL diagnostics and metrics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: postgres-integration-results
           path: |

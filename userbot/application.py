@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from telethon import TelegramClient
 
@@ -125,7 +125,11 @@ async def run_userbot_application(
 
     configure_legacy_config(config)
     userbot_settings = config.userbot
-    configure_uid_crypto(userbot_settings.uid_hash_key, userbot_settings.uid_enc_key)
+    configure_uid_crypto(
+        userbot_settings.uid_hash_key,
+        userbot_settings.uid_enc_key,
+        (userbot_settings.uid_enc_key_previous,),
+    )
 
     runtime_dir = config.runtime_dir
     runtime_dir.mkdir(parents=True, exist_ok=True)

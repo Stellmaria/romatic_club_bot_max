@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    image: ${POSTGRES_IMAGE:-romatic-postgres:17-alpine-hardened}
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
@@ -56,7 +59,10 @@ services:
           - romatic-supervisor
 
   bot:
-    build: .
+    build:
+      context: .
+      args:
+        REQUIREMENTS_LOCK: requirements/bot.lock
     restart: unless-stopped
     env_file:
       - ${BOT_ENV_FILE:-.env.bot}
@@ -79,7 +85,10 @@ services:
       romatic-supervisor-control: {}
 
   userbot:
-    build: .
+    build:
+      context: .
+      args:
+        REQUIREMENTS_LOCK: requirements/userbot.lock
     restart: unless-stopped
     user: "${ROMATIC_APP_UID:-10001}:${ROMATIC_APP_GID:-10001}"
     env_file:

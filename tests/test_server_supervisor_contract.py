@@ -49,11 +49,12 @@ def test_supervisor_guards_resident_source_before_invoking_deploy() -> None:
     assert "Host Server Supervisor is running stale code" in runtime
     assert "Restart romatic-server-supervisor.service once" in runtime
     assert runtime.index("_guard_resident_supervisor(rollback_sha)") < runtime.index(
-        '["bash", "deploy/server/deploy.sh"]', runtime.index("_guard_resident_supervisor(rollback_sha)")
+        '["bash", "deploy/server/deploy.sh"]',
+        runtime.index("_guard_resident_supervisor(rollback_sha)"),
     )
 
 
-def test_update_builds_and_starts_proxy_with_both_application_services() -> None:
+def test_update_rebuilds_hardened_postgres_and_application_services() -> None:
     runtime = source("scripts/server_supervisor.py")
     deploy = source("deploy/server/deploy.sh")
 
@@ -61,14 +62,16 @@ def test_update_builds_and_starts_proxy_with_both_application_services() -> None
     deploy_invocation = runtime.index('["bash", "deploy/server/deploy.sh"]', target_guard)
     target_environment = runtime.index('"ROMATIC_DEPLOY_TARGET_SHA": target_sha', deploy_invocation)
     assert target_guard < deploy_invocation < target_environment
-    assert "build --pull bot userbot supervisor-proxy" in deploy
+    assert "build --pull postgres bot userbot supervisor-proxy" in deploy
     assert "up -d --remove-orphans postgres supervisor-proxy bot userbot" in deploy
     assert "wait_service bot" in deploy
     assert "wait_service userbot" in deploy
     assert "wait_service supervisor-proxy" in deploy
 
 
-def test_supervisor_rejects_target_with_different_resident_source(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_supervisor_rejects_target_with_different_resident_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(server_supervisor, "RESIDENT_SOURCE_SHA", "resident")
 
     def fake_git(*args: str, **kwargs: object) -> server_supervisor.CommandResult:
@@ -88,8 +91,7 @@ def test_proxy_is_isolated_from_docker_and_checkout() -> None:
     assert "Dockerfile.server-supervisor-proxy" in service
     assert "read_only: true" in service
     assert (
-        'user: "${ROMATIC_SUPERVISOR_GID:-10001}:'
-        '${ROMATIC_SUPERVISOR_GID:-10001}"'
+        'user: "${ROMATIC_SUPERVISOR_GID:-10001}:' '${ROMATIC_SUPERVISOR_GID:-10001}"'
     ) in service
     assert "cap_drop:\n      - ALL" in service
     assert "no-new-privileges:true" in service
@@ -98,16 +100,16 @@ def test_proxy_is_isolated_from_docker_and_checkout() -> None:
     assert "ports:" not in service
 
 
-def test_restart_targets_are_separate_but_update_rebuilds_both() -> None:
+def test_restart_targets_are_separate_but_update_rebuilds_runtime_images() -> None:
     runtime = source("scripts/server_supervisor.py")
     deploy = source("deploy/server/deploy.sh")
 
-    assert 'def _restart_bot()' in runtime
+    assert "def _restart_bot()" in runtime
     assert '_compose("restart", "bot")' in runtime
-    assert 'def _restart_userbot()' in runtime
+    assert "def _restart_userbot()" in runtime
     assert '_compose("restart", "userbot")' in runtime
     assert '"/v1/restart-userbot": ("userbot-restart", _restart_userbot)' in runtime
-    assert "build --pull bot userbot supervisor-proxy" in deploy
+    assert "build --pull postgres bot userbot supervisor-proxy" in deploy
     assert "up -d --remove-orphans postgres supervisor-proxy bot userbot" in deploy
 
 
@@ -129,10 +131,15 @@ def test_deploy_keeps_backup_health_and_rollback_gates() -> None:
 def test_postgres_image_matches_production_major_version() -> None:
     compose = source("compose.yaml")
     env_example = source(".env.example")
+    postgres_dockerfile = source("Dockerfile.postgres")
 
-    assert "${POSTGRES_IMAGE:-postgres:17-alpine}" in compose
-    assert "POSTGRES_IMAGE=postgres:17-alpine" in env_example
+    assert "${POSTGRES_IMAGE:-romatic-postgres:17-alpine-hardened}" in compose
+    assert "dockerfile: Dockerfile.postgres" in compose
+    assert "POSTGRES_IMAGE=romatic-postgres:17-alpine-hardened" in env_example
+    assert postgres_dockerfile.startswith("FROM postgres:17-alpine@sha256:")
+    assert "PG_MAJOR=17" in postgres_dockerfile
     assert "postgres:16-alpine" not in compose
+    assert "postgres:16-alpine" not in postgres_dockerfile
 
 
 def test_systemd_runtime_stays_unprivileged() -> None:
