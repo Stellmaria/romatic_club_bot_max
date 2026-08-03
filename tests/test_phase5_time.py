@@ -8,9 +8,12 @@ import pytest
 from bot.core.time import (
     LEGACY_CALLBACK_COMPATIBILITY_SUNSET,
     MOSCOW,
+    auction_end_at_59,
     business_today,
     ensure_utc,
     moscow_date,
+    moscow_now,
+    moscow_time,
     parse_callback_timestamp,
     parse_timestamp,
     require_aware,
@@ -63,6 +66,13 @@ def test_aware_timestamp_keeps_its_instant_and_renders_in_moscow() -> None:
     assert rendered.hour == 0
     assert rendered.minute == 45
     assert moscow_date(value).isoformat() == "2026-07-02"
+    assert moscow_time(value).isoformat() == "00:45:00"
+
+
+def test_moscow_now_uses_injected_clock() -> None:
+    clock = FrozenClock(datetime(2026, 8, 3, 13, 30, tzinfo=UTC))
+
+    assert moscow_now(clock=clock) == datetime(2026, 8, 3, 16, 30, tzinfo=MOSCOW)
 
 
 def test_iso_timestamp_serialization_is_canonical_utc() -> None:
@@ -72,6 +82,16 @@ def test_iso_timestamp_serialization_is_canonical_utc() -> None:
 
     assert encoded == "2026-08-03T13:45:23Z"
     assert parse_timestamp(encoded) == datetime(2026, 8, 3, 13, 45, 23, tzinfo=UTC)
+
+
+def test_parse_timestamp_accepts_datetime_and_rejects_invalid_input() -> None:
+    source = datetime(2026, 8, 3, 13, 45, tzinfo=UTC)
+
+    assert parse_timestamp(source) == source
+    with pytest.raises(ValueError, match="must not be empty"):
+        parse_timestamp(" ")
+    with pytest.raises(TypeError, match="datetime or ISO string"):
+        parse_timestamp(123)  # type: ignore[arg-type]
 
 
 def test_callback_timestamp_round_trip_uses_versioned_utc_payload() -> None:
@@ -96,6 +116,10 @@ def test_invalid_callback_timestamp_is_rejected() -> None:
         parse_callback_timestamp("u1:not-an-epoch")
 
 
-def test_ensure_utc_rejects_non_datetime_values() -> None:
+def test_time_helpers_reject_non_datetime_values() -> None:
     with pytest.raises(TypeError):
         ensure_utc("2026-01-01")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="must be a datetime"):
+        require_aware("2026-01-01")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="start_time must be a datetime"):
+        auction_end_at_59("2026-01-01")  # type: ignore[arg-type]
