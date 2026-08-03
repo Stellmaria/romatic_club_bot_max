@@ -46,9 +46,7 @@ def configure_logging(
         handler.setFormatter(JsonLogFormatter())
     else:
         handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s [%(levelname)s] [cid=%(correlation_id)s] %(message)s"
-            )
+            logging.Formatter("%(asctime)s [%(levelname)s] [cid=%(correlation_id)s] %(message)s")
         )
     root = logging.getLogger()
     root.handlers.clear()
@@ -60,9 +58,7 @@ def configure_logging(
         project_logger.handlers.clear()
         project_logger.propagate = True
 
-    logging.getLogger("aiogram").setLevel(
-        logging.DEBUG if aiogram_debug else logging.WARNING
-    )
+    logging.getLogger("aiogram").setLevel(logging.DEBUG if aiogram_debug else logging.WARNING)
 
 
 __all__ = ["JsonLogFormatter", "configure_logging"]
