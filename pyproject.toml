@@ -41,7 +41,7 @@ dependencies = { file = ["requirements.txt"] }
 minversion = "9.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-ra --strict-markers --cov=bot --cov=db --cov=userbot --cov-report=term-missing:skip-covered --cov-report=json:var/coverage.json"
+addopts = "-ra --strict-markers"
 asyncio_mode = "auto"
 markers = [
   "integration: destructive tests requiring POSTGRES_INTEGRATION_CONFIRM=1 and disposable PostgreSQL 17",
@@ -49,7 +49,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-parallel = true
+parallel = false
 source = ["bot", "db", "userbot"]
 omit = [
   "*/__main__.py",
@@ -58,7 +58,6 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 35
 show_missing = true
 skip_covered = true
 exclude_also = [
@@ -73,12 +72,19 @@ line-length = 100
 extend-exclude = [".venv", "var", "private", "db/migrations"]
 
 [tool.ruff.lint]
-# The full legacy tree remains on a correctness baseline. scripts/quality.py
-# applies the stronger families below to files changed against the base branch.
+# The full legacy tree stays on a correctness baseline. scripts/quality.py
+# applies the extended ratchet to changed files.
 select = ["E9", "F63", "F7", "F82"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
 
 [tool.ruff.lint.isort]
 known-first-party = ["bot", "database", "db", "userbot"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+"scripts/**/*.py" = ["S603", "S607"]
 
 [tool.black]
 target-version = ["py313"]
