@@ -1,0 +1,238 @@
+name: Apply ZoneInfo Sunset
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-zoneinfo-sunset
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/issue-37-time-policy
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Apply deterministic ZoneInfo migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          from pathlib import Path
+
+
+          def replace_exact(path: Path, old: str, new: str, *, count: int = 1) -> None:
+              text = path.read_text(encoding="utf-8")
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} occurrences of {old!r}, found {actual}")
+              path.write_text(text.replace(old, new), encoding="utf-8")
+
+
+          path = Path("bot/auction_notify.py")
+          text = path.read_text(encoding="utf-8")
+          for old in (
+              "import pytz\n",
+              "from dateutil import parser as _parser\n",
+              "from dateutil import tz\n",
+          ):
+              if old not in text:
+                  raise SystemExit(f"{path}: missing import {old!r}")
+              text = text.replace(old, "", 1)
+          import_marker = "from bot.handlers.helper.helpers_users import"
+          if import_marker not in text:
+              raise SystemExit(f"{path}: bot import marker missing")
+          text = text.replace(
+              import_marker,
+              "from bot.core.time import MOSCOW, parse_timestamp\nfrom bot.handlers.helper.helpers_users import",
+              1,
+          )
+          text = text.replace('MSK = tz.gettz("Europe/Moscow")', "MSK = MOSCOW", 1)
+          text = text.replace("v = _parser.parse(v)", "v = parse_timestamp(v)", 1)
+          text = text.replace('msk_tz = pytz.timezone("Europe/Moscow")', "msk_tz = MSK", 1)
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("bot/handlers/admin/moderation_diagnostics.py")
+          text = path.read_text(encoding="utf-8")
+          if "from dateutil import tz\n" not in text:
+              raise SystemExit(f"{path}: dateutil import missing")
+          text = text.replace("from dateutil import tz\n", "", 1)
+          text = text.replace("from bot.core.time import utc_now", "from bot.core.time import MOSCOW, utc_now", 1)
+          occurrences = text.count('MSK = tz.gettz("Europe/Moscow")')
+          if occurrences != 2:
+              raise SystemExit(f"{path}: expected two dateutil timezone constructors, found {occurrences}")
+          text = text.replace('MSK = tz.gettz("Europe/Moscow")', "MSK = MOSCOW")
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("bot/handlers/auction_comments.py")
+          text = path.read_text(encoding="utf-8")
+          for old in ("from dateutil import tz\n", "from dateutil import parser\n"):
+              if old not in text:
+                  raise SystemExit(f"{path}: missing import {old!r}")
+              text = text.replace(old, "", 1)
+          inline_imports = text.count("        from dateutil import parser\n")
+          if inline_imports != 3:
+              raise SystemExit(f"{path}: expected three inline parser imports, found {inline_imports}")
+          text = text.replace("        from dateutil import parser\n", "")
+          marker = "from bot.legacy_fsm import PrintExStates\n"
+          if marker not in text:
+              raise SystemExit(f"{path}: core import marker missing")
+          text = text.replace(
+              marker,
+              marker + "from bot.core.time import MOSCOW, moscow_now, parse_timestamp, utc_now\n",
+              1,
+          )
+          text = text.replace('MSK = tz.gettz("Europe/Moscow")', "MSK = MOSCOW", 1)
+          text = text.replace('_MSK = ZoneInfo("Europe/Moscow")', "_MSK = MOSCOW", 1)
+          parser_calls = text.count("parser.parse(")
+          if parser_calls != 5:
+              raise SystemExit(f"{path}: expected five parser calls, found {parser_calls}")
+          text = text.replace("parser.parse(", "parse_timestamp(")
+          naive_now = text.count("    now = datetime.now()\n")
+          if naive_now != 3:
+              raise SystemExit(f"{path}: expected three naive auction now calls, found {naive_now}")
+          text = text.replace("    now = datetime.now()\n", "    now = utc_now()\n")
+          text = text.replace("new_end_time = datetime.now(_MSK) + timedelta(minutes=30)", "new_end_time = moscow_now() + timedelta(minutes=30)", 1)
+          text = text.replace('update_lot_field(lot["auction_id"], "end_time", new_end_time.replace(tzinfo=None))', 'update_lot_field(lot["auction_id"], "end_time", new_end_time)', 1)
+          text = text.replace("stop_time = datetime.now(_MSK)", "stop_time = moscow_now()", 1)
+          text = text.replace('update_lot_field(lot["auction_id"], "end_time", stop_time.replace(tzinfo=None))', 'update_lot_field(lot["auction_id"], "end_time", stop_time)', 1)
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("requirements.txt")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          removed = {line for line in lines if line.startswith(("python-dateutil", "pytz"))}
+          if len(removed) != 2:
+              raise SystemExit(f"{path}: expected python-dateutil and pytz, found {removed}")
+          path.write_text("\n".join(line for line in lines if line not in removed) + "\n", encoding="utf-8")
+
+          path = Path("requirements-dev.txt")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          matches = [line for line in lines if line.startswith("types-python-dateutil")]
+          if len(matches) != 1:
+              raise SystemExit(f"{path}: expected one types-python-dateutil line")
+          path.write_text("\n".join(line for line in lines if line not in matches) + "\n", encoding="utf-8")
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          replace = '  "dateutil.*",\n'
+          if replace not in text:
+              raise SystemExit(f"{path}: dateutil mypy override missing")
+          path.write_text(text.replace(replace, "", 1), encoding="utf-8")
+
+          path = Path("quality/time-policy-baseline.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          payload["legacy_timezone_imports"] = {}
+          for key in [
+              "bot/handlers/auction_comments.py::_legacy_admin_start_auction::datetime.now",
+              "bot/handlers/auction_comments.py::_legacy_admin_stop_auction::datetime.now",
+              "bot/handlers/auction_comments.py::_legacy_filter_auction_bids::datetime.now",
+              "bot/handlers/auction_comments.py::is_auction_active::datetime.now",
+              "bot/handlers/auction_comments.py::is_auction_finished::datetime.now",
+          ]:
+              payload["direct_datetime_calls"].pop(key, None)
+          path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+          Path("tests/test_legacy_timezone_sunset.py").write_text(
+              '''from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from bot.auction_notify import MSK, to_msk_dt
+from bot.handlers.admin.moderation_diagnostics import _to_msk
+from bot.handlers.auction_comments import is_auction_active, is_auction_finished
+
+
+def test_auction_notify_uses_zoneinfo_and_central_iso_parser() -> None:
+    parsed = to_msk_dt("2026-08-03T13:45:00Z")
+
+    assert parsed == datetime(2026, 8, 3, 16, 45, tzinfo=MSK)
+    assert parsed is not None and parsed.tzinfo is MSK
+
+
+def test_moderation_diagnostics_interprets_legacy_naive_values_as_moscow() -> None:
+    parsed = _to_msk(datetime(2026, 8, 3, 16, 45))
+
+    assert parsed == datetime(2026, 8, 3, 16, 45, tzinfo=MSK)
+
+
+@pytest.mark.asyncio
+async def test_legacy_auction_deadline_helpers_compare_aware_instants() -> None:
+    far_future = datetime.now(UTC) + timedelta(days=3650)
+    far_past = datetime.now(UTC) - timedelta(days=3650)
+
+    assert await is_auction_active({"status": "active", "end_time": far_future.isoformat()})
+    assert not await is_auction_finished({"end_time": far_future.isoformat()})
+    assert not await is_auction_active({"status": "active", "end_time": far_past.isoformat()})
+    assert await is_auction_finished({"end_time": far_past.isoformat()})
+''',
+              encoding="utf-8",
+          )
+          PY
+      - name: Install dependency graph without legacy timezone packages
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+      - name: Validate source and dependency sunset
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! git grep -nE '(^|[[:space:]])(import pytz|from pytz|from dateutil|import dateutil)' -- 'bot/*.py' 'bot/**/*.py' 'db/*.py' 'db/**/*.py' 'userbot/*.py' 'userbot/**/*.py'
+          ! grep -E '^(python-dateutil|pytz|types-python-dateutil)' requirements.txt requirements-dev.txt
+          python scripts/check_time_policy.py
+          python -m black --check \
+            bot/auction_notify.py \
+            bot/handlers/admin/moderation_diagnostics.py \
+            bot/handlers/auction_comments.py \
+            tests/test_legacy_timezone_sunset.py
+          python -m ruff check \
+            bot/auction_notify.py \
+            bot/handlers/admin/moderation_diagnostics.py \
+            bot/handlers/auction_comments.py \
+            tests/test_legacy_timezone_sunset.py
+          python -m pytest -q tests/test_legacy_timezone_sunset.py tests/test_phase5_time.py tests/test_time_boundaries.py
+          python scripts/quality.py unit
+          python scripts/quality.py coverage
+        env:
+          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          UID_HASH_KEY: ci-only-hmac-key
+          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: Commit validated sunset
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-zoneinfo-sunset.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- \
+            .github/workflows/apply-zoneinfo-sunset.yml \
+            bot/auction_notify.py \
+            bot/handlers/admin/moderation_diagnostics.py \
+            bot/handlers/auction_comments.py \
+            pyproject.toml \
+            quality/time-policy-baseline.json \
+            requirements.txt \
+            requirements-dev.txt \
+            tests/test_legacy_timezone_sunset.py
+          git diff --cached --check
+          git commit -m 'refactor(time): remove legacy timezone libraries'
+          git push origin HEAD:codex/issue-37-time-policy
