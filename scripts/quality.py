@@ -125,6 +125,30 @@ def assert_error_baseline_not_relaxed(
         raise SystemExit("Error-count baseline cannot increase for: " + ", ".join(relaxed))
 
 
+def assert_time_policy_baseline_not_relaxed(
+    *,
+    current: dict[str, Any],
+    previous: dict[str, Any] | None,
+) -> None:
+    """Allow deleting legacy violations, but never adding or multiplying them."""
+
+    if previous is None:
+        return
+    relaxed: list[str] = []
+    for category in ("direct_datetime_calls", "legacy_timezone_imports"):
+        current_counts = current.get(category, {})
+        previous_counts = previous.get(category, {})
+        if not isinstance(current_counts, dict) or not isinstance(previous_counts, dict):
+            raise SystemExit(f"Invalid time-policy baseline category: {category}")
+        for key, raw_count in current_counts.items():
+            count = int(raw_count)
+            allowed = int(previous_counts.get(key, 0))
+            if count > allowed:
+                relaxed.append(f"{category}: {key} ({allowed} -> {count})")
+    if relaxed:
+        raise SystemExit("Time-policy baseline cannot increase:\n" + "\n".join(relaxed))
+
+
 def command_changed(base: str) -> None:
     files = changed_python_files(base)
     if not files:
@@ -207,12 +231,18 @@ def command_typing(base: str) -> None:
         raise SystemExit("\n".join(failures))
 
 
-def command_architecture() -> None:
+def command_architecture(base: str) -> None:
+    baseline_path = QUALITY_DIR / "time-policy-baseline.json"
+    assert_time_policy_baseline_not_relaxed(
+        current=load_json(baseline_path),
+        previous=base_json(base, baseline_path),
+    )
     for script in (
         "scripts/check_persistence_exceptions.py",
         "scripts/check_database_boundaries.py",
         "scripts/check_telegram_boundary.py",
         "scripts/check_handler_import_boundaries.py",
+        "scripts/check_time_policy.py",
     ):
         run((sys.executable, script))
     run(
@@ -393,7 +423,7 @@ def main() -> int:
     elif args.command == "typing":
         command_typing(base)
     elif args.command == "architecture":
-        command_architecture()
+        command_architecture(base)
     elif args.command == "coverage":
         command_coverage(base)
     elif args.command == "security":
@@ -405,7 +435,7 @@ def main() -> int:
     elif args.command == "all":
         command_changed(base)
         command_typing(base)
-        command_architecture()
+        command_architecture(base)
         command_security()
         command_coverage(base)
         if args.include_integration:

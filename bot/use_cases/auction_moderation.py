@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from bot.core.time import ensure_utc, require_aware
 from bot.domain.auctions import (
     AuctionNotFound,
     AuctionSlotConflict,
@@ -25,6 +26,10 @@ MutateSchedule = Callable[..., Awaitable[Row]]
 GetOwners = Callable[[int], Awaitable[list[Row]]]
 GetUser = Callable[[int], Awaitable[Row | None]]
 IsLuxury = Callable[[int], Awaitable[bool]]
+
+
+def _aware_utc(value: datetime, *, name: str) -> datetime:
+    return ensure_utc(require_aware(value, name=name))
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +52,10 @@ class ScheduleAuctionCommand:
     auction_id: int
     start_time: datetime
     end_time: datetime
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "start_time", _aware_utc(self.start_time, name="start_time"))
+        object.__setattr__(self, "end_time", _aware_utc(self.end_time, name="end_time"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +132,7 @@ class _AuctionScheduleUseCase:
     async def _owners(self, auction_id: int) -> tuple[OwnerSnapshot, ...]:
         try:
             raw = await self._get_owners(int(auction_id))
-        except Exception:
+        except Exception:  # noqa: BLE001 - optional owner enrichment is best-effort
             return ()
         snapshots = await asyncio.gather(
             *(self._owner_snapshot(dict(item)) for item in raw),
@@ -143,7 +152,7 @@ class _AuctionScheduleUseCase:
                     timeout=self._timeout_seconds,
                 )
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise ApplicationTimeout("auction schedule mutation timed out") from exc
         except AuctionSlotConflict as exc:
             raise ApplicationConflict("auction slot is occupied") from exc
@@ -160,12 +169,16 @@ class ScheduleAuctionUseCase(_AuctionScheduleUseCase):
     async def execute(self, command: ScheduleAuctionCommand) -> ScheduledAuction:
         self._validate(command)
         lot = await self._commit(command)
+        start_time_raw = lot.get("start_time") or command.start_time
+        end_time_raw = lot.get("end_time") or command.end_time
+        if not isinstance(start_time_raw, datetime) or not isinstance(end_time_raw, datetime):
+            raise ApplicationInvalidState("repository returned an invalid schedule")
         owners = await self._owners(command.auction_id)
         return ScheduledAuction(
             lot=lot,
             owners=owners,
-            start_time=lot.get("start_time") or command.start_time,
-            end_time=lot.get("end_time") or command.end_time,
+            start_time=_aware_utc(start_time_raw, name="start_time"),
+            end_time=_aware_utc(end_time_raw, name="end_time"),
         )
 
 
@@ -175,21 +188,23 @@ class RescheduleAuctionUseCase(_AuctionScheduleUseCase):
         before = await self._get_lot(int(command.auction_id))
         if not before:
             raise ApplicationNotFound("auction not found")
-        old_start = before.get("start_time")
-        old_end = before.get("end_time")
-        if not isinstance(old_start, datetime) or not isinstance(old_end, datetime):
+        old_start_raw = before.get("start_time")
+        old_end_raw = before.get("end_time")
+        if not isinstance(old_start_raw, datetime) or not isinstance(old_end_raw, datetime):
             raise ApplicationInvalidState("auction has no persisted schedule")
+        old_start = _aware_utc(old_start_raw, name="old_start_time")
+        old_end = _aware_utc(old_end_raw, name="old_end_time")
 
         lot = await self._commit(command)
-        actual_start = lot.get("start_time") or command.start_time
-        actual_end = lot.get("end_time") or command.end_time
-        if not isinstance(actual_start, datetime) or not isinstance(actual_end, datetime):
+        actual_start_raw = lot.get("start_time") or command.start_time
+        actual_end_raw = lot.get("end_time") or command.end_time
+        if not isinstance(actual_start_raw, datetime) or not isinstance(actual_end_raw, datetime):
             raise ApplicationInvalidState("repository returned an invalid schedule")
-        if (
-            actual_start.replace(second=0, microsecond=0)
-            != command.start_time.replace(second=0, microsecond=0)
-            or actual_end.replace(microsecond=0) != command.end_time.replace(microsecond=0)
-        ):
+        actual_start = _aware_utc(actual_start_raw, name="actual_start_time")
+        actual_end = _aware_utc(actual_end_raw, name="actual_end_time")
+        if actual_start.replace(second=0, microsecond=0) != command.start_time.replace(
+            second=0, microsecond=0
+        ) or actual_end.replace(microsecond=0) != command.end_time.replace(microsecond=0):
             raise ApplicationInvalidState(
                 "persisted schedule differs from requested schedule",
                 details={

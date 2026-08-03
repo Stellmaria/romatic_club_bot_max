@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Mapping, Any
-from zoneinfo import ZoneInfo
+from typing import Any
 
+from bot.core.time import ensure_utc, require_aware
 from bot.domain.auctions.bidding import auction_bidding_closes_at
 from bot.domain.auctions.enums import (
     AuctionKind,
@@ -14,17 +15,8 @@ from bot.domain.auctions.enums import (
 )
 
 
-_LEGACY_TZ = ZoneInfo("Europe/Moscow")
-
-
-def _compatible_now(now: datetime, reference: datetime) -> datetime:
-    if reference.tzinfo is None and now.tzinfo is not None:
-        return now.astimezone(_LEGACY_TZ).replace(tzinfo=None)
-    if reference.tzinfo is not None and now.tzinfo is None:
-        return now.replace(tzinfo=_LEGACY_TZ).astimezone(reference.tzinfo)
-    if reference.tzinfo is not None and now.tzinfo is not None:
-        return now.astimezone(reference.tzinfo)
-    return now
+def _aware_utc(value: datetime, *, name: str) -> datetime:
+    return ensure_utc(require_aware(value, name=name))
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,8 +32,14 @@ class Auction:
     message_id: int | None = None
     discussion_message_id: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.start_time is not None:
+            object.__setattr__(self, "start_time", _aware_utc(self.start_time, name="start_time"))
+        if self.end_time is not None:
+            object.__setattr__(self, "end_time", _aware_utc(self.end_time, name="end_time"))
+
     @classmethod
-    def from_record(cls, row: Mapping[str, Any]) -> "Auction":
+    def from_record(cls, row: Mapping[str, Any]) -> Auction:
         return cls(
             auction_id=int(row["auction_id"]),
             status=str(row.get("status") or ""),
@@ -69,23 +67,15 @@ class Auction:
     def is_active_at(self, now: datetime) -> bool:
         if self.normalized_status is not AuctionStatus.ACTIVE:
             return False
-        if self.start_time is not None:
-            comparable_now = _compatible_now(now, self.start_time)
-            if comparable_now < self.start_time:
-                return False
-        if self.end_time is not None:
-            comparable_now = _compatible_now(now, self.end_time)
-            if comparable_now >= auction_bidding_closes_at(self.end_time):
-                return False
-        return True
+        current_utc = _aware_utc(now, name="now")
+        if self.start_time is not None and current_utc < self.start_time:
+            return False
+        return self.end_time is None or current_utc < auction_bidding_closes_at(self.end_time)
 
     def has_ended_at(self, now: datetime) -> bool:
         if self.end_time is None:
             return False
-        return (
-            _compatible_now(now, self.end_time)
-            >= auction_bidding_closes_at(self.end_time)
-        )
+        return _aware_utc(now, name="now") >= auction_bidding_closes_at(self.end_time)
 
     @property
     def lowest_bid_wins(self) -> bool:
@@ -103,8 +93,14 @@ class Bid:
     created_at: datetime | None
     currency: Currency = Currency.DIAMONDS
 
+    def __post_init__(self) -> None:
+        if self.placed_at is not None:
+            object.__setattr__(self, "placed_at", _aware_utc(self.placed_at, name="placed_at"))
+        if self.created_at is not None:
+            object.__setattr__(self, "created_at", _aware_utc(self.created_at, name="created_at"))
+
     @classmethod
-    def from_record(cls, row: Mapping[str, Any]) -> "Bid":
+    def from_record(cls, row: Mapping[str, Any]) -> Bid:
         return cls(
             bid_id=int(row["bid_id"]),
             auction_id=int(row["auction_id"]),
@@ -149,7 +145,7 @@ class Autobid:
     is_active: bool
 
     @classmethod
-    def from_record(cls, row: Mapping[str, Any]) -> "Autobid":
+    def from_record(cls, row: Mapping[str, Any]) -> Autobid:
         return cls(
             autobid_id=int(row["autobid_id"]),
             auction_id=int(row["auction_id"]),

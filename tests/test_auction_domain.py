@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-import sys
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from bot.domain.auctions import (
     Auction,
@@ -20,6 +16,8 @@ from bot.domain.auctions import (
     parse_bid_offer,
 )
 from bot.domain.auctions.rules import minimum_next_bid, parse_bid_amount, validate_bid_amount
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_currency_aliases_share_one_policy() -> None:
@@ -41,12 +39,15 @@ def test_bid_parser_is_shared_and_supports_thousands_suffix() -> None:
 def test_bid_minimum_and_step_are_validated_from_start_price() -> None:
     assert minimum_next_bid(start_price=100, current_max=None, step=10) == 100
     assert minimum_next_bid(start_price=100, current_max=140, step=10) == 150
-    assert validate_bid_amount(
-        amount=150,
-        currency=Currency.DIAMONDS,
-        start_price=100,
-        current_max=140,
-    ) == 150
+    assert (
+        validate_bid_amount(
+            amount=150,
+            currency=Currency.DIAMONDS,
+            start_price=100,
+            current_max=140,
+        )
+        == 150
+    )
     with pytest.raises(BidTooLow):
         validate_bid_amount(
             amount=140,
@@ -64,7 +65,7 @@ def test_bid_minimum_and_step_are_validated_from_start_price() -> None:
 
 
 def test_auction_accepts_entire_displayed_bidding_minute() -> None:
-    displayed_bidding_minute = datetime(2026, 8, 1, 18, 30)
+    displayed_bidding_minute = datetime(2026, 8, 1, 18, 30, tzinfo=UTC)
     close_instant = displayed_bidding_minute + timedelta(minutes=1)
     auction = Auction(
         auction_id=1,

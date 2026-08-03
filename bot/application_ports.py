@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncContextManager, Protocol, TypeVar, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
 
 from bot.application_models import (
     AuctionRecord,
@@ -20,12 +21,14 @@ T = TypeVar("T")
 
 @runtime_checkable
 class Clock(Protocol):
+    """Return the current instant as a timezone-aware UTC datetime."""
+
     def now(self) -> datetime: ...
 
 
 @runtime_checkable
 class TransactionManager(Protocol):
-    def transaction(self) -> AsyncContextManager[object]: ...
+    def transaction(self) -> AbstractAsyncContextManager[object]: ...
 
 
 @runtime_checkable
@@ -138,8 +141,8 @@ AsyncFactory = Callable[[], Awaitable[T]]
 
 
 __all__ = [
-    "AuditPort",
     "AuctionRepositoryPort",
+    "AuditPort",
     "Clock",
     "ExchangeRepositoryPort",
     "FileStoragePort",

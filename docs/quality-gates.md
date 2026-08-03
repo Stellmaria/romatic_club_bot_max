@@ -47,6 +47,8 @@ Architecture job запускает import/AST contracts и поведенчес
 
 Security job отдельно запускает persistence exception и Telegram boundary contracts. Security-adjacent Ruff rules применяются к каждому изменённому Python-файлу.
 
+Time-policy contract запускает `scripts/check_time_policy.py`: новые прямые вызовы системных часов, `pytz` и `dateutil.tz` запрещены, а legacy baseline может только уменьшаться. Полный контракт описан в `docs/TIME_POLICY.md`.
+
 ## Duration and flaky rate
 
 Unit, coverage и PostgreSQL integration команды создают JUnit XML и JSON metrics в `var/quality`. Метрики содержат количество тестов, failures/errors/skips, длительность suite, число rerun/flaky markers и flaky rate. GitHub Actions публикует их как artifacts на 14 дней.

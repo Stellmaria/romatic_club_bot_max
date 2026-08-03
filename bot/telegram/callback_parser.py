@@ -7,6 +7,7 @@ control-character validation before a handler interprets any field.
 
 from __future__ import annotations
 
+from bot.core.time import parse_callback_timestamp, serialize_callback_timestamp
 from bot.telegram.boundary import validate_callback_payload
 
 
@@ -28,4 +29,9 @@ def rsplit_callback_data(
     return raw.rsplit(separator, maxsplit)
 
 
-__all__ = ["rsplit_callback_data", "split_callback_data"]
+__all__ = [
+    "parse_callback_timestamp",
+    "rsplit_callback_data",
+    "serialize_callback_timestamp",
+    "split_callback_data",
+]
