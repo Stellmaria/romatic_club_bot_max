@@ -1,5 +1,6 @@
 # Operator, security, and data-maintenance tooling. Excluded from production images.
-cyclonedx-bom==7.1.0
+cyclonedx-bom==7.3.1
+lxml>=6.1.0,<7
 pandas>=2.3,<3
 pip-audit==2.9.0
 requests>=2.33,<3
