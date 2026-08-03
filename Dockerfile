@@ -7,6 +7,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        libssl3t64=3.5.6-1~deb13u2 \
+        openssl=3.5.6-1~deb13u2 \
+        openssl-provider-legacy=3.5.6-1~deb13u2 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --uid 10001 appuser
 
 ARG REQUIREMENTS_LOCK=requirements/bot.lock
