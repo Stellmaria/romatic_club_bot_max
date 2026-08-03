@@ -139,9 +139,7 @@ class MetricsRegistry:
         **labels: str,
     ) -> None:
         if not math.isfinite(value) or value < 0:
-            raise ValueError(
-                "Histogram observation must be a finite non-negative number"
-            )
+            raise ValueError("Histogram observation must be a finite non-negative number")
         key = self._key(name, labels)
         self._histogram_counts[key] += 1
         self._histogram_sums[key] = self._histogram_sums.get(key, 0.0) + value
@@ -168,27 +166,18 @@ class MetricsRegistry:
                 key=lambda item: item[0],
             )
             for upper_bound, bucket_count in buckets:
-                rendered_bound = (
-                    "+Inf" if math.isinf(upper_bound) else f"{upper_bound:g}"
-                )
+                rendered_bound = "+Inf" if math.isinf(upper_bound) else f"{upper_bound:g}"
                 bucket_labels = tuple((*labels, ("le", rendered_bound)))
-                lines.append(
-                    f"{name}_bucket{_render_labels(bucket_labels)} {bucket_count}"
-                )
+                lines.append(f"{name}_bucket{_render_labels(bucket_labels)} {bucket_count}")
             lines.append(f"{name}_count{_render_labels(labels)} {count}")
             lines.append(
-                f"{name}_sum{_render_labels(labels)} "
-                f"{self._histogram_sums[(name, labels)]:g}"
+                f"{name}_sum{_render_labels(labels)} " f"{self._histogram_sums[(name, labels)]:g}"
             )
         return "\n".join(lines) + ("\n" if lines else "")
 
 
 def _escape_label(value: str) -> str:
-    return (
-        value.replace("\\", "\\\\")
-        .replace("\n", "\\n")
-        .replace('"', '\\"')
-    )
+    return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
 
 
 def _render_labels(labels: MetricLabels) -> str:
@@ -240,13 +229,10 @@ class HealthProbeServer:
         workers = tuple(asdict(item) for item in worker_health)
         database = self._database_ready()
         critical_workers = tuple(
-            item
-            for item in worker_health
-            if item.criticality is WorkerCriticality.CRITICAL
+            item for item in worker_health if item.criticality is WorkerCriticality.CRITICAL
         )
         ready_workers = bool(worker_health) and all(
-            item.state not in {WorkerState.FAILED, WorkerState.STOPPED}
-            for item in critical_workers
+            item.state not in {WorkerState.FAILED, WorkerState.STOPPED} for item in critical_workers
         )
         ready = database and ready_workers
         self._metrics.gauge(
