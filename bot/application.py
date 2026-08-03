@@ -164,7 +164,10 @@ async def run_bot(config: BotProcessSettings) -> None:
         )
 
         metrics.increment("application_starts_total", process="bot")
-        logger.info("Starting bot polling", extra={"event": "telegram.polling_started"})
+        logger.info(
+            "Starting bot polling",
+            extra={"event": "telegram.polling_started"},
+        )
         await _run_polling_with_worker_monitor(
             dispatcher,
             telegram_bot,
@@ -172,9 +175,13 @@ async def run_bot(config: BotProcessSettings) -> None:
         )
     except asyncio.CancelledError as error:
         primary_error = error
-        logger.info("Application cancellation requested", extra={"event": "application.cancelled"})
+        logger.info(
+            "Application cancellation requested",
+            extra={"event": "application.cancelled"},
+        )
         raise
-    except Exception as error:
+    # This is the process lifecycle boundary: record the failure, then re-raise it.
+    except Exception as error:  # noqa: BLE001
         primary_error = error
         metrics.increment("application_failures_total", process="bot")
         logger.exception(
@@ -201,7 +208,8 @@ async def run_bot(config: BotProcessSettings) -> None:
         for resource_name, cleanup in cleanup_steps:
             try:
                 await cleanup()
-            except Exception as error:
+            # Cleanup must continue so every remaining resource gets a close attempt.
+            except Exception as error:  # noqa: BLE001
                 logger.exception(
                     "Failed to close resource",
                     extra={
@@ -213,7 +221,10 @@ async def run_bot(config: BotProcessSettings) -> None:
                 if cleanup_error is None:
                     cleanup_error = error
 
-        logger.info("Application shutdown complete", extra={"event": "application.stopped"})
+        logger.info(
+            "Application shutdown complete",
+            extra={"event": "application.stopped"},
+        )
         if primary_error is None and cleanup_error is not None:
             raise cleanup_error
 
