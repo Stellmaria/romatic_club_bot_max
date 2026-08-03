@@ -50,25 +50,58 @@ jobs:
             "${files[@]}" || true
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('bot/application_models.py')
           text = path.read_text(encoding='utf-8')
           text = text.replace('from typing import TypeVar\n', '')
           text = text.replace('\nT = TypeVar("T")\n', '')
-          text = text.replace('def required(\n', 'def required[T](\n')
+          text = text.replace('def required(row:', 'def required[T](row:')
           path.write_text(text, encoding='utf-8')
+
+          path = Path('bot/application_ports.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'from typing import AsyncContextManager, Protocol, TypeVar, runtime_checkable\n',
+              'from contextlib import AbstractAsyncContextManager\n'
+              'from typing import Protocol, TypeVar, runtime_checkable\n',
+          )
+          text = text.replace('AsyncContextManager[object]', 'AbstractAsyncContextManager[object]')
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('bot/domain/auctions/models.py')
+          text = path.read_text(encoding='utf-8')
+          needle = (
+              '        if self.end_time is not None and current_utc >= '
+              'auction_bidding_closes_at(self.end_time):\n'
+              '            return False\n'
+              '        return True\n'
+          )
+          replacement = (
+              '        return self.end_time is None or current_utc < '
+              'auction_bidding_closes_at(self.end_time)\n'
+          )
+          if needle not in text:
+              raise SystemExit('active-auction end condition not found')
+          path.write_text(text.replace(needle, replacement), encoding='utf-8')
 
           path = Path('bot/repositories/auction_workflows.py')
           text = path.read_text(encoding='utf-8')
-          needle = '                row = await conn.fetchrow(\n                    f"""\n'
-          replacement = (
-              '                # Column names are restricted by immutable allowlists above.\n'
-              '                row = await conn.fetchrow(  # noqa: S608\n'
-              '                    f"""\n'
+          text, first_count = re.subn(
+              r'(RETURNING \*\n\s+"""),',
+              r'\1,  # noqa: S608 - columns come from _MODERATABLE_FIELDS',
+              text,
+              count=1,
           )
-          if text.count(needle) != 2:
-              raise SystemExit('expected exactly two allowlisted dynamic UPDATE statements')
-          path.write_text(text.replace(needle, replacement), encoding='utf-8')
+          text, second_count = re.subn(
+              r'(RETURNING a\.\*\n\s+"""),',
+              r'\1,  # noqa: S608 - columns come from _OWNER_EDITABLE_FIELDS',
+              text,
+              count=1,
+          )
+          if (first_count, second_count) != (1, 1):
+              raise SystemExit('allowlisted dynamic UPDATE statements not found')
+          path.write_text(text, encoding='utf-8')
 
           path = Path('bot/use_cases/auction_moderation.py')
           text = path.read_text(encoding='utf-8')
@@ -88,9 +121,8 @@ jobs:
               'f"SELECT count(*) FROM public.{MIGRATION_TABLE}")\n'
           )
           replacement = (
-              '        journal_sql = (\n'
-              '            f"SELECT count(*) FROM public.{MIGRATION_TABLE}"  # noqa: S608\n'
-              '        )\n'
+              '        journal_sql = '
+              'f"SELECT count(*) FROM public.{MIGRATION_TABLE}"  # noqa: S608\n'
               '        journal_count = await connection.fetchval(journal_sql)\n'
           )
           if needle not in text:
@@ -103,13 +135,14 @@ jobs:
           if root_line not in text:
               raise SystemExit('ROOT declaration not found')
           text = text.replace(root_line, '', 1)
-          marker = (
-              'from bot.domain.auctions.rules import minimum_next_bid, parse_bid_amount, '
-              'validate_bid_amount\n\n'
-          )
+          marker = '\n\ndef test_'
           if marker not in text:
-              raise SystemExit('domain import marker not found')
-          text = text.replace(marker, marker + 'ROOT = Path(__file__).resolve().parents[1]\n\n', 1)
+              raise SystemExit('first test marker not found')
+          text = text.replace(
+              marker,
+              '\n\nROOT = Path(__file__).resolve().parents[1]\n\n\ndef test_',
+              1,
+          )
           path.write_text(text, encoding='utf-8')
           PY
           python -m black "${files[@]}"
