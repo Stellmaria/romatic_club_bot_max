@@ -128,3 +128,9 @@ module = [
   "dateutil.*",
 ]
 ignore_missing_imports = true
+
+# The deprecated aggregate intentionally exposes dynamic read-only aliases.
+# Keep its compatibility surface isolated while process-scoped settings remain strict.
+[[tool.mypy.overrides]]
+module = ["bot.core.settings"]
+disable_error_code = ["arg-type", "no-untyped-def"]
