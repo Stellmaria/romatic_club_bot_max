@@ -21,18 +21,24 @@ def main() -> int:
                     f"{workflow.relative_to(ROOT)}: {action}@{ref} is not pinned to a full commit SHA"
                 )
 
-    for name in ("Dockerfile", "Dockerfile.server-supervisor-proxy"):
+    for name in (
+        "Dockerfile",
+        "Dockerfile.server-supervisor-proxy",
+        "Dockerfile.postgres",
+    ):
         first = (ROOT / name).read_text(encoding="utf-8").splitlines()[0]
         if not first.startswith("FROM ") or not DIGEST.search(first):
             failures.append(f"{name}: base image is not pinned by sha256 digest")
 
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    if "dockerfile: Dockerfile.postgres" not in compose:
+        failures.append("compose.yaml: PostgreSQL does not use Dockerfile.postgres")
+    if "romatic-postgres:17-alpine-hardened" not in compose:
+        failures.append("compose.yaml: hardened PostgreSQL image tag is missing")
+
     postgres = (
         "postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193"
     )
-    if postgres not in compose:
-        failures.append("compose.yaml: PostgreSQL image is not pinned by the approved digest")
-
     inventory = (ROOT / "security/base-image-digests.txt").read_text(encoding="utf-8")
     for expected in (
         "python:3.13.13-slim@sha256:aa938a849bcb82dce8f49480f056ab82bf5c1c3ebc294f0430f37b6820e7f286",
