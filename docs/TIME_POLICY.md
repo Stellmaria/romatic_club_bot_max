@@ -22,7 +22,7 @@ The compatibility branch has a declared sunset date of **2026-11-01** (`LEGACY_C
 
 ## Enforcement
 
-`scripts/check_time_policy.py` scans runtime Python code for direct `datetime.now()`, `datetime.utcnow()`, `datetime.today()`, `date.today()`, `pytz`, and `dateutil.tz` usage. Existing legacy occurrences are recorded in `quality/time-policy-baseline.json`.
+`scripts/check_time_policy.py` scans runtime Python code for direct `datetime.now()`, `datetime.utcnow()`, `datetime.today()`, `datetime.fromisoformat()`, `date.today()`, `pytz`, and `dateutil.tz` usage. Existing legacy occurrences are recorded in `quality/time-policy-baseline.json`.
 
 The baseline is a one-way ratchet: entries may be removed as code is migrated, but new entries and increased counts fail CI. This allows the remaining large legacy adapters to be migrated incrementally without permitting any further spread of ambiguous time handling.
 
