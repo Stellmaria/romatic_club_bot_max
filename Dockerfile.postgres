@@ -1,0 +1,10 @@
+FROM postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+
+# The upstream image currently ships gosu 1.19 built with a vulnerable Go toolchain.
+# Alpine's tiny su-exec utility provides the user-switching behavior required by
+# docker-entrypoint.sh without embedding the vulnerable Go standard library.
+RUN set -eux; \
+    apk add --no-cache su-exec; \
+    rm -f /usr/local/bin/gosu; \
+    ln -s /sbin/su-exec /usr/local/bin/gosu; \
+    gosu nobody true
