@@ -10,5 +10,5 @@ pymorphy2==0.9.1
 pymorphy2-dicts-ru==2.4.417127.4579844
 python-dateutil>=2.9.0.post0,<3
 python-dotenv>=1.2.2,<2
-pytz>=2026.1
-requests>=2.33,<3
+pytz>=2026.3.post1
+requests>=2.34.2,<3
