@@ -6,17 +6,16 @@ from time import perf_counter
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
-from bot.core.environment import load_project_environment, resolve_project_root
 from bot.core.legacy_config import configure_legacy_config, legacy_config
-from bot.core.settings import BotProcessSettings, ConfigurationError
+from bot.core.settings import BotProcessSettings
 from bot.uid_crypto import configure_uid_crypto
 from db.core import close_db, init_db
 from db.legacy import (
-    fetch,
-    execute,
     add_user,
-    set_subscription,
+    execute,
+    fetch,
     set_luxury_status,
+    set_subscription,
 )
 
 log = logging.getLogger("refresh_users")
@@ -316,7 +315,7 @@ async def main(config: BotProcessSettings) -> None:
             total,
         )
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         log.exception("DB fetch timed out (60s). Database/pool/query is stuck.")
         raise
     finally:

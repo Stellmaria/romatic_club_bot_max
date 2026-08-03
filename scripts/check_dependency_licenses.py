@@ -24,7 +24,7 @@ def requirement_names(lock_path: Path) -> list[str]:
     names: list[str] = []
     for raw_line in lock_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("#") or line.startswith("--"):
+        if not line or line.startswith(("#", "--")):
             continue
         match = re.match(r"([A-Za-z0-9_.-]+)", line)
         if match:

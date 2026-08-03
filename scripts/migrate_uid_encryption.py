@@ -209,14 +209,13 @@ async def main(database: DatabaseSettings) -> None:
     try:
         await apply_migrations(pool)
 
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                stats = MigrationStats(
-                    user_uids=await migrate_user_uids(conn),
-                    requests=await migrate_requests(conn),
-                    bans=await migrate_bans(conn),
-                )
-                await assert_plaintext_scrubbed(conn)
+        async with pool.acquire() as conn, conn.transaction():
+            stats = MigrationStats(
+                user_uids=await migrate_user_uids(conn),
+                requests=await migrate_requests(conn),
+                bans=await migrate_bans(conn),
+            )
+            await assert_plaintext_scrubbed(conn)
 
         print(f"user_uids migrated: {stats.user_uids}")
         print(f"uid_verification_requests migrated: {stats.requests}")

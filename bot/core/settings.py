@@ -356,7 +356,7 @@ class DatabaseSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "DatabaseSettings":
+    ) -> DatabaseSettings:
         reader = _Reader(
             os.environ if environ is None else environ,
             resolve_project_root(project_root),
@@ -380,7 +380,7 @@ class SupervisorClientSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "SupervisorClientSettings":
+    ) -> SupervisorClientSettings:
         reader = _Reader(
             os.environ if environ is None else environ,
             resolve_project_root(project_root),
@@ -422,7 +422,7 @@ class BotSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "BotSettings":
+    ) -> BotSettings:
         reader = _Reader(
             os.environ if environ is None else environ,
             resolve_project_root(project_root),
@@ -469,7 +469,7 @@ class UserbotSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "UserbotSettings":
+    ) -> UserbotSettings:
         root = resolve_project_root(project_root)
         reader = _Reader(os.environ if environ is None else environ, root)
         runtime_dir = reader.path("RUNTIME_DIR", default=root / "var")
@@ -492,7 +492,7 @@ class BotProcessSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "BotProcessSettings":
+    ) -> BotProcessSettings:
         root = resolve_project_root(project_root)
         reader = _Reader(os.environ if environ is None else environ, root)
         runtime_dir = reader.path("RUNTIME_DIR", default=root / "var")
@@ -522,7 +522,7 @@ class UserbotProcessSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "UserbotProcessSettings":
+    ) -> UserbotProcessSettings:
         root = resolve_project_root(project_root)
         reader = _Reader(os.environ if environ is None else environ, root)
         runtime_dir = reader.path("RUNTIME_DIR", default=root / "var")
@@ -553,7 +553,7 @@ class Settings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "Settings":
+    ) -> Settings:
         root = resolve_project_root(project_root)
         reader = _Reader(os.environ if environ is None else environ, root)
         runtime_dir = reader.path("RUNTIME_DIR", default=root / "var")
@@ -805,10 +805,10 @@ def _parse_supervisor(reader: _Reader) -> SupervisorClientSettings:
 
 
 __all__ = (
+    "CONFIG_SCHEMA",
     "BidValidationMode",
     "BotProcessSettings",
     "BotSettings",
-    "CONFIG_SCHEMA",
     "ConfigField",
     "ConfigurationError",
     "ConfigurationIssue",
