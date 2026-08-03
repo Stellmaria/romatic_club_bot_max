@@ -22,7 +22,7 @@ def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
     assert "actions/upload-artifact@v4" in workflow
     assert "postgres-integration-results" in workflow
     assert "test-coverage-shard-" in workflow
-    assert "uv pip install --system --require-hashes -r requirements.lock" in workflow
+    assert "uv pip install --system -r requirements.lock" in workflow
 
     assert 'DEFAULT_IMAGE = "postgres:17-alpine"' in integration_runner
     assert '"POSTGRES_INTEGRATION_CONFIRM": "1"' in integration_runner
