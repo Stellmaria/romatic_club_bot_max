@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from aiogram import Bot, Dispatcher
 
 from bot.core.logging import configure_logging
+from bot.core.observability import HealthProbeServer, MetricsRegistry
 from bot.core.settings import BotProcessSettings
 from bot.core.supervisor_client import SupervisorClient
 from bot.core.tasks import BackgroundTaskManager
@@ -56,6 +57,7 @@ async def run_bot(config: BotProcessSettings) -> None:
     configure_logging(
         bot_settings.log_level,
         aiogram_debug=bot_settings.aiogram_debug,
+        structured=True,
     )
 
     from bot.core.legacy_config import configure_legacy_config
@@ -79,10 +81,12 @@ async def run_bot(config: BotProcessSettings) -> None:
     database_runtime = DatabaseRuntime(config.database)
     telegram_bot: Bot | None = None
     task_manager: BackgroundTaskManager | None = None
+    health_server: HealthProbeServer | None = None
+    metrics = MetricsRegistry()
     primary_error: BaseException | None = None
     try:
         await init_db(database_runtime)
-        logger.info("Database startup complete")
+        logger.info("Database startup complete", extra={"event": "database.ready"})
 
         container = ApplicationContainer.build(
             pool=database_runtime.require_pool(),
@@ -91,7 +95,10 @@ async def run_bot(config: BotProcessSettings) -> None:
 
         if supervisor_client is not None:
             await supervisor_client.start()
-            logger.info("Supervisor client session initialized")
+            logger.info(
+                "Supervisor client session initialized",
+                extra={"event": "supervisor.ready"},
+            )
 
         telegram_bot = Bot(token=bot_settings.bot_token)
         patch_bot_protect_content(telegram_bot, is_admin=is_admin)
@@ -108,7 +115,10 @@ async def run_bot(config: BotProcessSettings) -> None:
             drop_pending_updates=bot_settings.drop_pending_updates,
         )
         if bot_settings.drop_pending_updates:
-            logger.info("Pending Telegram updates dropped before polling")
+            logger.info(
+                "Pending Telegram updates dropped before polling",
+                extra={"event": "telegram.pending_updates_dropped"},
+            )
 
         task_manager = BackgroundTaskManager()
         task_manager.start(
@@ -119,7 +129,21 @@ async def run_bot(config: BotProcessSettings) -> None:
             )
         )
 
-        logger.info("Starting bot polling")
+        health_server = HealthProbeServer(
+            database_ready=lambda: database_runtime.started,
+            task_manager=lambda: task_manager,
+            metrics=metrics,
+            host="0.0.0.0",
+            port=8081,
+        )
+        await health_server.start()
+        logger.info(
+            "Health and metrics probes started",
+            extra={"event": "observability.ready", "probe_port": 8081},
+        )
+
+        metrics.increment("application_starts_total", process="bot")
+        logger.info("Starting bot polling", extra={"event": "telegram.polling_started"})
         await _run_polling_with_worker_monitor(
             dispatcher,
             telegram_bot,
@@ -127,9 +151,16 @@ async def run_bot(config: BotProcessSettings) -> None:
         )
     except BaseException as error:
         primary_error = error
+        metrics.increment("application_failures_total", process="bot")
+        logger.exception(
+            "Application failed",
+            extra={"event": "application.failed", "error_type": type(error).__name__},
+        )
         raise
     finally:
         cleanup_steps: list[tuple[str, Callable[[], Awaitable[None]]]] = []
+        if health_server is not None:
+            cleanup_steps.append(("health probe server", health_server.close))
         if task_manager is not None:
             cleanup_steps.append(("background tasks", task_manager.stop))
         if telegram_bot is not None:
@@ -143,11 +174,18 @@ async def run_bot(config: BotProcessSettings) -> None:
             try:
                 await cleanup()
             except BaseException as error:
-                logger.exception("Failed to close %s", resource_name)
+                logger.exception(
+                    "Failed to close resource",
+                    extra={
+                        "event": "application.cleanup_failed",
+                        "resource": resource_name,
+                        "error_type": type(error).__name__,
+                    },
+                )
                 if cleanup_error is None:
                     cleanup_error = error
 
-        logger.info("Application shutdown complete")
+        logger.info("Application shutdown complete", extra={"event": "application.stopped"})
         if primary_error is None and cleanup_error is not None:
             raise cleanup_error
 
