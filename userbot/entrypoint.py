@@ -13,7 +13,7 @@ from userbot.session import UserbotSessionError
 logger = logging.getLogger("userbot")
 
 
-async def _main(config: UserbotProcessSettings) -> None:
+async def main(config: UserbotProcessSettings) -> None:
     from userbot.application import run_userbot_application
 
     await run_userbot_application(config)
@@ -30,7 +30,7 @@ def run() -> int:
         return 2
 
     try:
-        asyncio.run(_main(config))
+        asyncio.run(main(config))
     except KeyboardInterrupt:
         logger.info("Userbot stopped by operator")
         return 130
