@@ -6,4 +6,4 @@ cryptography>=48.0.1,<49
 python-dateutil>=2.9.0.post0,<3
 python-dotenv>=1.2.2,<2
 pytz>=2026.1
-Telethon>=1.42,<2
+Telethon>=1.44.0,<2
