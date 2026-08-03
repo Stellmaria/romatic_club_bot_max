@@ -18,4 +18,5 @@ server-data/
 monitoring/
 docs/
 tests/
+deploy/
 scripts/validate_monitoring.py
