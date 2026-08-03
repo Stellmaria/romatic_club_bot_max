@@ -99,6 +99,7 @@ class _WorkerRuntime:
     last_heartbeat_at: float | None = None
     last_error: str | None = None
     task: asyncio.Task[None] | None = field(default=None, repr=False)
+    worker_task: asyncio.Task[None] | None = field(default=None, repr=False)
 
 
 class BackgroundTaskManager:
@@ -124,6 +125,7 @@ class BackgroundTaskManager:
 
         loop = asyncio.get_running_loop()
         self._fatal_failure = loop.create_future()
+        self._stopping = False
         for spec in specs:
             if spec.name in self._workers:
                 raise ValueError(f"Duplicate background task name: {spec.name}")
@@ -137,6 +139,8 @@ class BackgroundTaskManager:
     def heartbeat(self, name: str) -> None:
         runtime = self._workers.get(name)
         if runtime is None:
+            if self._stopping:
+                return
             raise KeyError(f"Unknown background task: {name}")
         runtime.last_heartbeat_at = self._clock()
 
@@ -166,6 +170,7 @@ class BackgroundTaskManager:
             context = WorkerContext(spec.name, lambda: self.heartbeat(spec.name))
             try:
                 worker = asyncio.create_task(spec.factory(context), name=f"{spec.name}:run")
+                runtime.worker_task = worker
                 await self._wait_worker(worker, runtime)
             except asyncio.CancelledError:
                 runtime.state = WorkerState.STOPPED
@@ -185,6 +190,8 @@ class BackgroundTaskManager:
                     runtime.state = WorkerState.FAILED
                     self._publish_fatal(runtime, RuntimeError(runtime.last_error))
                     return
+            finally:
+                runtime.worker_task = None
 
             runtime.restarts += 1
             runtime.state = WorkerState.BACKING_OFF
@@ -261,11 +268,26 @@ class BackgroundTaskManager:
         raise await self._fatal_failure
 
     async def stop(self) -> None:
+        if not self._workers:
+            if self._fatal_failure is not None and not self._fatal_failure.done():
+                self._fatal_failure.cancel()
+            self._fatal_failure = None
+            return
+
+        # Give newly scheduled supervisors and their worker coroutines a chance
+        # to enter before cancellation. Otherwise a coroutine can be cancelled
+        # before its try/finally body starts and resource cleanup never runs.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
         self._stopping = True
-        workers, self._workers = self._workers, {}
+        workers = dict(self._workers)
         for runtime in workers.values():
+            if runtime.worker_task is not None:
+                runtime.worker_task.cancel()
             if runtime.task is not None:
                 runtime.task.cancel()
+
         for runtime in workers.values():
             task = runtime.task
             if task is None:
@@ -283,10 +305,13 @@ class BackgroundTaskManager:
                     runtime.spec.name,
                     runtime.spec.shutdown_timeout,
                 )
+                if runtime.worker_task is not None:
+                    runtime.worker_task.cancel()
             except Exception:
                 logger.exception("Background task %s failed during shutdown", runtime.spec.name)
             runtime.state = WorkerState.STOPPED
 
+        self._workers = {}
         if self._fatal_failure is not None and not self._fatal_failure.done():
             self._fatal_failure.cancel()
         self._fatal_failure = None
