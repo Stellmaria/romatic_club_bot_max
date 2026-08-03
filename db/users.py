@@ -50,9 +50,26 @@ async def sync_user_profile(user_id: int, username: str, full_name: str) -> bool
 
 @require_db_pool
 async def add_user(user_id: int, username: str, full_name: str) -> None:
-    """Compatibility wrapper for callers that do not need the changed flag."""
+    """Compatibility adapter using the historical execute-only contract."""
 
-    await sync_user_profile(user_id, username, full_name)
+    normalized_username = _normalize_profile_username(username)
+    normalized_full_name = (full_name or "").strip()
+    async with db_pool.acquire() as conn:
+        async with track_database_query("users.profile.add", pool=db_pool.pool):
+            await conn.execute(
+                """
+                INSERT INTO public.users (user_id, username, full_name)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (user_id) DO UPDATE
+                SET username = EXCLUDED.username,
+                    full_name = EXCLUDED.full_name
+                WHERE users.username IS DISTINCT FROM EXCLUDED.username
+                   OR users.full_name IS DISTINCT FROM EXCLUDED.full_name
+                """,
+                int(user_id),
+                normalized_username,
+                normalized_full_name,
+            )
 
 
 @require_db_pool
