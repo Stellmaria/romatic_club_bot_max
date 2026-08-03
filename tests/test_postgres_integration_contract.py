@@ -8,9 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    integration_runner = (ROOT / "scripts/run_postgres_integration.py").read_text(
-        encoding="utf-8"
-    )
+    integration_runner = (ROOT / "scripts/run_postgres_integration.py").read_text(encoding="utf-8")
     quality_runner = (ROOT / "scripts/quality.py").read_text(encoding="utf-8")
 
     assert "postgres-integration:" in workflow
