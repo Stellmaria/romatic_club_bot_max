@@ -2,6 +2,7 @@ import asyncio
 import logging
 import sys
 from time import perf_counter
+from typing import TypedDict
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -19,6 +20,11 @@ from db.legacy import (
 )
 
 log = logging.getLogger("refresh_users")
+
+
+class UserPayload(TypedDict):
+    username: str | None
+    full_name: str | None
 
 
 def _clean_username(username: str | None) -> str | None:
@@ -170,7 +176,7 @@ async def try_refresh_from_pm(bot: Bot, user_id: int) -> bool:
 
 async def probe_chat_member(
     bot: Bot, chat_id: int, user_id: int
-) -> tuple[bool | None, dict | None]:
+) -> tuple[bool | None, UserPayload | None]:
     """
     Возвращает:
       - is_member: True/False если удалось проверить, None если не удалось
@@ -324,4 +330,4 @@ async def main(config: BotProcessSettings) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main(BotProcessSettings.from_env()))
