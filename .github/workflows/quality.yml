@@ -185,7 +185,8 @@ jobs:
               docker build --pull=false --file Dockerfile.server-supervisor-proxy --tag "$ref" .
               ;;
             postgres)
-              ref="postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193"
+              ref="romatic-postgres:${SHA}"
+              docker build --pull=false --file Dockerfile.postgres --tag "$ref" .
               ;;
             *) exit 2 ;;
           esac
