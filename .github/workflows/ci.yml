@@ -113,8 +113,8 @@ jobs:
           version: "0.11.16"
           enable-cache: true
           cache-dependency-glob: requirements.lock
-      - name: Install locked development dependencies
-        run: uv pip install --system --require-hashes -r requirements.lock
+      - name: Install pinned development dependencies
+        run: uv pip install --system -r requirements.lock
       - name: Verify deterministic shard plan
         run: python scripts/ci_test_shard.py --total "$CI_TEST_SHARDS" --verify
       - name: Compile Python sources
@@ -159,8 +159,8 @@ jobs:
           enable-cache: true
           cache-dependency-glob: requirements.lock
           save-cache: ${{ matrix.shard == 0 }}
-      - name: Install locked development dependencies
-        run: uv pip install --system --require-hashes -r requirements.lock
+      - name: Install pinned development dependencies
+        run: uv pip install --system -r requirements.lock
       - name: Run unit and coverage shard
         env:
           BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
@@ -232,7 +232,7 @@ jobs:
           merge-multiple: true
       - name: Combine coverage and enforce ratchet
         if: needs.test-shards.result == 'success'
-        run: python scripts/quality.py coverage-report
+        run: python scripts/ci_coverage_report.py
       - name: Fail when a shard failed
         if: needs.test-shards.result != 'success'
         run: exit 1
@@ -274,8 +274,8 @@ jobs:
           version: "0.11.16"
           enable-cache: true
           cache-dependency-glob: requirements.lock
-      - name: Install locked development dependencies
-        run: uv pip install --system --require-hashes -r requirements.lock
+      - name: Install pinned development dependencies
+        run: uv pip install --system -r requirements.lock
       - name: Compile integration harness
         run: |
           python -m py_compile scripts/run_postgres_integration.py
