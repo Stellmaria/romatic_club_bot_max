@@ -132,7 +132,7 @@ class _AuctionScheduleUseCase:
     async def _owners(self, auction_id: int) -> tuple[OwnerSnapshot, ...]:
         try:
             raw = await self._get_owners(int(auction_id))
-        except Exception:
+        except Exception:  # noqa: BLE001 - optional owner enrichment is best-effort
             return ()
         snapshots = await asyncio.gather(
             *(self._owner_snapshot(dict(item)) for item in raw),
@@ -152,7 +152,7 @@ class _AuctionScheduleUseCase:
                     timeout=self._timeout_seconds,
                 )
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise ApplicationTimeout("auction schedule mutation timed out") from exc
         except AuctionSlotConflict as exc:
             raise ApplicationConflict("auction slot is occupied") from exc

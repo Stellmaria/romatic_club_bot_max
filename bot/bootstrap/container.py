@@ -47,7 +47,7 @@ class ApplicationContainer:
         storage_root: Path,
         clock: Clock | None = None,
         file_storage: FileStoragePort | None = None,
-    ) -> "ApplicationContainer":
+    ) -> ApplicationContainer:
         """Build concrete adapters once from explicit lifecycle resources."""
 
         auction_repository = AuctionWorkflowRepository(pool)

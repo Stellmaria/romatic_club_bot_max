@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any
 
 from bot.core.time import ensure_utc, require_aware
 from bot.domain.auctions.bidding import auction_bidding_closes_at
@@ -38,7 +39,7 @@ class Auction:
             object.__setattr__(self, "end_time", _aware_utc(self.end_time, name="end_time"))
 
     @classmethod
-    def from_record(cls, row: Mapping[str, Any]) -> "Auction":
+    def from_record(cls, row: Mapping[str, Any]) -> Auction:
         return cls(
             auction_id=int(row["auction_id"]),
             status=str(row.get("status") or ""),
@@ -69,9 +70,7 @@ class Auction:
         current_utc = _aware_utc(now, name="now")
         if self.start_time is not None and current_utc < self.start_time:
             return False
-        if self.end_time is not None and current_utc >= auction_bidding_closes_at(self.end_time):
-            return False
-        return True
+        return self.end_time is None or current_utc < auction_bidding_closes_at(self.end_time)
 
     def has_ended_at(self, now: datetime) -> bool:
         if self.end_time is None:
@@ -101,7 +100,7 @@ class Bid:
             object.__setattr__(self, "created_at", _aware_utc(self.created_at, name="created_at"))
 
     @classmethod
-    def from_record(cls, row: Mapping[str, Any]) -> "Bid":
+    def from_record(cls, row: Mapping[str, Any]) -> Bid:
         return cls(
             bid_id=int(row["bid_id"]),
             auction_id=int(row["auction_id"]),
@@ -146,7 +145,7 @@ class Autobid:
     is_active: bool
 
     @classmethod
-    def from_record(cls, row: Mapping[str, Any]) -> "Autobid":
+    def from_record(cls, row: Mapping[str, Any]) -> Autobid:
         return cls(
             autobid_id=int(row["autobid_id"]),
             auction_id=int(row["auction_id"]),

@@ -94,30 +94,29 @@ class AuctionWorkflowRepository:
         )
 
     async def create_pending(self, draft: AuctionDraft) -> dict[str, Any]:
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                card = None
-                if draft.card_id is not None:
-                    card = await conn.fetchrow(
-                        """
+        async with self._pool.acquire() as conn, conn.transaction():
+            card = None
+            if draft.card_id is not None:
+                card = await conn.fetchrow(
+                    """
                         SELECT card_id, card_name, hero_name, image_id
                         FROM public.cards
                         WHERE card_id = $1
                         FOR SHARE
                         """,
-                        int(draft.card_id),
-                    )
-                    if not card:
-                        raise ValueError(f"card not found: {draft.card_id}")
+                    int(draft.card_id),
+                )
+                if not card:
+                    raise ValueError(f"card not found: {draft.card_id}")
 
-                card_name = str((card["card_name"] if card else draft.card_name) or "").strip()
-                hero_name = str((card["hero_name"] if card else draft.hero_name) or "").strip()
-                image_id = draft.image_id or (card["image_id"] if card else None)
-                if not card_name:
-                    raise ValueError("card_name is required")
+            card_name = str((card["card_name"] if card else draft.card_name) or "").strip()
+            hero_name = str((card["hero_name"] if card else draft.hero_name) or "").strip()
+            image_id = draft.image_id or (card["image_id"] if card else None)
+            if not card_name:
+                raise ValueError("card_name is required")
 
-                row = await conn.fetchrow(
-                    """
+            row = await conn.fetchrow(
+                """
                     INSERT INTO public.auctions (
                         card_name,
                         hero_name,
@@ -143,31 +142,28 @@ class AuctionWorkflowRepository:
                     )
                     RETURNING *
                     """,
-                    card_name,
-                    hero_name or None,
-                    image_id,
-                    int(draft.start_price),
-                    draft.currency.value,
-                    [
-                        currency.value
-                        for currency in (draft.accepted_currencies or (draft.currency,))
-                    ],
-                    draft.custom_offer_terms,
-                    draft.comment,
-                    draft.auction_kind.value,
-                    draft.proof_photo_id,
-                    draft.craft_uid_possible,
-                    int(draft.card_id) if draft.card_id is not None else None,
-                )
-                await conn.execute(
-                    """
+                card_name,
+                hero_name or None,
+                image_id,
+                int(draft.start_price),
+                draft.currency.value,
+                [currency.value for currency in (draft.accepted_currencies or (draft.currency,))],
+                draft.custom_offer_terms,
+                draft.comment,
+                draft.auction_kind.value,
+                draft.proof_photo_id,
+                draft.craft_uid_possible,
+                int(draft.card_id) if draft.card_id is not None else None,
+            )
+            await conn.execute(
+                """
                     INSERT INTO public.auction_owners (auction_id, user_id)
                     VALUES ($1, $2)
                     ON CONFLICT DO NOTHING
                     """,
-                    int(row["auction_id"]),
-                    int(draft.owner_id),
-                )
+                int(row["auction_id"]),
+                int(draft.owner_id),
+            )
         return dict(row)
 
     async def get(self, auction_id: int) -> dict[str, Any]:
@@ -192,30 +188,27 @@ class AuctionWorkflowRepository:
         if end_time <= start_time:
             raise ValueError("end_time must be greater than start_time")
 
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                # Serialize approvals for one calendar day. This closes the race
-                # between the free-slot screen and the final confirmation click.
-                for schedule_day in sorted(
-                    {moscow_date(start_time).toordinal(), moscow_date(end_time).toordinal()}
-                ):
-                    await conn.execute(
-                        "SELECT pg_advisory_xact_lock($1, $2)",
-                        0x41554354,
-                        int(schedule_day),
-                    )
-                conflict = await self._has_prohibited_slot_overlap(
-                    conn,
-                    auction_id=int(auction_id),
-                    start_time=start_time,
+        async with self._pool.acquire() as conn, conn.transaction():
+            # Serialize approvals for one calendar day. This closes the race
+            # between the free-slot screen and the final confirmation click.
+            for schedule_day in sorted(
+                {moscow_date(start_time).toordinal(), moscow_date(end_time).toordinal()}
+            ):
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock($1, $2)",
+                    0x41554354,
+                    int(schedule_day),
                 )
-                if conflict:
-                    raise AuctionSlotConflict(
-                        f"auction slot {start_time!s} - {end_time!s} is occupied"
-                    )
+            conflict = await self._has_prohibited_slot_overlap(
+                conn,
+                auction_id=int(auction_id),
+                start_time=start_time,
+            )
+            if conflict:
+                raise AuctionSlotConflict(f"auction slot {start_time!s} - {end_time!s} is occupied")
 
-                row = await conn.fetchrow(
-                    """
+            row = await conn.fetchrow(
+                """
                     UPDATE public.auctions
                     SET start_time = $2,
                         end_time = $3,
@@ -226,21 +219,21 @@ class AuctionWorkflowRepository:
                       AND status IN ('pending', 'approved', 'moderation')
                     RETURNING *
                     """,
+                int(auction_id),
+                start_time,
+                end_time,
+            )
+            if not row:
+                current = await conn.fetchval(
+                    "SELECT status FROM public.auctions WHERE auction_id = $1",
                     int(auction_id),
-                    start_time,
-                    end_time,
                 )
-                if not row:
-                    current = await conn.fetchval(
-                        "SELECT status FROM public.auctions WHERE auction_id = $1",
-                        int(auction_id),
-                    )
-                    if current is None:
-                        raise AuctionNotFound(f"auction {auction_id} not found")
-                    raise InvalidAuctionTransition(
-                        current=str(current),
-                        target="scheduled",
-                    )
+                if current is None:
+                    raise AuctionNotFound(f"auction {auction_id} not found")
+                raise InvalidAuctionTransition(
+                    current=str(current),
+                    target="scheduled",
+                )
         return dict(row)
 
     async def reject(self, auction_id: int) -> dict[str, Any]:
@@ -277,27 +270,24 @@ class AuctionWorkflowRepository:
         if end_time <= start_time:
             raise ValueError("end_time must be greater than start_time")
 
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                for schedule_day in sorted(
-                    {moscow_date(start_time).toordinal(), moscow_date(end_time).toordinal()}
-                ):
-                    await conn.execute(
-                        "SELECT pg_advisory_xact_lock($1, $2)",
-                        0x41554354,
-                        int(schedule_day),
-                    )
-                conflict = await self._has_prohibited_slot_overlap(
-                    conn,
-                    auction_id=int(auction_id),
-                    start_time=start_time,
+        async with self._pool.acquire() as conn, conn.transaction():
+            for schedule_day in sorted(
+                {moscow_date(start_time).toordinal(), moscow_date(end_time).toordinal()}
+            ):
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock($1, $2)",
+                    0x41554354,
+                    int(schedule_day),
                 )
-                if conflict:
-                    raise AuctionSlotConflict(
-                        f"auction slot {start_time!s} - {end_time!s} is occupied"
-                    )
-                row = await conn.fetchrow(
-                    """
+            conflict = await self._has_prohibited_slot_overlap(
+                conn,
+                auction_id=int(auction_id),
+                start_time=start_time,
+            )
+            if conflict:
+                raise AuctionSlotConflict(f"auction slot {start_time!s} - {end_time!s} is occupied")
+            row = await conn.fetchrow(
+                """
                     UPDATE public.auctions
                     SET start_time = $2,
                         end_time = $3,
@@ -309,21 +299,21 @@ class AuctionWorkflowRepository:
                       AND message_id IS NULL
                     RETURNING *
                     """,
+                int(auction_id),
+                start_time,
+                end_time,
+            )
+            if not row:
+                current = await conn.fetchval(
+                    "SELECT status FROM public.auctions WHERE auction_id = $1",
                     int(auction_id),
-                    start_time,
-                    end_time,
                 )
-                if not row:
-                    current = await conn.fetchval(
-                        "SELECT status FROM public.auctions WHERE auction_id = $1",
-                        int(auction_id),
-                    )
-                    if current is None:
-                        raise AuctionNotFound(f"auction {auction_id} not found")
-                    raise InvalidAuctionTransition(
-                        current=str(current),
-                        target="scheduled",
-                    )
+                if current is None:
+                    raise AuctionNotFound(f"auction {auction_id} not found")
+                raise InvalidAuctionTransition(
+                    current=str(current),
+                    target="scheduled",
+                )
         return dict(row)
 
     async def update_moderatable_field(
@@ -354,10 +344,9 @@ class AuctionWorkflowRepository:
             f"{field} = ${index}" for index, field in enumerate(ordered, start=2)
         )
         values = [changes[field] for field in ordered]
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow(
-                    f"""
+        async with self._pool.acquire() as conn, conn.transaction():
+            # Column names are restricted by _MODERATABLE_FIELDS.
+            update_sql = f"""
                     UPDATE public.auctions
                     SET {assignments}
                     WHERE auction_id = $1
@@ -367,32 +356,34 @@ class AuctionWorkflowRepository:
                       )
                       AND message_id IS NULL
                     RETURNING *
-                    """,
+                    """  # noqa: S608
+            row = await conn.fetchrow(
+                update_sql,
+                int(auction_id),
+                *values,
+            )
+            if not row:
+                current = await conn.fetchval(
+                    "SELECT status FROM public.auctions WHERE auction_id = $1",
                     int(auction_id),
-                    *values,
                 )
-                if not row:
-                    current = await conn.fetchval(
-                        "SELECT status FROM public.auctions WHERE auction_id = $1",
-                        int(auction_id),
-                    )
-                    if current is None:
-                        raise AuctionNotFound(f"auction {auction_id} not found")
-                    raise InvalidAuctionTransition(
-                        current=str(current),
-                        target="edit:" + ",".join(ordered),
-                    )
-                if changes.get("auction_kind") in {"reverse", "free"}:
-                    await conn.execute(
-                        """
+                if current is None:
+                    raise AuctionNotFound(f"auction {auction_id} not found")
+                raise InvalidAuctionTransition(
+                    current=str(current),
+                    target="edit:" + ",".join(ordered),
+                )
+            if changes.get("auction_kind") in {"reverse", "free"}:
+                await conn.execute(
+                    """
                         UPDATE public.autobids
                         SET is_active = FALSE,
                             updated_at = NOW()
                         WHERE auction_id = $1
                           AND is_active = TRUE
                         """,
-                        int(auction_id),
-                    )
+                    int(auction_id),
+                )
         return dict(row)
 
     async def update_owner_fields(
@@ -414,8 +405,8 @@ class AuctionWorkflowRepository:
         owner_parameter = len(ordered) + 2
         values = [changes[field] for field in ordered]
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                f"""
+            # Column names are restricted by _OWNER_EDITABLE_FIELDS.
+            update_sql = f"""
                 UPDATE public.auctions a
                 SET {assignments}
                 WHERE a.auction_id = $1
@@ -428,7 +419,9 @@ class AuctionWorkflowRepository:
                         AND ao.user_id = ${owner_parameter}
                   )
                 RETURNING a.*
-                """,
+                """  # noqa: S608
+            row = await conn.fetchrow(
+                update_sql,
                 int(auction_id),
                 *values,
                 int(owner_id),
@@ -700,10 +693,9 @@ class AuctionWorkflowRepository:
         limit: int = 20,
     ) -> list[dict[str, Any]]:
         now = ensure_utc(require_aware(now, name="now"))
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                rows = await conn.fetch(
-                    """
+        async with self._pool.acquire() as conn, conn.transaction():
+            rows = await conn.fetch(
+                """
                     WITH due AS (
                         SELECT auction_id
                         FROM public.auctions
@@ -728,9 +720,9 @@ class AuctionWorkflowRepository:
                     WHERE a.auction_id = due.auction_id
                     RETURNING a.*
                     """,
-                    now,
-                    max(1, int(limit)),
-                )
+                now,
+                max(1, int(limit)),
+            )
         return [dict(row) for row in rows]
 
     async def claim_one(self, auction_id: int) -> dict[str, Any]:

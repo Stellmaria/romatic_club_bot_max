@@ -10,11 +10,11 @@ versioned UTC callback format from this module.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Final, Protocol
 from zoneinfo import ZoneInfo
 
-UTC: Final = timezone.utc
+UTC: Final = UTC
 MOSCOW: Final = ZoneInfo("Europe/Moscow")
 LEGACY_CALLBACK_COMPATIBILITY_SUNSET: Final = date(2026, 11, 1)
 _CALLBACK_TIMESTAMP_PREFIX: Final = "u1:"
@@ -195,9 +195,9 @@ def moscow_time(value: datetime) -> time:
 __all__ = [
     "LEGACY_CALLBACK_COMPATIBILITY_SUNSET",
     "MOSCOW",
+    "UTC",
     "ClockSource",
     "SystemClock",
-    "UTC",
     "auction_end_at_59",
     "business_today",
     "ensure_utc",

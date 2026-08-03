@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import asyncpg
@@ -14,7 +14,6 @@ from db.migrator import (
     _load_migrations,
     apply_migrations,
 )
-
 
 pytestmark = pytest.mark.integration
 
@@ -117,7 +116,8 @@ async def test_failed_migration_rolls_back_schema_and_journal(
 
     async with empty_pool.acquire() as connection:
         probe = await connection.fetchval("SELECT to_regclass('public.rollback_probe')")
-        journal_count = await connection.fetchval(f"SELECT count(*) FROM public.{MIGRATION_TABLE}")
+        journal_sql = f"SELECT count(*) FROM public.{MIGRATION_TABLE}"  # noqa: S608
+        journal_count = await connection.fetchval(journal_sql)
 
     assert probe is None
     assert int(journal_count) == 0
@@ -282,4 +282,4 @@ async def test_timestamptz_round_trip_preserves_the_same_instant(
         )
 
     assert stored.tzinfo is not None
-    assert stored == datetime(2026, 8, 3, 13, 45, tzinfo=timezone.utc)
+    assert stored == datetime(2026, 8, 3, 13, 45, tzinfo=UTC)

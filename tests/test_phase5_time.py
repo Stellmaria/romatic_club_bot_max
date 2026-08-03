@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -35,8 +35,8 @@ class FrozenClock:
 def test_naive_legacy_timestamp_is_interpreted_as_moscow_wall_time() -> None:
     value = ensure_utc(datetime(2026, 1, 15, 12, 30))
 
-    assert value.tzinfo is timezone.utc
-    assert value == datetime(2026, 1, 15, 9, 30, tzinfo=timezone.utc)
+    assert value.tzinfo is UTC
+    assert value == datetime(2026, 1, 15, 9, 30, tzinfo=UTC)
 
 
 def test_application_boundary_rejects_naive_datetime() -> None:
@@ -47,17 +47,17 @@ def test_application_boundary_rejects_naive_datetime() -> None:
 def test_injected_clock_is_normalized_to_utc() -> None:
     clock = FrozenClock(datetime(2026, 8, 3, 16, 30, tzinfo=MOSCOW))
 
-    assert utc_now(clock=clock) == datetime(2026, 8, 3, 13, 30, tzinfo=timezone.utc)
+    assert utc_now(clock=clock) == datetime(2026, 8, 3, 13, 30, tzinfo=UTC)
 
 
 def test_business_date_uses_explicit_moscow_year_boundary() -> None:
-    clock = FrozenClock(datetime(2026, 12, 31, 21, 30, tzinfo=timezone.utc))
+    clock = FrozenClock(datetime(2026, 12, 31, 21, 30, tzinfo=UTC))
 
     assert business_today(clock=clock) == date(2027, 1, 1)
 
 
 def test_aware_timestamp_keeps_its_instant_and_renders_in_moscow() -> None:
-    value = datetime(2026, 7, 1, 21, 45, tzinfo=timezone.utc)
+    value = datetime(2026, 7, 1, 21, 45, tzinfo=UTC)
     rendered = to_moscow(value)
 
     assert rendered.hour == 0
@@ -71,11 +71,11 @@ def test_iso_timestamp_serialization_is_canonical_utc() -> None:
     encoded = serialize_timestamp(source)
 
     assert encoded == "2026-08-03T13:45:23Z"
-    assert parse_timestamp(encoded) == datetime(2026, 8, 3, 13, 45, 23, tzinfo=timezone.utc)
+    assert parse_timestamp(encoded) == datetime(2026, 8, 3, 13, 45, 23, tzinfo=UTC)
 
 
 def test_callback_timestamp_round_trip_uses_versioned_utc_payload() -> None:
-    source = datetime(2026, 8, 3, 13, 45, 23, tzinfo=timezone.utc)
+    source = datetime(2026, 8, 3, 13, 45, 23, tzinfo=UTC)
 
     encoded = serialize_callback_timestamp(source)
 
@@ -87,8 +87,8 @@ def test_callback_timestamp_round_trip_uses_versioned_utc_payload() -> None:
 def test_legacy_naive_callback_is_interpreted_as_moscow_until_sunset() -> None:
     parsed = parse_callback_timestamp("2026-08-03T16:45:00")
 
-    assert parsed == datetime(2026, 8, 3, 13, 45, tzinfo=timezone.utc)
-    assert LEGACY_CALLBACK_COMPATIBILITY_SUNSET == date(2026, 11, 1)
+    assert parsed == datetime(2026, 8, 3, 13, 45, tzinfo=UTC)
+    assert date(2026, 11, 1) == LEGACY_CALLBACK_COMPATIBILITY_SUNSET
 
 
 def test_invalid_callback_timestamp_is_rejected() -> None:

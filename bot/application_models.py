@@ -7,10 +7,10 @@ own view models, but asyncpg records and untyped dictionaries stop here.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Mapping, TypeVar
 
 from bot.core.time import ensure_utc, require_aware
 from bot.domain.auctions.enums import AuctionKind, Currency
@@ -120,10 +120,7 @@ class OutboxRecord:
         object.__setattr__(self, "created_at", _aware_utc(self.created_at, name="created_at"))
 
 
-T = TypeVar("T")
-
-
-def required(row: Mapping[str, object], key: str, expected: type[T]) -> T:
+def required[T](row: Mapping[str, object], key: str, expected: type[T]) -> T:
     value = row.get(key)
     if not isinstance(value, expected):
         raise RecordMappingError(
