@@ -1,10 +1,28 @@
-FROM postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+FROM postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 AS upstream
 
 # The upstream image currently ships gosu 1.19 built with a vulnerable Go toolchain.
-# Alpine's tiny su-exec utility provides the user-switching behavior required by
-# docker-entrypoint.sh without embedding the vulnerable Go standard library.
+# Replace it before copying the merged filesystem into a clean final image. Merely
+# deleting gosu in a derived layer is insufficient because image scanners still see
+# the vulnerable binary in the inherited layer history.
 RUN set -eux; \
     apk add --no-cache su-exec; \
     rm -f /usr/local/bin/gosu; \
     ln -s /sbin/su-exec /usr/local/bin/gosu; \
-    gosu nobody true
+    gosu nobody true; \
+    postgres --version
+
+FROM scratch
+
+COPY --from=upstream / /
+
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    LANG=en_US.utf8 \
+    PG_MAJOR=17 \
+    PG_VERSION=17.10 \
+    PGDATA=/var/lib/postgresql/data
+
+VOLUME ["/var/lib/postgresql/data"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+STOPSIGNAL SIGINT
+EXPOSE 5432
+CMD ["postgres"]
