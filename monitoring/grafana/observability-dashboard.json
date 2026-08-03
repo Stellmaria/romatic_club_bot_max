@@ -1,0 +1,66 @@
+{
+  "uid": "romatic-observability",
+  "title": "Romatic Club SLO",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["romatic-club", "slo"],
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Core latency p50 / p95",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum by (le) (rate(telegram_update_latency_seconds_bucket[5m])))"},
+        {"refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum by (le) (rate(telegram_update_latency_seconds_bucket[5m])))"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Core error rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{"refId": "A", "expr": "sum(rate(telegram_update_errors_total[5m])) / clamp_min(sum(rate(telegram_updates_total[5m])), 1)"}]
+    },
+    {
+      "id": 3,
+      "title": "Core scheduler lag",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{"refId": "A", "expr": "max(scheduler_lag_seconds{component=\"core\"})"}]
+    },
+    {
+      "id": 4,
+      "title": "Core readiness",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [{"refId": "A", "expr": "min(application_ready)"}]
+    },
+    {
+      "id": 5,
+      "title": "Userbot latency p50 / p95",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {"refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum by (le) (rate(userbot_operation_latency_seconds_bucket[5m])))"},
+        {"refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum by (le) (rate(userbot_operation_latency_seconds_bucket[5m])))"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Userbot error rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [{"refId": "A", "expr": "sum(rate(userbot_operation_errors_total[5m])) / clamp_min(sum(rate(userbot_operations_total[5m])), 1)"}]
+    },
+    {
+      "id": 7,
+      "title": "Userbot queue depth",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+      "targets": [{"refId": "A", "expr": "max(userbot_queue_depth)"}]
+    }
+  ]
+}
