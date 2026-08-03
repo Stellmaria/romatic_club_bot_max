@@ -181,6 +181,7 @@ jobs:
           path: |
             .coverage.${{ matrix.shard }}
             shard-${{ matrix.shard }}.xml
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
 
