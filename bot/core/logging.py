@@ -5,16 +5,18 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from bot.core.observability import ObservationContextFilter, redact
 from bot.core.settings import LogLevel
 
 _STANDARD_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 
 
 class JsonLogFormatter(logging.Formatter):
-    """Small structured formatter shared by service entrypoints."""
+    """Structured formatter with correlation context and secret redaction."""
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
+            "schema_version": 1,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
@@ -25,7 +27,7 @@ class JsonLogFormatter(logging.Formatter):
                 payload[key] = value
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
-        return json.dumps(payload, ensure_ascii=False, default=str)
+        return json.dumps(redact(payload), ensure_ascii=False, default=str)
 
 
 def configure_logging(
@@ -39,10 +41,15 @@ def configure_logging(
     normalized = level_name.value if isinstance(level_name, LogLevel) else str(level_name)
     level = logging.getLevelNamesMapping().get(normalized.upper(), logging.INFO)
     handler = logging.StreamHandler()
+    handler.addFilter(ObservationContextFilter())
     if structured:
         handler.setFormatter(JsonLogFormatter())
     else:
-        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(levelname)s] [cid=%(correlation_id)s] %(message)s"
+            )
+        )
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(handler)
