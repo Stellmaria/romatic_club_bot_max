@@ -54,7 +54,7 @@ async def _run_polling_with_worker_monitor(
         await asyncio.gather(polling, worker_monitor, return_exceptions=True)
 
 
-async def run_bot(config: BotProcessSettings) -> None:
+async def run_bot(config: BotProcessSettings) -> None:  # noqa: C901
     """Run the bot from explicitly constructed configuration and adapters."""
 
     bot_settings = config.bot
@@ -185,7 +185,7 @@ async def run_bot(config: BotProcessSettings) -> None:
         )
         raise
     # This is the process lifecycle boundary: record the failure, then re-raise it.
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:
         primary_error = error
         metrics.increment("application_failures_total", process="bot")
         logger.exception(
@@ -213,7 +213,7 @@ async def run_bot(config: BotProcessSettings) -> None:
             try:
                 await cleanup()
             # Cleanup must continue so every remaining resource gets a close attempt.
-            except Exception as error:  # noqa: BLE001
+            except Exception as error:
                 logger.exception(
                     "Failed to close resource",
                     extra={
