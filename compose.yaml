@@ -58,15 +58,17 @@ services:
   bot:
     build: .
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - ${BOT_ENV_FILE:-.env.bot}
     environment:
+      RUNTIME_DIR: /app/var
       SUPERVISOR_TOKEN: ""
       SUPERVISOR_TOKEN_FILE: /run/secrets/supervisor_token
     secrets:
       - supervisor_token
     command: ["python", "main.py"]
     volumes:
-      - ./var:/app/var
+      - ${ROMATIC_DATA_DIR:-./server-data}/runtime/bot:/app/var
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,15 +81,36 @@ services:
   userbot:
     build: .
     restart: unless-stopped
-    env_file: .env
+    user: "${ROMATIC_APP_UID:-10001}:${ROMATIC_APP_GID:-10001}"
+    env_file:
+      - ${USERBOT_ENV_FILE:-.env.userbot}
     environment:
+      RUNTIME_DIR: /app/var
+      USERBOT_SESSION: /run/romatic-userbot-session/userbot
       SUPERVISOR_ENABLED: "false"
       SUPERVISOR_TOKEN: ""
       SUPERVISOR_TOKEN_FILE: ""
       SUPERVISOR_BASE_URL: ""
     command: ["python", "-m", "userbot.entrypoint"]
+    stdin_open: false
+    tty: false
     volumes:
-      - ./var:/app/var
+      - ${ROMATIC_DATA_DIR:-./server-data}/runtime/userbot:/app/var
+      - ${ROMATIC_DATA_DIR:-./server-data}/userbot-session:/run/romatic-userbot-session
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -m
+        - userbot.healthcheck
+        - --file
+        - /app/var/userbot-health.json
+        - --max-age
+        - "30"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy

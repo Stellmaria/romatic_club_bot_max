@@ -16,8 +16,10 @@ jobs:
       - name: Prepare non-secret Compose environment
         run: |
           cp .env.example .env
+          cp .env.bot.example .env.bot
+          cp .env.userbot.example .env.userbot
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_only_password/' .env
-          sed -i 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://auction_bot:ci_only_password@postgres:5432/auction_bot#' .env
+          sed -i 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://auction_bot:ci_only_password@postgres:5432/auction_bot#' .env.bot .env.userbot
           sed -i 's#^SUPERVISOR_TOKEN_FILE_HOST=.*#SUPERVISOR_TOKEN_FILE_HOST=./.ci-supervisor-token#' .env
           printf '%s\n' 'ci-only-supervisor-token-value' > .ci-supervisor-token
       - name: Validate Compose contract
@@ -106,7 +108,8 @@ jobs:
           BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
           UID_HASH_KEY: ci-only-hmac-key
           UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-        run: python -m pytest -q -m "not integration"
+          PYTHONUNBUFFERED: "1"
+        run: timeout --signal=TERM --kill-after=15s 300s python -m pytest -vv -m "not integration"
 
   postgres-integration:
     runs-on: ubuntu-latest

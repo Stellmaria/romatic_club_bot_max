@@ -1,18 +1,16 @@
-"""Userbot process lifecycle and dependency composition."""
+"""Userbot production lifecycle and dependency composition."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from collections.abc import Mapping
-from getpass import getpass
 from pathlib import Path
 from typing import Any, Callable
 
 from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
 
+from bot.core.logging import configure_logging
 from bot.core.settings import UserbotProcessSettings, UserbotSettings
 from bot.core.tasks import (
     BackgroundTaskManager,
@@ -20,6 +18,13 @@ from bot.core.tasks import (
     RestartPolicy,
     WorkerCriticality,
 )
+from userbot.health import (
+    build_health_payload,
+    health_file_path,
+    health_reporter_loop,
+    write_health,
+)
+from userbot.session import UserbotSessionError, validate_session_storage
 
 ClientFactory = Callable[[str, int, str], Any]
 logger = logging.getLogger("userbot")
@@ -48,19 +53,10 @@ def resolve_userbot_session(
     environ: Mapping[str, str] | None = None,
     project_root: Path,
 ) -> str:
-    """Preserve an existing root session unless a session was configured."""
+    """Return the configured session path without legacy filesystem fallback."""
 
-    environment = os.environ if environ is None else environ
-    configured_session = config.session.strip()
-    if (environment.get("USERBOT_SESSION") or "").strip():
-        return configured_session
-
-    configured_path = Path(configured_session)
-    default_path = config.runtime_dir / "userbot_session"
-    legacy_path = project_root / "userbot_session"
-    if configured_path == default_path and legacy_path.with_suffix(".session").is_file():
-        return str(legacy_path)
-    return configured_session
+    del environ, project_root
+    return config.session.strip()
 
 
 def create_userbot_client(
@@ -70,20 +66,13 @@ def create_userbot_client(
     client_factory: ClientFactory = TelegramClient,
     environ: Mapping[str, str] | None = None,
 ) -> TelegramClient:
-    """Construct, but do not connect, a Telegram client."""
+    """Construct a production client only for an existing private session."""
 
     errors = userbot_configuration_errors(config)
     if errors:
         raise UserbotConfigurationError("; ".join(errors))
-
-    session = resolve_userbot_session(
-        config,
-        environ=environ,
-        project_root=project_root,
-    )
-    session_path = Path(session)
-    if session_path.parent != Path("."):
-        session_path.parent.mkdir(parents=True, exist_ok=True)
+    session = resolve_userbot_session(config, environ=environ, project_root=project_root)
+    validate_session_storage(session)
     return client_factory(session, config.api_id, config.api_hash)
 
 
@@ -118,55 +107,76 @@ async def _run_client_with_worker_monitor(
         await asyncio.gather(disconnected, worker_monitor, return_exceptions=True)
 
 
-async def run_userbot_application(config: UserbotProcessSettings) -> None:
-    """Run authorization, handlers and supervised workers with deterministic cleanup."""
+async def run_userbot_application(
+    config: UserbotProcessSettings,
+    *,
+    client_factory: ClientFactory = TelegramClient,
+) -> None:
+    """Run a pre-authorized session and supervised workers without reading stdin."""
 
-    logging.basicConfig(level=logging.INFO)
+    configure_logging("INFO", structured=True)
 
     from bot.core.legacy_config import configure_legacy_config
     from bot.uid_crypto import configure_uid_crypto
-
-    configure_legacy_config(config)
-    userbot_settings = config.userbot
-    configure_uid_crypto(userbot_settings.uid_hash_key, userbot_settings.uid_enc_key)
-
     from db.lifecycle import close_db, init_db
     from db.pool import DatabaseRuntime
     from userbot.handlers import register_handlers, register_schedule_handlers
     from userbot.workers import autobid_watchdog, schedule_announcement_watchdog
 
-    database_runtime = DatabaseRuntime(config.database)
-    telegram_client = create_userbot_client(
-        userbot_settings,
-        project_root=config.project_root,
+    configure_legacy_config(config)
+    userbot_settings = config.userbot
+    configure_uid_crypto(userbot_settings.uid_hash_key, userbot_settings.uid_enc_key)
+
+    runtime_dir = config.runtime_dir
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    health_path = health_file_path(runtime_dir)
+    write_health(
+        health_path,
+        build_health_payload(status="starting", connected=False, authorized=False),
     )
-    register_handlers(telegram_client)
-    register_schedule_handlers(telegram_client)
+
+    database_runtime = DatabaseRuntime(config.database)
+    telegram_client: TelegramClient | None = None
     task_manager: BackgroundTaskManager | None = None
+    database_started = False
+    authorized = False
+    primary_error: BaseException | None = None
 
     try:
-        await init_db(database_runtime)
+        telegram_client = create_userbot_client(
+            userbot_settings,
+            project_root=config.project_root,
+            client_factory=client_factory,
+        )
         await telegram_client.connect()
         if not await telegram_client.is_user_authorized():
-            phone = input("Введите телефон (+7...): ").strip()
-            await telegram_client.send_code_request(phone)
-            code = input("Введите код: ").strip()
-            try:
-                await telegram_client.sign_in(phone=phone, code=code)
-            except SessionPasswordNeededError:
-                password = getpass("Введите пароль 2FA: ").strip()
-                await telegram_client.sign_in(phone=phone, password=password)
+            raise UserbotSessionError(
+                "Userbot session is not authorized. "
+                "Run `auction-userbot-provision authorize` outside the production process."
+            )
+        authorized = True
+
+        # Session readiness is checked before database initialization so an
+        # absent or revoked credential fails fast with the correct diagnosis.
+        await init_db(database_runtime)
+        database_started = True
+        register_handlers(telegram_client)
+        register_schedule_handlers(telegram_client)
 
         task_manager = BackgroundTaskManager()
         task_manager.start(
             [
                 BackgroundTaskSpec(
                     "userbot-autobid-watchdog",
-                    lambda _context: autobid_watchdog(telegram_client),
+                    lambda context: autobid_watchdog(
+                        telegram_client,
+                        heartbeat=context.heartbeat,
+                    ),
                     criticality=WorkerCriticality.CRITICAL,
                     restart_policy=RestartPolicy.ON_FAILURE,
                     max_failures=4,
                     max_backoff=30.0,
+                    heartbeat_timeout=60.0,
                     shutdown_timeout=20.0,
                 ),
                 BackgroundTaskSpec(
@@ -181,26 +191,59 @@ async def run_userbot_application(config: UserbotProcessSettings) -> None:
                     max_backoff=60.0,
                     shutdown_timeout=20.0,
                 ),
+                BackgroundTaskSpec(
+                    "userbot-health-reporter",
+                    lambda context: health_reporter_loop(
+                        context,
+                        task_manager=task_manager,
+                        telegram_client=telegram_client,
+                        path=health_path,
+                    ),
+                    criticality=WorkerCriticality.RECOVERABLE,
+                    restart_policy=RestartPolicy.ALWAYS,
+                    max_failures=8,
+                    max_backoff=30.0,
+                    heartbeat_timeout=20.0,
+                    shutdown_timeout=10.0,
+                ),
             ]
         )
         current_user = await telegram_client.get_me()
-        logger.info("Userbot logged in as @%s", current_user.username or current_user.id)
-        logger.info("Listening discussion chat for bids/moderation/rules…")
+        logger.info(
+            "Userbot production session ready",
+            extra={"telegram_user_id": getattr(current_user, "id", None)},
+        )
         await _run_client_with_worker_monitor(telegram_client, task_manager)
+    except BaseException as error:
+        primary_error = error
+        write_health(
+            health_path,
+            build_health_payload(
+                status="failed",
+                connected=bool(telegram_client and telegram_client.is_connected()),
+                authorized=authorized,
+                task_manager=task_manager,
+                error=f"{type(error).__name__}: {error}",
+            ),
+        )
+        raise
     finally:
         if task_manager is not None:
             await task_manager.stop()
-        try:
-            if telegram_client.is_connected():
-                await telegram_client.disconnect()
-        finally:
+        if telegram_client is not None and telegram_client.is_connected():
+            await telegram_client.disconnect()
+        if database_started:
             await close_db(database_runtime)
+        if primary_error is None:
+            write_health(
+                health_path,
+                build_health_payload(
+                    status="stopped",
+                    connected=False,
+                    authorized=authorized,
+                    task_manager=task_manager,
+                ),
+            )
 
 
-__all__ = [
-    "UserbotConfigurationError",
-    "create_userbot_client",
-    "resolve_userbot_session",
-    "run_userbot_application",
-    "userbot_configuration_errors",
-]
+__all__ = ["UserbotSessionError", "run_userbot_application"]

@@ -18,6 +18,8 @@ tools = ["pandas==2.3.3"]
 [project.scripts]
 auction-bot = "main:main"
 auction-userbot = "userbot.entrypoint:run"
+auction-userbot-provision = "userbot.provision:run"
+auction-userbot-healthcheck = "userbot.healthcheck:run"
 auction-route-inventory = "bot.bootstrap.route_inventory:main"
 
 [tool.setuptools]
