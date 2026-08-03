@@ -1,9 +1,9 @@
 name: Source Snapshot
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/issue-42-observability
+      - main
 
 permissions:
   contents: read
