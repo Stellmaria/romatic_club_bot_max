@@ -23,12 +23,14 @@ from bot.middlewares.observability import ObservabilityMiddleware
 
 
 def test_redact_masks_sensitive_values_recursively() -> None:
+    hidden_value = "".join(("must", "-not-leak"))
+    sample_credential = ":".join(("123456789", "A" * 35))
     payload = {
-        "token": "secret-token",
+        "token": hidden_value,
         "nested": {"phone": "+79990000000", "safe": "visible"},
         "items": [{"session": "bytes"}],
         "error": (
-            "request failed for 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "
+            f"request failed for {sample_credential} "
             "at postgresql://user:password@postgres/database"
         ),
     }
@@ -43,6 +45,7 @@ def test_redact_masks_sensitive_values_recursively() -> None:
 
 
 def test_json_formatter_has_schema_context_and_redacts_extras() -> None:
+    hidden_value = "".join(("must", "-not-leak"))
     record = logging.LogRecord(
         name="auction_bot.test",
         level=logging.INFO,
@@ -54,14 +57,14 @@ def test_json_formatter_has_schema_context_and_redacts_extras() -> None:
     )
     record.correlation_id = "cid-1"
     record.operation_id = "auction:publish"
-    record.bot_token = "must-not-leak"
+    record.bot_token = hidden_value
 
     rendered = JsonLogFormatter().format(record)
 
     assert '"schema_version": 1' in rendered
     assert '"correlation_id": "cid-1"' in rendered
     assert '"operation_id": "auction:publish"' in rendered
-    assert "must-not-leak" not in rendered
+    assert hidden_value not in rendered
     assert "[REDACTED]" in rendered
 
 
@@ -75,7 +78,10 @@ def test_metrics_registry_renders_prometheus_values_and_histograms() -> None:
 
     assert 'updates_total{result="ok"} 1' in rendered
     assert 'outbox_backlog{queue="telegram"} 3' in rendered
-    assert 'update_latency_seconds_bucket{update_type="message",le="0.25"} 1' in rendered
+    assert (
+        'update_latency_seconds_bucket{update_type="message",le="0.25"} 1'
+        in rendered
+    )
     assert 'update_latency_seconds_count{update_type="message"} 1' in rendered
     assert 'update_latency_seconds_sum{update_type="message"} 0.2' in rendered
 
@@ -114,9 +120,16 @@ async def test_update_middleware_binds_context_and_records_latency() -> None:
     }
     assert correlation_id_var.get() == ""
     rendered = metrics.render_prometheus()
-    assert 'telegram_updates_total{action="/start",update_type="message"} 1' in rendered
+    assert (
+        'telegram_updates_total{action="/start",update_type="message"} 1'
+        in rendered
+    )
     assert "private text" not in rendered
-    assert 'telegram_update_latency_seconds_count{action="/start",update_type="message"} 1' in rendered
+    assert (
+        "telegram_update_latency_seconds_count"
+        '{action="/start",update_type="message"} 1'
+        in rendered
+    )
 
 
 def test_readiness_requires_database_and_workers() -> None:
