@@ -12,7 +12,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Protocol, cast
 
 from bot.core.tasks import BackgroundTaskManager, WorkerCriticality, WorkerState
 
@@ -27,11 +27,19 @@ operation_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
 
 _SECRET_KEY = re.compile(r"(?:token|secret|password|phone|uid|session)", re.I)
 _BOT_TOKEN = re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{20,}\b")
-_DSN_PASSWORD = re.compile(r"(?P<prefix>\b[a-z][a-z0-9+.-]*://[^\s:/@]+:)[^\s@]+@", re.I)
+_DSN_PASSWORD = re.compile(
+    r"(?P<prefix>\b[a-z][a-z0-9+.-]*://[^\s:/@]+:)[^\s@]+@",
+    re.I,
+)
 _PHONE_NUMBER = re.compile(r"(?<!\d)\+?\d(?:[\s()-]*\d){9,14}(?!\d)")
 _METRIC_NAME = re.compile(r"^[a-zA-Z_:][a-zA-Z0-9_:]*$")
 _LABEL_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _DEFAULT_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
+
+
+class _ContextLogRecord(Protocol):
+    correlation_id: str | None
+    operation_id: str | None
 
 
 def new_correlation_id(prefix: str = "op") -> str:
@@ -77,10 +85,9 @@ def redact(value: Any) -> Any:
 
 class ObservationContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        record.correlation_id = (
-            correlation_id_var.get() or getattr(record, "correlation_id", None)
-        )
-        record.operation_id = operation_id_var.get() or getattr(record, "operation_id", None)
+        context_record = cast(_ContextLogRecord, record)
+        context_record.correlation_id = correlation_id_var.get() or None
+        context_record.operation_id = operation_id_var.get() or None
         return True
 
 
@@ -92,12 +99,12 @@ class HealthSnapshot:
     workers: tuple[dict[str, Any], ...]
 
 
-MetricLabels = tuple[tuple[str, str], ...]
-MetricKey = tuple[str, MetricLabels]
+type MetricLabels = tuple[tuple[str, str], ...]
+type MetricKey = tuple[str, MetricLabels]
 
 
 class MetricsRegistry:
-    """Small in-process Prometheus registry without external runtime dependencies."""
+    """Small in-process Prometheus registry without external dependencies."""
 
     def __init__(self) -> None:
         self._counters: Counter[MetricKey] = Counter()
@@ -132,7 +139,9 @@ class MetricsRegistry:
         **labels: str,
     ) -> None:
         if not math.isfinite(value) or value < 0:
-            raise ValueError("Histogram observation must be a finite non-negative number")
+            raise ValueError(
+                "Histogram observation must be a finite non-negative number"
+            )
         key = self._key(name, labels)
         self._histogram_counts[key] += 1
         self._histogram_sums[key] = self._histogram_sums.get(key, 0.0) + value
@@ -159,7 +168,9 @@ class MetricsRegistry:
                 key=lambda item: item[0],
             )
             for upper_bound, bucket_count in buckets:
-                rendered_bound = "+Inf" if math.isinf(upper_bound) else f"{upper_bound:g}"
+                rendered_bound = (
+                    "+Inf" if math.isinf(upper_bound) else f"{upper_bound:g}"
+                )
                 bucket_labels = tuple((*labels, ("le", rendered_bound)))
                 lines.append(
                     f"{name}_bucket{_render_labels(bucket_labels)} {bucket_count}"
@@ -173,7 +184,11 @@ class MetricsRegistry:
 
 
 def _escape_label(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace('"', '\\"')
+    )
 
 
 def _render_labels(labels: MetricLabels) -> str:
@@ -206,7 +221,11 @@ class HealthProbeServer:
     async def start(self) -> None:
         if self._server is not None:
             raise RuntimeError("Health probe server is already started")
-        self._server = await asyncio.start_server(self._handle, self._host, self._port)
+        self._server = await asyncio.start_server(
+            self._handle,
+            self._host,
+            self._port,
+        )
 
     async def close(self) -> None:
         if self._server is None:
@@ -230,7 +249,10 @@ class HealthProbeServer:
             for item in critical_workers
         )
         ready = database and ready_workers
-        self._metrics.gauge("process_uptime_seconds", time.monotonic() - self._started_at)
+        self._metrics.gauge(
+            "process_uptime_seconds",
+            time.monotonic() - self._started_at,
+        )
         self._metrics.gauge("application_ready", 1 if ready else 0)
         self._metrics.gauge("database_ready", 1 if database else 0)
         if self._database_metrics is not None:
