@@ -13,6 +13,7 @@ import asyncpg
 import pytest
 import pytest_asyncio
 
+from bot.uid_crypto import configure_uid_crypto, reset_uid_crypto_for_testing
 from db.migrator import apply_migrations
 
 
@@ -95,6 +96,19 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
     outcome = yield
     report = outcome.get_result()
     setattr(item, f"rep_{report.when}", report)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def configured_uid_crypto() -> None:
+    hash_key = os.getenv("UID_HASH_KEY", "").strip()
+    encryption_key = os.getenv("UID_ENC_KEY", "").strip()
+    if not hash_key or not encryption_key:
+        pytest.fail("UID_HASH_KEY and UID_ENC_KEY are required for integration tests")
+    configure_uid_crypto(hash_key, encryption_key)
+    try:
+        yield
+    finally:
+        reset_uid_crypto_for_testing()
 
 
 @pytest_asyncio.fixture
