@@ -202,11 +202,9 @@ class RescheduleAuctionUseCase(_AuctionScheduleUseCase):
             raise ApplicationInvalidState("repository returned an invalid schedule")
         actual_start = _aware_utc(actual_start_raw, name="actual_start_time")
         actual_end = _aware_utc(actual_end_raw, name="actual_end_time")
-        if (
-            actual_start.replace(second=0, microsecond=0)
-            != command.start_time.replace(second=0, microsecond=0)
-            or actual_end.replace(microsecond=0) != command.end_time.replace(microsecond=0)
-        ):
+        if actual_start.replace(second=0, microsecond=0) != command.start_time.replace(
+            second=0, microsecond=0
+        ) or actual_end.replace(microsecond=0) != command.end_time.replace(microsecond=0):
             raise ApplicationInvalidState(
                 "persisted schedule differs from requested schedule",
                 details={

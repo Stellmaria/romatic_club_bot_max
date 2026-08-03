@@ -53,9 +53,7 @@ class AuctionWorkflowRepository:
         """
         normalized_start = start_time.replace(second=0, microsecond=0)
         if normalized_start.minute not in (0, 30):
-            raise ValueError(
-                "auction start_time must be aligned to a :00 or :30 slot"
-            )
+            raise ValueError("auction start_time must be aligned to a :00 or :30 slot")
 
         return bool(
             await conn.fetchval(
@@ -112,13 +110,9 @@ class AuctionWorkflowRepository:
                     if not card:
                         raise ValueError(f"card not found: {draft.card_id}")
 
-                card_name = str(
-                    (card["card_name"] if card else draft.card_name) or ""
-                ).strip()
-                hero_name = str(
-                    (card["hero_name"] if card else draft.hero_name) or ""
-                ).strip()
-                image_id = (draft.image_id or (card["image_id"] if card else None))
+                card_name = str((card["card_name"] if card else draft.card_name) or "").strip()
+                hero_name = str((card["hero_name"] if card else draft.hero_name) or "").strip()
+                image_id = draft.image_id or (card["image_id"] if card else None)
                 if not card_name:
                     raise ValueError("card_name is required")
 
@@ -357,8 +351,7 @@ class AuctionWorkflowRepository:
             raise ValueError(f"fields are not moderatable: {sorted(unknown)}")
         ordered = sorted(changes)
         assignments = ", ".join(
-            f"{field} = ${index}"
-            for index, field in enumerate(ordered, start=2)
+            f"{field} = ${index}" for index, field in enumerate(ordered, start=2)
         )
         values = [changes[field] for field in ordered]
         async with self._pool.acquire() as conn:
@@ -416,8 +409,7 @@ class AuctionWorkflowRepository:
             raise ValueError(f"fields are not owner-editable: {sorted(unknown)}")
         ordered = sorted(changes)
         assignments = ", ".join(
-            f"{field} = ${index}"
-            for index, field in enumerate(ordered, start=2)
+            f"{field} = ${index}" for index, field in enumerate(ordered, start=2)
         )
         owner_parameter = len(ordered) + 2
         values = [changes[field] for field in ordered]

@@ -127,8 +127,7 @@ def required(row: Mapping[str, object], key: str, expected: type[T]) -> T:
     value = row.get(key)
     if not isinstance(value, expected):
         raise RecordMappingError(
-            f"required field {key!r} must be {expected.__name__}, "
-            f"got {type(value).__name__}"
+            f"required field {key!r} must be {expected.__name__}, " f"got {type(value).__name__}"
         )
     return value
 

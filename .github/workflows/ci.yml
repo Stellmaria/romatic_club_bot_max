@@ -97,7 +97,7 @@ jobs:
       - name: Verify installed wheel resources
         run: |
           python -m pip install --no-deps --force-reinstall dist/*.whl
-          python -I -c "from db.migrator import _load_migrations; items = _load_migrations(); assert items[-1].filename == '017_query_performance_indexes.sql'; assert len({item.version for item in items}) == len(items)"
+          python -I -c "from db.migrator import _load_migrations; items = _load_migrations(); assert items[-1].filename == '018_utc_timestamp_policy.sql'; assert len({item.version for item in items}) == len(items)"
           python -I -c "import db.migrations as compatibility; import db.migrator as runtime; assert compatibility.apply_migrations is runtime.apply_migrations; assert compatibility.MIGRATIONS_DIR == runtime.MIGRATIONS_DIR"
       - name: Remove wheel build artifacts before source checks
         run: rm -rf build

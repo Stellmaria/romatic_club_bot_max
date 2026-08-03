@@ -39,12 +39,15 @@ def test_bid_parser_is_shared_and_supports_thousands_suffix() -> None:
 def test_bid_minimum_and_step_are_validated_from_start_price() -> None:
     assert minimum_next_bid(start_price=100, current_max=None, step=10) == 100
     assert minimum_next_bid(start_price=100, current_max=140, step=10) == 150
-    assert validate_bid_amount(
-        amount=150,
-        currency=Currency.DIAMONDS,
-        start_price=100,
-        current_max=140,
-    ) == 150
+    assert (
+        validate_bid_amount(
+            amount=150,
+            currency=Currency.DIAMONDS,
+            start_price=100,
+            current_max=140,
+        )
+        == 150
+    )
     with pytest.raises(BidTooLow):
         validate_bid_amount(
             amount=140,

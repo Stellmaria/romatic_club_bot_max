@@ -57,12 +57,8 @@ async def test_clean_install_is_complete_idempotent_and_checksummed(
         )
 
     assert [row["filename"] for row in rows] == first
-    assert [row["version"] for row in rows] == [
-        migration.version for migration in migrations
-    ]
-    assert [row["checksum"] for row in rows] == [
-        migration.checksum for migration in migrations
-    ]
+    assert [row["version"] for row in rows] == [migration.version for migration in migrations]
+    assert [row["checksum"] for row in rows] == [migration.checksum for migration in migrations]
     assert all(str(row["postgres_version"]).split(".", 1)[0] == "17" for row in rows)
     assert int(table_count) >= 20
     assert int(naive_timestamp_count) == 0
@@ -73,17 +69,13 @@ async def test_concurrent_migration_runners_are_serialized_by_advisory_lock(
 ) -> None:
     migrations = _load_migrations()
 
-    results = await asyncio.gather(
-        *(apply_migrations(empty_pool) for _ in range(3))
-    )
+    results = await asyncio.gather(*(apply_migrations(empty_pool) for _ in range(3)))
 
     assert sum(bool(result) for result in results) == 1
     assert sorted(len(result) for result in results) == [0, 0, len(migrations)]
 
     async with empty_pool.acquire() as connection:
-        journal_count = await connection.fetchval(
-            "SELECT count(*) FROM public.schema_migrations"
-        )
+        journal_count = await connection.fetchval("SELECT count(*) FROM public.schema_migrations")
         duplicate_versions = await connection.fetchval(
             """
             SELECT count(*)
@@ -124,12 +116,8 @@ async def test_failed_migration_rolls_back_schema_and_journal(
         await apply_migrations(empty_pool, directory=tmp_path)
 
     async with empty_pool.acquire() as connection:
-        probe = await connection.fetchval(
-            "SELECT to_regclass('public.rollback_probe')"
-        )
-        journal_count = await connection.fetchval(
-            f"SELECT count(*) FROM public.{MIGRATION_TABLE}"
-        )
+        probe = await connection.fetchval("SELECT to_regclass('public.rollback_probe')")
+        journal_count = await connection.fetchval(f"SELECT count(*) FROM public.{MIGRATION_TABLE}")
 
     assert probe is None
     assert int(journal_count) == 0
@@ -144,9 +132,7 @@ async def test_changed_applied_migration_checksum_is_rejected(
         "CREATE TABLE public.checksum_probe(id integer PRIMARY KEY);",
         encoding="utf-8",
     )
-    assert await apply_migrations(empty_pool, directory=tmp_path) == [
-        migration.name
-    ]
+    assert await apply_migrations(empty_pool, directory=tmp_path) == [migration.name]
 
     migration.write_text(
         "CREATE TABLE public.checksum_probe(id bigint PRIMARY KEY);",

@@ -80,7 +80,12 @@ class TimePolicyVisitor(ast.NodeVisitor):
         if isinstance(func, ast.Attribute):
             if isinstance(func.value, ast.Name):
                 owner = func.value.id
-                if owner in self.datetime_classes and func.attr in {"fromisoformat", "now", "today", "utcnow"}:
+                if owner in self.datetime_classes and func.attr in {
+                    "fromisoformat",
+                    "now",
+                    "today",
+                    "utcnow",
+                }:
                     self._record(f"datetime.{func.attr}")
                 elif owner in self.date_classes and func.attr == "today":
                     self._record("date.today")
@@ -121,8 +126,7 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict[str, dict[str, int]]:
             str(key): int(value) for key, value in payload["direct_datetime_calls"].items()
         },
         "legacy_timezone_imports": {
-            str(key): int(value)
-            for key, value in payload["legacy_timezone_imports"].items()
+            str(key): int(value) for key, value in payload["legacy_timezone_imports"].items()
         },
     }
 
