@@ -1,26 +1,54 @@
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime, timezone
+from typing import Any
 
 from bot.core.settings import LogLevel
+
+_STANDARD_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
+
+
+class JsonLogFormatter(logging.Formatter):
+    """Small structured formatter shared by service entrypoints."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        for key, value in record.__dict__.items():
+            if key not in _STANDARD_RECORD_FIELDS and key not in {"message", "asctime"}:
+                payload[key] = value
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 def configure_logging(
     level_name: str | LogLevel = LogLevel.INFO,
     *,
     aiogram_debug: bool = False,
+    structured: bool = False,
 ) -> None:
     """Configure process logging from an already validated settings model."""
 
     normalized = level_name.value if isinstance(level_name, LogLevel) else str(level_name)
     level = logging.getLevelNamesMapping().get(normalized.upper(), logging.INFO)
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        force=True,
-    )
+    handler = logging.StreamHandler()
+    if structured:
+        handler.setFormatter(JsonLogFormatter())
+    else:
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(level)
 
-    for logger_name in ("auction", "auction_bot"):
+    for logger_name in ("auction", "auction_bot", "userbot"):
         project_logger = logging.getLogger(logger_name)
         project_logger.handlers.clear()
         project_logger.propagate = True
@@ -30,4 +58,4 @@ def configure_logging(
     )
 
 
-__all__ = ["configure_logging"]
+__all__ = ["JsonLogFormatter", "configure_logging"]
