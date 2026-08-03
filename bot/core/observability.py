@@ -150,15 +150,15 @@ class MetricsRegistry:
 
     def render_prometheus(self) -> str:
         lines: list[str] = []
-        for (name, labels), value in sorted(self._counters.items()):
-            lines.append(f"{name}{_render_labels(labels)} {value}")
-        for (name, labels), value in sorted(self._gauges.items()):
-            lines.append(f"{name}{_render_labels(labels)} {value:g}")
+        for (name, labels), counter_value in sorted(self._counters.items()):
+            lines.append(f"{name}{_render_labels(labels)} {counter_value}")
+        for (name, labels), gauge_value in sorted(self._gauges.items()):
+            lines.append(f"{name}{_render_labels(labels)} {gauge_value:g}")
         for (name, labels), count in sorted(self._histogram_counts.items()):
             buckets = sorted(
                 (
-                    (upper_bound, value)
-                    for (bucket_name, bucket_labels, upper_bound), value in (
+                    (upper_bound, bucket_value)
+                    for (bucket_name, bucket_labels, upper_bound), bucket_value in (
                         self._histogram_buckets.items()
                     )
                     if bucket_name == name and bucket_labels == labels
