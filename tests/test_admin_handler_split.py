@@ -10,10 +10,7 @@ from aiogram import Router
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_DIR = ROOT / "bot" / "handlers" / "admin"
 
-FACADES = (
-    "admin_panel",
-    "moderation",
-)
+FACADES = ("admin_panel", "moderation")
 
 
 def _tree(module: str) -> ast.Module:
