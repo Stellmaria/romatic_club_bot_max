@@ -9,7 +9,7 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     versions = [migration.version for migration in migrations]
 
     assert len(versions) == len(set(versions))
-    assert filenames[-1] == "013_schedule_temporary_emoji_marks.sql"
+    assert filenames[-1] == "016_auction_processing_leases.sql"
 
     schedule_migration = next(
         migration
@@ -31,6 +31,31 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     assert "ADD COLUMN IF NOT EXISTS currency TEXT" in bid_contract.sql
     assert "CREATE TRIGGER trg_fill_bid_currency" in bid_contract.sql
 
-    temporary_emoji_contract = migrations[-1]
+    temporary_emoji_contract = next(
+        migration
+        for migration in migrations
+        if migration.filename == "013_schedule_temporary_emoji_marks.sql"
+    )
     assert "schedule_temporary_emoji_marks" in temporary_emoji_contract.sql
     assert "PRIMARY KEY (scope, entity_key)" in temporary_emoji_contract.sql
+
+    utc_outbox_contract = next(
+        migration
+        for migration in migrations
+        if migration.filename == "014_transactional_outbox_and_utc.sql"
+    )
+    assert "ALTER COLUMN start_time TYPE timestamptz" in utc_outbox_contract.sql
+    assert "CREATE TABLE IF NOT EXISTS public.telegram_outbox" in utc_outbox_contract.sql
+
+    delivery_contract = next(
+        migration
+        for migration in migrations
+        if migration.filename == "015_outbox_delivery_control.sql"
+    )
+    assert "delivery_state" in delivery_contract.sql
+    assert "copy_message" in delivery_contract.sql
+
+    processing_contract = migrations[-1]
+    assert "publication_started_at" in processing_contract.sql
+    assert "finalization_started_at" in processing_contract.sql
+    assert "ix_auctions_publication_due" in processing_contract.sql
