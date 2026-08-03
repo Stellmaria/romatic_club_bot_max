@@ -170,7 +170,7 @@ async def test_parallel_equal_bids_are_serialized_by_auction_row_lock(
                 auction_id=auction_id,
                 bid_message_id=710000 + index,
                 bidder_id=720000 + index,
-                explicit_amount=10,
+                explicit_amount=30,
                 now=now,
                 check_ban=False,
             )
@@ -191,7 +191,7 @@ async def test_parallel_equal_bids_are_serialized_by_auction_row_lock(
             """,
             auction_id,
         )
-    assert [(row["amount"], row["currency"]) for row in rows] == [(10, "алмазы")]
+    assert [(row["amount"], row["currency"]) for row in rows] == [(30, "алмазы")]
 
 
 async def test_parallel_publication_workers_claim_each_lot_once(
