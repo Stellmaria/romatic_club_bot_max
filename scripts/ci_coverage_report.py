@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import json
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Any
+
+from quality import (
+    ARTIFACT_DIR,
+    QUALITY_DIR,
+    ROOT,
+    assert_baseline_not_relaxed,
+    base_json,
+    coverage_scope_percent,
+    load_json,
+    resolve_base,
+    run,
+)
+
+SHARD_DIR = ROOT / "var" / "shard-results"
+
+
+def combined_test_metrics(junit_paths: list[Path], *, suite: str) -> dict[str, Any]:
+    if not junit_paths:
+        raise SystemExit(f"No JUnit files found for {suite}")
+
+    totals: dict[str, Any] = {
+        "tests": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "seconds": 0.0,
+        "flaky_tests": 0,
+        "suite": suite,
+    }
+    for junit_path in junit_paths:
+        root = ET.parse(junit_path).getroot()
+        suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+        totals["tests"] += sum(int(item.attrib.get("tests", 0)) for item in suites)
+        totals["failures"] += sum(int(item.attrib.get("failures", 0)) for item in suites)
+        totals["errors"] += sum(int(item.attrib.get("errors", 0)) for item in suites)
+        totals["skipped"] += sum(int(item.attrib.get("skipped", 0)) for item in suites)
+        totals["seconds"] += sum(float(item.attrib.get("time", 0)) for item in suites)
+        totals["flaky_tests"] += len(root.findall(".//flakyFailure"))
+        totals["flaky_tests"] += len(root.findall(".//rerunFailure"))
+
+    totals["seconds"] = round(float(totals["seconds"]), 3)
+    test_count = int(totals["tests"])
+    flaky = int(totals["flaky_tests"])
+    totals["flaky_rate_percent"] = round(
+        (flaky / test_count * 100) if test_count else 0.0,
+        4,
+    )
+    return totals
+
+
+def write_metrics(junit_paths: list[Path]) -> None:
+    totals = combined_test_metrics(junit_paths, suite="unit")
+    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    (ARTIFACT_DIR / "unit-metrics.json").write_text(
+        json.dumps(totals, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print("combined test metrics:", json.dumps(totals, sort_keys=True))
+
+
+def enforce_coverage_ratchet(*, base: str, coverage_path: Path) -> None:
+    payload = load_json(coverage_path)
+    actual = {
+        "overall": float(payload["totals"]["percent_covered"]),
+        "domain_application": coverage_scope_percent(payload),
+    }
+    baseline_path = QUALITY_DIR / "coverage-baseline.json"
+    baseline = load_json(baseline_path)
+    assert_baseline_not_relaxed(
+        current=baseline,
+        previous=base_json(base, baseline_path),
+        keys=("overall", "domain_application"),
+    )
+    (ARTIFACT_DIR / "coverage-results.json").write_text(
+        json.dumps(actual, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    failures = [
+        f"{name}: {value:.2f}% < baseline {float(baseline[name]):.2f}%"
+        for name, value in actual.items()
+        if value + 1e-9 < float(baseline[name])
+    ]
+    print(
+        "coverage ratchet:",
+        ", ".join(f"{name}={value:.2f}%" for name, value in actual.items()),
+    )
+    if failures:
+        raise SystemExit("\n".join(failures))
+
+
+def main() -> int:
+    coverage_files = sorted(SHARD_DIR.glob(".coverage.*"))
+    junit_files = sorted(SHARD_DIR.glob("shard-*.xml"))
+    if not coverage_files:
+        raise SystemExit("No shard coverage files found")
+
+    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    coverage_path = ARTIFACT_DIR / "coverage.json"
+    run((sys.executable, "-m", "coverage", "combine", str(SHARD_DIR)), timeout=60)
+    run(
+        (sys.executable, "-m", "coverage", "json", "-o", str(coverage_path)),
+        timeout=60,
+    )
+    run(
+        (sys.executable, "-m", "coverage", "report", "--show-missing", "--skip-covered"),
+        timeout=60,
+    )
+    write_metrics(junit_files)
+    enforce_coverage_ratchet(base=resolve_base(None), coverage_path=coverage_path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
