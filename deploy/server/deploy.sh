@@ -69,7 +69,7 @@ rollback_code() {
   if [[ "$code_switched" == "1" ]]; then
     echo "Deployment failed; rolling application code back to $previous_sha" >&2
     git reset --hard "$previous_sha" >&2 || true
-    "${compose[@]}" build bot userbot supervisor-proxy >&2 || true
+    "${compose[@]}" build postgres bot userbot supervisor-proxy >&2 || true
     if [[ "$runtime_replaced" == "1" ]]; then
       "${compose[@]}" up -d postgres supervisor-proxy bot userbot >&2 || true
     else
@@ -114,8 +114,7 @@ echo "Verified dump: $backup_path"
 echo "Preparing $target_sha..."
 git reset --hard "$target_sha"
 code_switched=1
-"${compose[@]}" pull postgres
-"${compose[@]}" build --pull bot userbot supervisor-proxy
+"${compose[@]}" build --pull postgres bot userbot supervisor-proxy
 
 echo "Validating target configuration before replacing runtime..."
 "${compose[@]}" run --rm --no-deps bot python - <<'PY'
