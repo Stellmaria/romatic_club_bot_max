@@ -26,6 +26,8 @@ The compatibility branch has a declared sunset date of **2026-11-01** (`LEGACY_C
 
 The baseline is a one-way ratchet: entries may be removed as code is migrated, but new entries and increased counts fail CI. This allows the remaining large legacy adapters to be migrated incrementally without permitting any further spread of ambiguous time handling.
 
+Application-model regression tests cover UTC normalization for auction, schedule, UID-verification, and outbox records. Changed executable lines remain subject to the repository's 80% coverage ratchet.
+
 ## Operational notes
 
 - The application does not depend on the PostgreSQL session timezone for business dates.
