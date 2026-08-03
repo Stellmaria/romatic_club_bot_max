@@ -108,7 +108,8 @@ jobs:
           BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
           UID_HASH_KEY: ci-only-hmac-key
           UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-        run: python -m pytest -q -m "not integration"
+          PYTHONUNBUFFERED: "1"
+        run: timeout --signal=TERM --kill-after=15s 300s python -m pytest -vv -m "not integration"
 
   postgres-integration:
     runs-on: ubuntu-latest
