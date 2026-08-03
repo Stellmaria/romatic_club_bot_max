@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deployment-contract:
     runs-on: ubuntu-latest
@@ -36,6 +40,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
+          cache-dependency-path: requirements-dev.txt
       - name: Install focused test dependencies
         run: |
           python -m pip install \
@@ -80,6 +85,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Compile
@@ -109,7 +117,15 @@ jobs:
           UID_HASH_KEY: ci-only-hmac-key
           UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
           PYTHONUNBUFFERED: "1"
-        run: timeout --signal=TERM --kill-after=15s 300s python -m pytest -vv -m "not integration"
+        run: python scripts/quality.py unit
+      - name: Upload unit duration and flaky metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-metrics
+          path: var/quality
+          if-no-files-found: warn
+          retention-days: 14
 
   postgres-integration:
     runs-on: ubuntu-latest
@@ -134,6 +150,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Compile integration harness
@@ -149,7 +168,7 @@ jobs:
           POSTGRES_INTEGRATION_CONFIRM: "1"
           POSTGRES_KEEP_FAILED_DATABASES: "1"
           POSTGRES_INTEGRATION_ARTIFACT_DIR: var/integration-artifacts
-        run: python -m pytest -q -m integration tests/integration
+        run: python scripts/quality.py integration
       - name: Collect PostgreSQL failure diagnostics
         if: failure()
         env:
@@ -174,11 +193,13 @@ jobs:
               done < var/integration-artifacts/failed-databases.txt
             fi
           fi
-      - name: Upload PostgreSQL diagnostics
-        if: failure()
+      - name: Upload PostgreSQL diagnostics and metrics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: postgres-integration-diagnostics
-          path: var/integration-artifacts
+          name: postgres-integration-results
+          path: |
+            var/integration-artifacts
+            var/quality
           if-no-files-found: warn
           retention-days: 14
