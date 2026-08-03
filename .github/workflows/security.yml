@@ -47,7 +47,9 @@ jobs:
       - name: Generate CycloneDX dependency SBOM
         run: |
           mkdir -p evidence
-          cyclonedx-py requirements "requirements/${{ matrix.group }}.lock"             --output-format JSON             --output-file "evidence/python-${{ matrix.group }}.cdx.json"
+          cyclonedx-py requirements requirements/${{ matrix.group }}.lock \
+            --output-format JSON \
+            --output-file evidence/python-${{ matrix.group }}.cdx.json
       - name: Upload dependency evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -91,7 +93,15 @@ jobs:
               ;;
             *) exit 2 ;;
           esac
-          docker buildx build             --pull=false             --file "$dockerfile"             "${build_args[@]}"             --sbom=true             --provenance=mode=max             --metadata-file "evidence/${SERVICE}-provenance.json"             --output "type=oci,dest=evidence/${SERVICE}.oci.tar"             .
+          docker buildx build \
+            --pull=false \
+            --file "$dockerfile" \
+            "${build_args[@]}" \
+            --sbom=true \
+            --provenance=mode=max \
+            --metadata-file "evidence/${SERVICE}-provenance.json" \
+            --output "type=oci,dest=evidence/${SERVICE}.oci.tar" \
+            .
       - name: Generate CycloneDX image SBOM
         uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8
         with:
@@ -111,15 +121,17 @@ jobs:
   postgres-evidence:
     name: postgres-evidence
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Build hardened PostgreSQL image
+        run: docker build --pull=false --file Dockerfile.postgres --tag "romatic-postgres:${GITHUB_SHA}" .
       - name: Generate PostgreSQL image SBOM
         uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8
         with:
-          image-ref: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+          image-ref: romatic-postgres:${{ github.sha }}
           format: cyclonedx
           output: postgres-image.cdx.json
       - name: Upload PostgreSQL SBOM
