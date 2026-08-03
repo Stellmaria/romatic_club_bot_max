@@ -13,6 +13,7 @@ from bot.core.observability import HealthProbeServer, MetricsRegistry
 from bot.core.settings import BotProcessSettings
 from bot.core.supervisor_client import SupervisorClient
 from bot.core.tasks import BackgroundTaskManager
+from bot.middlewares.observability import ObservabilityMiddleware
 
 logger = logging.getLogger("auction_bot")
 
@@ -84,6 +85,24 @@ async def run_bot(config: BotProcessSettings) -> None:
     health_server: HealthProbeServer | None = None
     metrics = MetricsRegistry()
     primary_error: BaseException | None = None
+
+    def database_metrics() -> dict[str, float]:
+        pool = database_runtime.pool
+        if pool is None:
+            return {}
+        values: dict[str, float] = {}
+        methods = {
+            "database_pool_size": "get_size",
+            "database_pool_idle": "get_idle_size",
+            "database_pool_min_size": "get_min_size",
+            "database_pool_max_size": "get_max_size",
+        }
+        for metric_name, method_name in methods.items():
+            getter = getattr(pool, method_name, None)
+            if callable(getter):
+                values[metric_name] = float(getter())
+        return values
+
     try:
         await init_db(database_runtime)
         logger.info("Database startup complete", extra={"event": "database.ready"})
@@ -105,7 +124,9 @@ async def run_bot(config: BotProcessSettings) -> None:
         dispatcher = Dispatcher(
             supervisor_client=supervisor_client,
             application_container=container,
+            metrics_registry=metrics,
         )
+        dispatcher.update.outer_middleware(ObservabilityMiddleware())
         register_all_routers(
             dispatcher,
             debug_messages=bot_settings.debug_middleware,
@@ -133,7 +154,7 @@ async def run_bot(config: BotProcessSettings) -> None:
             database_ready=lambda: database_runtime.started,
             task_manager=lambda: task_manager,
             metrics=metrics,
-            host="0.0.0.0",
+            database_metrics=database_metrics,
             port=8081,
         )
         await health_server.start()
@@ -149,13 +170,20 @@ async def run_bot(config: BotProcessSettings) -> None:
             telegram_bot,
             task_manager,
         )
-    except BaseException as error:
+    except asyncio.CancelledError as error:
+        primary_error = error
+        logger.info("Application cancellation requested", extra={"event": "application.cancelled"})
+        raise
+    except Exception as error:
         primary_error = error
         metrics.increment("application_failures_total", process="bot")
         logger.exception(
             "Application failed",
             extra={"event": "application.failed", "error_type": type(error).__name__},
         )
+        raise
+    except BaseException as error:
+        primary_error = error
         raise
     finally:
         cleanup_steps: list[tuple[str, Callable[[], Awaitable[None]]]] = []
@@ -169,11 +197,11 @@ async def run_bot(config: BotProcessSettings) -> None:
             cleanup_steps.append(("Supervisor client session", supervisor_client.close))
         cleanup_steps.append(("database runtime", lambda: close_db(database_runtime)))
 
-        cleanup_error: BaseException | None = None
+        cleanup_error: Exception | None = None
         for resource_name, cleanup in cleanup_steps:
             try:
                 await cleanup()
-            except BaseException as error:
+            except Exception as error:
                 logger.exception(
                     "Failed to close resource",
                     extra={
