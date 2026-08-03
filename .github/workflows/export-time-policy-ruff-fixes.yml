@@ -1,19 +1,22 @@
-name: Export Time Policy Ruff Fixes
+name: Apply Time Policy Fixes
 
 on:
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  actions: read
+  contents: write
 
 jobs:
-  export:
+  apply:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: codex/issue-37-time-policy
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
@@ -24,8 +27,96 @@ jobs:
             requirements-dev.txt
       - name: Install development dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Apply and validate deterministic fixes
+      - name: Download validated patch
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail --location \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/8860832324/zip" \
+            --output /tmp/time-policy-fixes.zip
+          rm -rf /tmp/time-policy-fixes
+          mkdir -p /tmp/time-policy-fixes
+          unzip -q /tmp/time-policy-fixes.zip -d /tmp/time-policy-fixes
+          cp -a /tmp/time-policy-fixes/time-policy-ruff-fixes/. .
+      - name: Add coverage regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/test_time_boundaries.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "from bot.application_models import AuctionRecord\n",
+              "from bot.application_models import (\n"
+              "    AuctionRecord,\n"
+              "    ModerationStatus,\n"
+              "    OutboxRecord,\n"
+              "    ScheduleLotRecord,\n"
+              "    UidVerificationRecord,\n"
+              ")\n",
+          )
+          test = '''
+
+          def test_all_persisted_record_timestamps_normalize_to_utc() -> None:
+              source = datetime(2026, 8, 3, 16, 30, tzinfo=timezone(timedelta(hours=3)))
+
+              auction = AuctionRecord(
+                  auction_id=2,
+                  status="scheduled",
+                  auction_kind=AuctionKind.STANDARD,
+                  currency=Currency.DIAMONDS,
+                  start_price=100,
+                  end_time=source,
+              )
+              lot = ScheduleLotRecord(
+                  auction_id=2,
+                  target_date=source.date(),
+                  start_time=source,
+                  end_time=source + timedelta(minutes=30),
+                  card_name="Test card",
+                  auction_kind=AuctionKind.STANDARD,
+              )
+              verification = UidVerificationRecord(
+                  request_id=3,
+                  user_id=4,
+                  status=ModerationStatus.PENDING,
+                  uid_hash="hash",
+                  created_at=source,
+              )
+              outbox = OutboxRecord(
+                  event_id=5,
+                  event_type="test",
+                  aggregate_id="2",
+                  payload_json="{}",
+                  created_at=source,
+                  attempts=0,
+              )
+
+              expected = datetime(2026, 8, 3, 13, 30, tzinfo=UTC)
+              assert auction.end_time == expected
+              assert lot.start_time == expected
+              assert lot.end_time == expected + timedelta(minutes=30)
+              assert verification.created_at == expected
+              assert outbox.created_at == expected
+          '''
+          test = "\n".join(line[10:] if line.startswith("          ") else line for line in test.splitlines())
+          if "test_all_persisted_record_timestamps_normalize_to_utc" not in text:
+              text += test + "\n"
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Validate final source
+        shell: bash
+        env:
+          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          UID_HASH_KEY: ci-only-hmac-key
+          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         run: |
           set -euo pipefail
           files=(
@@ -46,137 +137,37 @@ jobs:
             tests/test_time_boundaries.py
             tests/test_time_policy_checker.py
           )
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("bot/application_models.py")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace("from typing import Mapping, TypeVar\n", "from collections.abc import Mapping\n")
-          text = text.replace("from typing import TypeVar\n", "")
-          text = text.replace("\nT = TypeVar(\"T\")\n", "")
-          text = text.replace(
-              "def required(row: Mapping[str, object], key: str, expected: type[T]) -> T:",
-              "def required[T](row: Mapping[str, object], key: str, expected: type[T]) -> T:",
-          )
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("bot/application_ports.py")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              "from typing import AsyncContextManager, Protocol, TypeVar, runtime_checkable\n",
-              "from contextlib import AbstractAsyncContextManager\n"
-              "from typing import Protocol, TypeVar, runtime_checkable\n",
-          )
-          text = text.replace("AsyncContextManager[object]", "AbstractAsyncContextManager[object]")
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("bot/domain/auctions/models.py")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              "        if self.end_time is not None and current_utc >= auction_bidding_closes_at(self.end_time):\n"
-              "            return False\n"
-              "        return True\n",
-              "        return self.end_time is None or current_utc < auction_bidding_closes_at(self.end_time)\n",
-          )
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("bot/repositories/auction_workflows.py")
-          text = path.read_text(encoding="utf-8")
-
-          def extract_query(source: str, method: str, rationale: str) -> str:
-              method_start = source.index(f"    async def {method}(")
-              method_end = source.find("\n    async def ", method_start + 1)
-              if method_end < 0:
-                  method_end = len(source)
-              marker = source.index("SET {assignments}", method_start, method_end)
-              call_start = source.rfind("row = await conn.fetchrow(\n", method_start, marker)
-              if call_start < 0:
-                  raise SystemExit(f"fetchrow call not found in {method}")
-              string_start = source.index('f"""', call_start, marker)
-              string_end = source.index('""",', marker, method_end)
-              line_start = source.rfind("\n", method_start, call_start) + 1
-              indent = source[line_start:call_start]
-              query = source[string_start : string_end + 3]
-              replacement = (
-                  f"{indent}# {rationale}\n"
-                  f"{indent}update_sql = {query}  # noqa: S608\n"
-                  f"{indent}row = await conn.fetchrow(\n"
-                  f"{indent}    update_sql,"
-              )
-              return source[:line_start] + replacement + source[string_end + 4 :]
-
-          text = extract_query(
-              text,
-              "update_moderatable_fields",
-              "Column names are restricted by _MODERATABLE_FIELDS.",
-          )
-          text = extract_query(
-              text,
-              "update_owner_fields",
-              "Column names are restricted by _OWNER_EDITABLE_FIELDS.",
-          )
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("bot/use_cases/auction_moderation.py")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              "        except Exception:\n            return ()\n",
-              "        except Exception:  # noqa: BLE001 - optional owner enrichment is best-effort\n"
-              "            return ()\n",
-          )
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("tests/integration/test_migrations_postgres.py")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              "        journal_count = await connection.fetchval(f\"SELECT count(*) FROM public.{MIGRATION_TABLE}\")\n",
-              "        journal_sql = (\n"
-              "            f\"SELECT count(*) FROM public.{MIGRATION_TABLE}\"  # noqa: S608\n"
-              "        )\n"
-              "        journal_count = await connection.fetchval(journal_sql)\n",
-          )
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("tests/test_auction_domain.py")
-          text = path.read_text(encoding="utf-8")
-          root_line = "ROOT = Path(__file__).resolve().parents[1]\n\n"
-          if root_line in text:
-              text = text.replace(root_line, "", 1)
-              marker = "\n\ndef test_"
-              text = text.replace(
-                  marker,
-                  "\n\nROOT = Path(__file__).resolve().parents[1]\n\n\ndef test_",
-                  1,
-              )
-          path.write_text(text, encoding="utf-8")
-          PY
-          ruff_args=(
-            --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG
-            --ignore S101,S603,S607
-          )
-          python -m ruff check --fix "${ruff_args[@]}" "${files[@]}"
           python -m black "${files[@]}"
-          python -m ruff check --fix "${ruff_args[@]}" "${files[@]}"
-          python -m ruff check "${ruff_args[@]}" --output-format=concise "${files[@]}"
+          python -m ruff check \
+            --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG \
+            --ignore S101,S603,S607 \
+            "${files[@]}"
           python scripts/check_time_policy.py
           python -m pytest -q -m 'not integration'
-          mkdir -p var/time-policy-ruff-fixes
-          cp --parents "${files[@]}" var/time-policy-ruff-fixes/
-          git diff --binary > var/time-policy-ruff-fixes.patch
-      - name: Run coverage ratchet
-        run: python scripts/quality.py coverage
-        env:
-          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-          UID_HASH_KEY: ci-only-hmac-key
-          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-      - name: Upload validated fixes
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: time-policy-ruff-fixes
-          path: |
-            var/time-policy-ruff-fixes
-            var/time-policy-ruff-fixes.patch
-            var/quality
-          if-no-files-found: warn
-          retention-days: 1
+          python scripts/quality.py coverage
+      - name: Commit validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm -- .github/workflows/export-time-policy-ruff-fixes.yml
+          git add -- \
+            bot/application_models.py \
+            bot/application_ports.py \
+            bot/bootstrap/container.py \
+            bot/core/time.py \
+            bot/domain/auctions/models.py \
+            bot/repositories/auction_workflows.py \
+            bot/telegram/callback_parser.py \
+            bot/use_cases/auction_moderation.py \
+            scripts/check_time_policy.py \
+            scripts/quality.py \
+            tests/integration/test_migrations_postgres.py \
+            tests/test_auction_domain.py \
+            tests/test_phase5_time.py \
+            tests/test_runtime_schedule_migration.py \
+            tests/test_time_boundaries.py \
+            tests/test_time_policy_checker.py
+          git commit -m "fix(time): satisfy quality and coverage gates"
+          git push origin HEAD:codex/issue-37-time-policy
