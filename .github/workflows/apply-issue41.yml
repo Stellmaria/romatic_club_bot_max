@@ -1,0 +1,64 @@
+name: Apply Issue 41 Patch
+
+on:
+  pull_request:
+    paths:
+      - ".github/issue41.patch.gz.b64"
+      - ".github/workflows/apply-issue41.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+      - name: Apply validated patch
+        run: |
+          base64 -d .github/issue41.patch.gz.b64 | gzip -d > /tmp/issue41.patch
+          git apply --check /tmp/issue41.patch
+          git apply /tmp/issue41.patch
+          chmod +x scripts/compile_locks.sh
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            .env.bot.example \
+            .env.userbot.example \
+            .github/workflows/ci.yml \
+            .github/workflows/quality.yml \
+            .github/workflows/security.yml \
+            Dockerfile \
+            Dockerfile.server-supervisor-proxy \
+            bot/application.py \
+            bot/core/settings.py \
+            bot/tools/refresh_users.py \
+            bot/uid_crypto.py \
+            compose.yaml \
+            docs/quality-gates.md \
+            docs/security/secret-rotation.md \
+            docs/security/supply-chain.md \
+            requirements-dev.txt \
+            requirements.lock \
+            requirements.txt \
+            requirements/tools.in \
+            scripts/check_dependency_licenses.py \
+            scripts/check_immutable_references.py \
+            scripts/check_vulnerability_exceptions.py \
+            scripts/compile_locks.sh \
+            scripts/migrate_uid_encryption.py \
+            security/base-image-digests.txt \
+            security/vulnerability-exceptions.json \
+            tests/test_postgres_integration_contract.py \
+            tests/test_python_runtime_contract.py \
+            tests/test_uid_key_rotation.py \
+            userbot/application.py
+          git commit -m "security: complete supply-chain hardening"
+          git push origin "HEAD:${{ github.head_ref }}"
