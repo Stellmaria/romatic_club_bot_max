@@ -4,10 +4,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from bot.services.schedule_setup import expected_reward, validate_card_economy
-from userbot.schedule_announcements import (
-    render_schedule_announcement,
-    schedule_configuration_issues,
-)
+from userbot.schedule_announcements import schedule_configuration_issues
+from userbot.schedule_publication import render_schedule_announcement
 
 
 ROOT = Path(__file__).resolve().parents[1]
