@@ -11,7 +11,7 @@ def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
     quality_runner = (ROOT / "scripts/quality.py").read_text(encoding="utf-8")
 
     assert "postgres-integration:" in workflow
-    assert "image: postgres:17-alpine" in workflow
+    assert "image: postgres:17-alpine@sha256:" in workflow
     assert 'POSTGRES_INTEGRATION_CONFIRM: "1"' in workflow
     assert "python scripts/quality.py integration" in workflow
     assert "test-shards:" in workflow
@@ -22,7 +22,7 @@ def test_postgres_integration_has_dedicated_ci_job_and_local_runner() -> None:
     assert "test-coverage-shard-" in workflow
     assert "uv pip install --system --require-hashes --no-deps -r requirements/dev.lock" in workflow
 
-    assert 'DEFAULT_IMAGE = "postgres:17-alpine"' in integration_runner
+    assert 'DEFAULT_IMAGE = "postgres:17-alpine@sha256:' in integration_runner
     assert '"POSTGRES_INTEGRATION_CONFIRM": "1"' in integration_runner
     assert '"tests/integration"' in integration_runner
     assert "_dump_failed_databases" in integration_runner
