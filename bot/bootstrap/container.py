@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from bot.application_ports import Clock, FileStoragePort, LocalFileStorage
+from bot.core.time import SystemClock
 from bot.repositories.auction_workflows import AuctionWorkflowRepository
 from bot.repositories.exchanges import ExchangeRepository
 from bot.services.auction_workflows import (
@@ -18,11 +18,6 @@ from bot.services.auction_workflows import (
     AuctionPublicationService,
 )
 from bot.services.exchanges import ExchangeService
-
-
-class SystemClock:
-    def now(self) -> datetime:
-        return datetime.now(timezone.utc)
 
 
 @dataclass(frozen=True, slots=True)

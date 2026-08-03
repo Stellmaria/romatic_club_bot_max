@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import sys
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from bot.domain.auctions import (
     Auction,
@@ -64,7 +62,7 @@ def test_bid_minimum_and_step_are_validated_from_start_price() -> None:
 
 
 def test_auction_accepts_entire_displayed_bidding_minute() -> None:
-    displayed_bidding_minute = datetime(2026, 8, 1, 18, 30)
+    displayed_bidding_minute = datetime(2026, 8, 1, 18, 30, tzinfo=timezone.utc)
     close_instant = displayed_bidding_minute + timedelta(minutes=1)
     auction = Auction(
         auction_id=1,

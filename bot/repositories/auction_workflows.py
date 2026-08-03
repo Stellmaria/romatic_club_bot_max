@@ -5,6 +5,7 @@ from typing import Any
 
 import asyncpg
 
+from bot.core.time import ensure_utc, moscow_date, require_aware
 from bot.domain.auctions import (
     AuctionNotFound,
     AuctionOwnerPermissionDenied,
@@ -153,7 +154,10 @@ class AuctionWorkflowRepository:
                     image_id,
                     int(draft.start_price),
                     draft.currency.value,
-                    [currency.value for currency in (draft.accepted_currencies or (draft.currency,))],
+                    [
+                        currency.value
+                        for currency in (draft.accepted_currencies or (draft.currency,))
+                    ],
                     draft.custom_offer_terms,
                     draft.comment,
                     draft.auction_kind.value,
@@ -189,6 +193,8 @@ class AuctionWorkflowRepository:
         start_time: datetime,
         end_time: datetime,
     ) -> dict[str, Any]:
+        start_time = ensure_utc(require_aware(start_time, name="start_time"))
+        end_time = ensure_utc(require_aware(end_time, name="end_time"))
         if end_time <= start_time:
             raise ValueError("end_time must be greater than start_time")
 
@@ -197,7 +203,7 @@ class AuctionWorkflowRepository:
                 # Serialize approvals for one calendar day. This closes the race
                 # between the free-slot screen and the final confirmation click.
                 for schedule_day in sorted(
-                    {start_time.date().toordinal(), end_time.date().toordinal()}
+                    {moscow_date(start_time).toordinal(), moscow_date(end_time).toordinal()}
                 ):
                     await conn.execute(
                         "SELECT pg_advisory_xact_lock($1, $2)",
@@ -272,13 +278,15 @@ class AuctionWorkflowRepository:
         start_time: datetime,
         end_time: datetime,
     ) -> dict[str, Any]:
+        start_time = ensure_utc(require_aware(start_time, name="start_time"))
+        end_time = ensure_utc(require_aware(end_time, name="end_time"))
         if end_time <= start_time:
             raise ValueError("end_time must be greater than start_time")
 
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 for schedule_day in sorted(
-                    {start_time.date().toordinal(), end_time.date().toordinal()}
+                    {moscow_date(start_time).toordinal(), moscow_date(end_time).toordinal()}
                 ):
                     await conn.execute(
                         "SELECT pg_advisory_xact_lock($1, $2)",
@@ -591,6 +599,7 @@ class AuctionWorkflowRepository:
         return dict(row)
 
     async def restart(self, auction_id: int, *, end_time: datetime) -> dict[str, Any]:
+        end_time = ensure_utc(require_aware(end_time, name="end_time"))
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -620,6 +629,7 @@ class AuctionWorkflowRepository:
         return dict(row)
 
     async def finish_now(self, auction_id: int, *, end_time: datetime) -> dict[str, Any]:
+        end_time = ensure_utc(require_aware(end_time, name="end_time"))
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -697,6 +707,7 @@ class AuctionWorkflowRepository:
         now: datetime,
         limit: int = 20,
     ) -> list[dict[str, Any]]:
+        now = ensure_utc(require_aware(now, name="now"))
         async with self._pool.acquire() as conn:
             async with conn.transaction():
                 rows = await conn.fetch(

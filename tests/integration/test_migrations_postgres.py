@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import asyncpg
@@ -46,6 +47,15 @@ async def test_clean_install_is_complete_idempotent_and_checksummed(
             """
         )
 
+        naive_timestamp_count = await connection.fetchval(
+            """
+            SELECT count(*)
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND data_type = 'timestamp without time zone'
+            """
+        )
+
     assert [row["filename"] for row in rows] == first
     assert [row["version"] for row in rows] == [
         migration.version for migration in migrations
@@ -55,6 +65,7 @@ async def test_clean_install_is_complete_idempotent_and_checksummed(
     ]
     assert all(str(row["postgres_version"]).split(".", 1)[0] == "17" for row in rows)
     assert int(table_count) >= 20
+    assert int(naive_timestamp_count) == 0
 
 
 async def test_concurrent_migration_runners_are_serialized_by_advisory_lock(
@@ -251,3 +262,38 @@ async def test_current_schema_enforces_unique_check_and_foreign_key_constraints(
                 VALUES (987654321, 123)
                 """
             )
+
+
+async def test_timestamptz_round_trip_preserves_the_same_instant(
+    postgres_pool: asyncpg.Pool,
+) -> None:
+    source = datetime(
+        2026,
+        8,
+        3,
+        16,
+        45,
+        tzinfo=timezone(timedelta(hours=3)),
+    )
+
+    async with postgres_pool.acquire() as connection:
+        stored = await connection.fetchval(
+            """
+            INSERT INTO public.telegram_outbox(
+                dedupe_key, topic, method, chat_id, payload, available_at
+            )
+            VALUES (
+                'time-policy:round-trip',
+                'test',
+                'send_message',
+                1,
+                '{}'::jsonb,
+                $1
+            )
+            RETURNING available_at
+            """,
+            source,
+        )
+
+    assert stored.tzinfo is not None
+    assert stored == datetime(2026, 8, 3, 13, 45, tzinfo=timezone.utc)

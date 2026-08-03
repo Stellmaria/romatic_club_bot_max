@@ -12,7 +12,12 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Mapping, TypeVar
 
+from bot.core.time import ensure_utc, require_aware
 from bot.domain.auctions.enums import AuctionKind, Currency
+
+
+def _aware_utc(value: datetime, *, name: str) -> datetime:
+    return ensure_utc(require_aware(value, name=name))
 
 
 class RecordMappingError(ValueError):
@@ -48,6 +53,12 @@ class AuctionRecord:
     message_id: int | None = None
     comment: str = ""
 
+    def __post_init__(self) -> None:
+        if self.start_time is not None:
+            object.__setattr__(self, "start_time", _aware_utc(self.start_time, name="start_time"))
+        if self.end_time is not None:
+            object.__setattr__(self, "end_time", _aware_utc(self.end_time, name="end_time"))
+
 
 @dataclass(frozen=True, slots=True)
 class ExchangeRecord:
@@ -79,6 +90,10 @@ class ScheduleLotRecord:
     card_name: str
     auction_kind: AuctionKind
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "start_time", _aware_utc(self.start_time, name="start_time"))
+        object.__setattr__(self, "end_time", _aware_utc(self.end_time, name="end_time"))
+
 
 @dataclass(frozen=True, slots=True)
 class UidVerificationRecord:
@@ -87,6 +102,9 @@ class UidVerificationRecord:
     status: ModerationStatus
     uid_hash: str
     created_at: datetime
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "created_at", _aware_utc(self.created_at, name="created_at"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +115,9 @@ class OutboxRecord:
     payload_json: str
     created_at: datetime
     attempts: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "created_at", _aware_utc(self.created_at, name="created_at"))
 
 
 T = TypeVar("T")

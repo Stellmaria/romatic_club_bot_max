@@ -20,6 +20,8 @@ T = TypeVar("T")
 
 @runtime_checkable
 class Clock(Protocol):
+    """Return the current instant as a timezone-aware UTC datetime."""
+
     def now(self) -> datetime: ...
 
 
