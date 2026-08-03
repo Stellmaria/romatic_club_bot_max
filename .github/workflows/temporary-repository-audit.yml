@@ -1,6 +1,8 @@
 name: Temporary Repository Audit
 
 on:
+  push:
+    branches: [codex/issue-37-time-policy]
   pull_request:
   workflow_dispatch:
 
