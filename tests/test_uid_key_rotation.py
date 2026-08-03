@@ -22,10 +22,14 @@ def test_uid_encryption_rotation_preserves_existing_ciphertext() -> None:
 
         rotated = uid_rotate_encryption(legacy_token)
         assert uid_decrypt(rotated) == "0123456789abcdef01234567"
-        assert Fernet(NEW_KEY.encode("ascii")).decrypt(rotated.encode()) == b"0123456789abcdef01234567"
+        assert (
+            Fernet(NEW_KEY.encode("ascii")).decrypt(rotated.encode()) == b"0123456789abcdef01234567"
+        )
 
         fresh = uid_encrypt("0123456789ABCDEF01234567")
-        assert Fernet(NEW_KEY.encode("ascii")).decrypt(fresh.encode()) == b"0123456789abcdef01234567"
+        assert (
+            Fernet(NEW_KEY.encode("ascii")).decrypt(fresh.encode()) == b"0123456789abcdef01234567"
+        )
     finally:
         reset_uid_crypto_for_testing()
 

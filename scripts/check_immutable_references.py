@@ -17,7 +17,9 @@ def main() -> int:
             if action.startswith("./"):
                 continue
             if not FULL_SHA.fullmatch(ref):
-                failures.append(f"{workflow.relative_to(ROOT)}: {action}@{ref} is not pinned to a full commit SHA")
+                failures.append(
+                    f"{workflow.relative_to(ROOT)}: {action}@{ref} is not pinned to a full commit SHA"
+                )
 
     for name in ("Dockerfile", "Dockerfile.server-supervisor-proxy"):
         first = (ROOT / name).read_text(encoding="utf-8").splitlines()[0]
@@ -25,7 +27,9 @@ def main() -> int:
             failures.append(f"{name}: base image is not pinned by sha256 digest")
 
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
-    postgres = "postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193"
+    postgres = (
+        "postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193"
+    )
     if postgres not in compose:
         failures.append("compose.yaml: PostgreSQL image is not pinned by the approved digest")
 

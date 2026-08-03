@@ -79,7 +79,9 @@ def main() -> int:
         print("\n".join(f"- {item}" for item in denied), file=sys.stderr)
         return 1
     if unknown:
-        print("Dependencies with missing license metadata require explicit review:", file=sys.stderr)
+        print(
+            "Dependencies with missing license metadata require explicit review:", file=sys.stderr
+        )
         print("\n".join(f"- {item}" for item in unknown), file=sys.stderr)
         return 1
 

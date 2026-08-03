@@ -35,7 +35,9 @@ def _plain_uid(value: object) -> str | None:
     return candidate if UID_RE.fullmatch(candidate) else None
 
 
-def _validated_encrypted_uid(*, digest: str, encrypted: str, row_label: str) -> tuple[str, str, str]:
+def _validated_encrypted_uid(
+    *, digest: str, encrypted: str, row_label: str
+) -> tuple[str, str, str]:
     try:
         plaintext = uid_decrypt(encrypted)
     except Exception as exc:
@@ -100,13 +102,11 @@ async def migrate_user_uids(conn) -> int:
 
 
 async def migrate_requests(conn) -> int:
-    rows = await conn.fetch(
-        """
+    rows = await conn.fetch("""
         SELECT id, uid, uid_hash, uid_enc, uid_last4
         FROM public.uid_verification_requests
         FOR UPDATE
-        """
-    )
+        """)
     changed = 0
     for row in rows:
         request_id = int(row["id"])
