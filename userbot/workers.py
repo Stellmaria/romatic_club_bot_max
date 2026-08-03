@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from bot.core.legacy_config import legacy_config
@@ -16,9 +17,14 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger("userbot")
+Heartbeat = Callable[[], None]
 
 
-async def autobid_watchdog(telegram_client: TelegramClient) -> None:
+async def autobid_watchdog(
+    telegram_client: TelegramClient,
+    *,
+    heartbeat: Heartbeat | None = None,
+) -> None:
     while True:
         try:
             rows = await list_autobids(auction_id=None, only_active=True)
@@ -29,8 +35,13 @@ async def autobid_watchdog(telegram_client: TelegramClient) -> None:
                     discussion_chat_id=int(legacy_config.DISCUSSION_CHAT_ID),
                     auction_id=auction_id,
                 )
-        except Exception:  # noqa: BLE001
-            logger.exception("Autobid watchdog failed")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Autobid watchdog iteration failed")
+            raise
+        if heartbeat is not None:
+            heartbeat()
         await asyncio.sleep(15)
 
 
