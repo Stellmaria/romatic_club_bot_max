@@ -22,3 +22,18 @@ jobs:
           path: .
           include-hidden-files: true
           retention-days: 1
+
+  tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Download exact CI tools
+        run: python -m pip download --only-binary=:all: --no-deps ruff==0.16.1 black==26.5.1 pytokens==0.4.1 click==8.4.2 mypy-extensions==1.1.0 packaging==26.2 pathspec==1.1.1 platformdirs==4.11.0
+      - name: Upload tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-tools
+          path: "*.whl"
+          retention-days: 1
