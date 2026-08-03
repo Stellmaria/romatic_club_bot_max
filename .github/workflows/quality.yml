@@ -123,3 +123,49 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Run security boundary contracts
         run: python scripts/quality.py security
+
+  branch-protection-contract:
+    name: branch-protection-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify main required checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          expected = {
+              "changed-code-quality",
+              "typing-and-architecture",
+              "coverage",
+              "security-static",
+              "deployment-contract",
+              "server-supervisor-contract",
+              "test",
+              "postgres-integration",
+          }
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['REPOSITORY']}/branches/main",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "User-Agent": "romatic-club-quality-gates",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              branch = json.load(response)
+          if not branch.get("protected"):
+              raise SystemExit("main is not protected")
+          status_checks = branch.get("protection", {}).get("required_status_checks", {})
+          contexts = set(status_checks.get("contexts", []))
+          missing = sorted(expected - contexts)
+          if missing:
+              raise SystemExit("main is missing required checks: " + ", ".join(missing))
+          print("main required checks verified:", ", ".join(sorted(expected)))
+          PY
