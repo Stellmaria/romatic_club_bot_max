@@ -202,7 +202,11 @@ async def main(config: BotProcessSettings) -> None:
     )
 
     configure_legacy_config(config)
-    configure_uid_crypto(config.bot.uid_hash_key, config.bot.uid_enc_key)
+    configure_uid_crypto(
+        config.bot.uid_hash_key,
+        config.bot.uid_enc_key,
+        (config.bot.uid_enc_key_previous,),
+    )
 
     await init_db(config.database)
     bot = Bot(config.bot.bot_token)

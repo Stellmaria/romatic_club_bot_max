@@ -9,7 +9,7 @@ python -m pip install -r requirements-dev.txt
 python scripts/quality.py all --base origin/main
 ```
 
-CI устанавливает полностью зафиксированный граф зависимостей из `requirements.lock` через `uv`. После изменения `requirements.txt` или `requirements-dev.txt` lock-файл нужно обновить в том же PR.
+CI устанавливает полностью зафиксированный граф зависимостей из `requirements/dev.lock` через `uv`. После изменения `requirements/*.in` lock-файл нужно обновить в том же PR.
 
 Для destructive integration suite нужен disposable PostgreSQL 17 и переменные из integration test contract:
 
@@ -82,7 +82,7 @@ Time-policy contract запускает `scripts/check_time_policy.py`: новы
 
 Shard JUnit-файлы объединяются в общие unit metrics. Coverage и PostgreSQL integration также создают JSON metrics в `var/quality`. Метрики содержат количество тестов, failures/errors/skips, суммарную длительность suite, число rerun/flaky markers и flaky rate. GitHub Actions публикует их как artifacts.
 
-Dependency-heavy Python jobs используют `uv` cache с `requirements.lock` как ключом. Deployment build использует Docker Buildx GitHub Actions layer cache.
+Dependency-heavy Python jobs используют `uv` cache с `requirements/dev.lock` как ключом. Deployment build использует Docker Buildx GitHub Actions layer cache.
 
 ## Required checks
 

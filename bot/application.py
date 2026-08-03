@@ -62,7 +62,11 @@ async def run_bot(config: BotProcessSettings) -> None:
     from bot.uid_crypto import configure_uid_crypto
 
     configure_legacy_config(config)
-    configure_uid_crypto(bot_settings.uid_hash_key, bot_settings.uid_enc_key)
+    configure_uid_crypto(
+        bot_settings.uid_hash_key,
+        bot_settings.uid_enc_key,
+        (bot_settings.uid_enc_key_previous,),
+    )
 
     from bot.bootstrap import build_background_task_specs, register_all_routers
     from bot.bootstrap.container import ApplicationContainer

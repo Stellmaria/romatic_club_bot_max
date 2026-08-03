@@ -231,7 +231,11 @@ def run() -> None:
     load_project_environment(project_root)
     database = DatabaseSettings.from_env(project_root=project_root)
     bot = BotSettings.from_env(project_root=project_root)
-    configure_uid_crypto(bot.uid_hash_key, bot.uid_enc_key)
+    configure_uid_crypto(
+        bot.uid_hash_key,
+        bot.uid_enc_key,
+        (bot.uid_enc_key_previous,),
+    )
     asyncio.run(main(database))
 
 

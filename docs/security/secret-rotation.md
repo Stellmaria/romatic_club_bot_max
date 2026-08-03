@@ -51,10 +51,10 @@ Never commit `.session`, session strings, phone numbers, login codes, or 2FA pas
 
 1. Back up the database and verify a full restore in disposable PostgreSQL.
 2. Add a key identifier to encrypted records if it is not already present.
-3. Deploy code that can decrypt with the old and new keys while encrypting only with the new key.
-4. Re-encrypt records in bounded batches inside transactions. Record migrated, skipped, and failed counts without logging plaintext UID values.
+3. Set the replacement in `UID_ENC_KEY`, retain the old value temporarily in `UID_ENC_KEY_PREVIOUS`, and deploy. Runtime writes use only the new key while reads accept both.
+4. Run the UID encryption migration in bounded transactions. The regression contract `tests/test_uid_key_rotation.py` proves old ciphertext remains readable and rotates to the active key without plaintext loss. Record migrated, skipped, and failed counts without logging plaintext UID values.
 5. Verify every encrypted row can be decrypted with the new key and business lookups still work.
-6. Remove the old decryption key only after verification and backup-retention review.
+6. Remove `UID_ENC_KEY_PREVIOUS` only after every encrypted row is readable with the active key and backup-retention review is complete.
 
 ### `UID_HASH_KEY`
 

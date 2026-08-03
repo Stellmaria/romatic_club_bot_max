@@ -38,19 +38,29 @@ def normalized(value: str) -> str:
 
 def license_text(distribution: importlib.metadata.Distribution) -> str:
     metadata = distribution.metadata
-    values = [metadata.get("License", "")]
+    values = [metadata.get("License-Expression", ""), metadata.get("License", "")]
     values.extend(metadata.get_all("Classifier") or [])
     return "\n".join(values).strip().lower()
 
 
 def main() -> int:
-    lock_path = Path(sys.argv[1] if len(sys.argv) > 1 else "requirements.lock")
+    lock_path = Path(sys.argv[1] if len(sys.argv) > 1 else "requirements/dev.lock")
     if not lock_path.is_file():
         print(f"lock file not found: {lock_path}", file=sys.stderr)
         return 2
 
     subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", str(lock_path)],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--require-hashes",
+            "--no-deps",
+            "-r",
+            str(lock_path),
+        ],
         check=True,
     )
 
