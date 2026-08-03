@@ -3,6 +3,7 @@ name: Apply Time Policy CI Fixes
 on:
   push:
     branches: [codex/issue-37-time-policy]
+  pull_request:
   workflow_dispatch:
 
 permissions:
