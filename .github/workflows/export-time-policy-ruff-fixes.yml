@@ -44,13 +44,13 @@ jobs:
             tests/test_time_boundaries.py
             tests/test_time_policy_checker.py
           )
-          python -m ruff check --fix \
-            --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG \
-            --ignore S101,S603,S607 \
-            "${files[@]}" || true
+          ruff_args=(
+            --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG
+            --ignore S101,S603,S607
+          )
+          python -m ruff check --fix "${ruff_args[@]}" "${files[@]}" || true
           python - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('bot/application_models.py')
           text = path.read_text(encoding='utf-8')
@@ -87,20 +87,33 @@ jobs:
 
           path = Path('bot/repositories/auction_workflows.py')
           text = path.read_text(encoding='utf-8')
-          text, first_count = re.subn(
-              r'(RETURNING \*\n\s+"""),',
-              r'\1,  # noqa: S608 - columns come from _MODERATABLE_FIELDS',
+
+          def extract_allowlisted_query(source: str, marker: str, rationale: str) -> str:
+              marker_pos = source.index(marker)
+              call_pos = source.rfind('row = await conn.fetchrow(\n', 0, marker_pos)
+              string_pos = source.index('f"""', call_pos, marker_pos)
+              close_pos = source.index('""",', marker_pos)
+              line_start = source.rfind('\n', 0, call_pos) + 1
+              indent = source[line_start:call_pos]
+              query = source[string_pos:close_pos + 3]
+              replacement = (
+                  f'{indent}# {rationale}\n'
+                  f'{indent}query = {query}  # noqa: S608\n'
+                  f'{indent}row = await conn.fetchrow(\n'
+                  f'{indent}    query,'
+              )
+              return source[:line_start] + replacement + source[close_pos + 4:]
+
+          text = extract_allowlisted_query(
               text,
-              count=1,
+              'SET {assignments}',
+              'Column names are restricted by _MODERATABLE_FIELDS.',
           )
-          text, second_count = re.subn(
-              r'(RETURNING a\.\*\n\s+"""),',
-              r'\1,  # noqa: S608 - columns come from _OWNER_EDITABLE_FIELDS',
+          text = extract_allowlisted_query(
               text,
-              count=1,
+              'SET {assignments}',
+              'Column names are restricted by _OWNER_EDITABLE_FIELDS.',
           )
-          if (first_count, second_count) != (1, 1):
-              raise SystemExit('allowlisted dynamic UPDATE statements not found')
           path.write_text(text, encoding='utf-8')
 
           path = Path('bot/use_cases/auction_moderation.py')
@@ -145,11 +158,11 @@ jobs:
           )
           path.write_text(text, encoding='utf-8')
           PY
+          python -m ruff check --fix "${ruff_args[@]}" "${files[@]}"
           python -m black "${files[@]}"
           python -m ruff check \
-            --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG \
+            "${ruff_args[@]}" \
             --output-format=concise \
-            --ignore S101,S603,S607 \
             "${files[@]}"
           python scripts/check_time_policy.py
           python -m pytest -q -m 'not integration'
