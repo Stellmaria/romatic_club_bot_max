@@ -1,13 +1,75 @@
-name: Temporary CI acceleration bootstrap (disabled)
+name: Temporary CI acceleration finalizer
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ci/velvet-style-test-acceleration]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: temporary-ci-acceleration-finalizer
+  cancel-in-progress: false
 
 jobs:
-  disabled:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - run: echo "temporary bootstrap disabled"
+      - uses: actions/checkout@v4
+        with:
+          ref: ci/velvet-style-test-acceleration
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+      - name: Generate lock and finalize workflow wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's#python scripts/quality.py coverage-report#python scripts/ci_coverage_report.py#' .github/workflows/ci.yml
+          uv pip compile \
+            --python-version 3.13 \
+            --generate-hashes \
+            requirements-dev.txt \
+            -o requirements.lock
+          uv pip install --system --require-hashes -r requirements.lock
+          python -m black \
+            scripts/ci_test_shard.py \
+            scripts/ci_coverage_report.py \
+            tests/test_postgres_integration_contract.py
+          python -m ruff check --fix \
+            scripts/ci_test_shard.py \
+            scripts/ci_coverage_report.py \
+            tests/test_postgres_integration_contract.py
+          python -m black --check \
+            scripts/ci_test_shard.py \
+            scripts/ci_coverage_report.py \
+            tests/test_postgres_integration_contract.py
+          python -m ruff check \
+            scripts/ci_test_shard.py \
+            scripts/ci_coverage_report.py \
+            tests/test_postgres_integration_contract.py
+          python scripts/ci_test_shard.py --total 4 --verify
+          python -m pytest -q tests/test_postgres_integration_contract.py
+      - name: Commit final implementation and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/temporary-ci-acceleration.yml
+          git add -- \
+            .github/workflows/ci.yml \
+            requirements.lock \
+            scripts/ci_test_shard.py \
+            scripts/ci_coverage_report.py \
+            tests/test_postgres_integration_contract.py
+          git diff --cached --check
+          git commit -m "ci: finalize sharded coverage and locked dependencies"
+          git push origin HEAD:ci/velvet-style-test-acceleration
