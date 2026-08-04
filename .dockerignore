@@ -17,6 +17,11 @@ var/
 server-data/
 monitoring/
 docs/
+!docs/
+docs/*
+!docs/privacy/
+docs/privacy/*
+!docs/privacy/data_inventory.json
 tests/
 deploy/
 scripts/validate_monitoring.py
