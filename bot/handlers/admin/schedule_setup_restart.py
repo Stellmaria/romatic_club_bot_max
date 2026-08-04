@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """Restart, deck selection and audit commands for extended schedule setup."""
 
 from __future__ import annotations
@@ -201,14 +202,14 @@ async def restart_selected_scope(call: CallbackQuery) -> None:
     if not call.message:
         await call.answer("Сообщение недоступно", show_alert=True)
         return
-    token = rsplit_callback_data(call.data, ":", 1)[1]
+    scope_value = rsplit_callback_data(call.data, ":", 1)[1]
     user_id = int(call.from_user.id)
-    if token == "all":
+    if scope_value == "all":
         await call.answer("Начинаю проверку всех колод")
         await _restart_all(call.message, user_id)
         return
     try:
-        deck_id = int(token)
+        deck_id = int(scope_value)
     except ValueError:
         await call.answer("Некорректная колода", show_alert=True)
         return
@@ -255,9 +256,12 @@ async def extended_schedule_audit(message: Message) -> None:
         tail += f"\n…и ещё {len(errors) - 50}."
     await message.answer(
         "🔎 <b>Аудит шаблона расписания</b>\n\n"
-        f"Общие эмодзи: {audit['common_configured']}/{audit['common_total']} (временных: {temp['assets']})\n"
-        f"Колоды: {audit['decks_configured']}/{audit['decks_total']} (временных: {temp['decks']})\n"
-        f"Карты: {audit['cards_verified']}/{audit['cards_total']} (временных: {temp['cards']})\n"
+        f"Общие эмодзи: {audit['common_configured']}/{audit['common_total']} "
+        f"(временных: {temp['assets']})\n"
+        f"Колоды: {audit['decks_configured']}/{audit['decks_total']} "
+        f"(временных: {temp['decks']})\n"
+        f"Карты: {audit['cards_verified']}/{audit['cards_total']} "
+        f"(временных: {temp['cards']})\n"
         f"Ошибки экономики: {len(errors)}\n\n{tail}\n\n"
         "Выбор колоды: /schedule_setup_restart · незаполненные: "
         "/schedule_setup_incomplete · временные: /schedule_temp",
