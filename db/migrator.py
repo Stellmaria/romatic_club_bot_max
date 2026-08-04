@@ -10,7 +10,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -210,7 +210,7 @@ def _load_migrations(directory: Path = MIGRATIONS_DIR) -> list[Migration]:
         )
 
     if not migrations:
-        raise RuntimeError(f"В каталоге {directory} нет SQL-миграций")
+        raise RuntimeError(f"No SQL migrations found in {directory}")
 
     return migrations
 
@@ -256,7 +256,7 @@ def _is_current_migration_table(columns: dict[str, str]) -> bool:
 
 
 async def _next_legacy_table_name(conn: asyncpg.Connection) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     base = f"schema_migrations_legacy_{stamp}"
     candidate = base
     suffix = 1
@@ -289,8 +289,8 @@ async def _ensure_migration_table(conn: asyncpg.Connection) -> None:
         if not _is_current_migration_table(columns):
             legacy_name = await _archive_legacy_migration_table(conn)
             logger.warning(
-                "Обнаружена старая таблица public.%s с несовместимой структурой. "
-                "Она сохранена как public.%s; создан новый журнал миграций.",
+                "Found incompatible legacy table public.%s. "
+                "It was archived as public.%s before creating the migration journal.",
                 MIGRATION_TABLE,
                 legacy_name,
             )
@@ -432,8 +432,8 @@ async def apply_migrations(
 
                 if migration.version < max_applied_version:
                     raise RuntimeError(
-                        "Обнаружена новая миграция с номером ниже уже применённых: "
-                        f"{migration.filename}. Добавляй миграции только в конец истории."
+                        "Found a pending migration below the applied version boundary: "
+                        f"{migration.filename}. Append migrations to the end of history."
                     )
 
                 conflicting = next(
