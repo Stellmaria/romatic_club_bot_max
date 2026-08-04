@@ -26,14 +26,20 @@ def test_only_bot_and_control_adapter_can_reach_proxy() -> None:
 
     assert "romatic-supervisor-control:" in proxy
     assert "hermes-supervisor-control:" in proxy
+    assert "romatic-application" not in proxy
+    assert "romatic-database" not in proxy
     assert "default: {}" not in proxy
 
-    assert "default: {}" in bot
+    assert "romatic-application: {}" in bot
+    assert "romatic-database: {}" in bot
     assert "romatic-supervisor-control: {}" in bot
+    assert "default: {}" not in bot
     assert "supervisor_token" in bot
 
-    assert "default: {}" in userbot
+    assert "romatic-application: {}" in userbot
+    assert "romatic-database: {}" in userbot
     assert "romatic-supervisor-control" not in userbot
+    assert "default: {}" not in userbot
     assert 'SUPERVISOR_ENABLED: "false"' in userbot
     assert 'SUPERVISOR_TOKEN: ""' in userbot
     assert 'SUPERVISOR_TOKEN_FILE: ""' in userbot
