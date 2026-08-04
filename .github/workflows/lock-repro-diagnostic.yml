@@ -1,23 +1,25 @@
-name: Lock Repro Diagnostic
+name: Lock Repro Repair
 
 on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  generate-locks:
+  refresh-locks:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.13"
@@ -28,24 +30,38 @@ jobs:
           cache-dependency-glob: requirements/*.lock
       - name: Install hashed security tooling
         run: uv pip install --system --require-hashes --no-deps -r requirements/tools.lock
-      - name: Generate lock files
-        run: scripts/compile_locks.sh generated-locks
-      - name: Upload generated lock files
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: generated-locks
-          path: generated-locks/*.lock
-          if-no-files-found: error
-          retention-days: 1
-      - name: Upload current lock files
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: current-locks
-          path: requirements/*.lock
-          if-no-files-found: error
-          retention-days: 1
-      - name: Show reproducibility diff
+      - name: Generate and validate exact lock drift
         run: |
-          for group in bot userbot tools dev; do
-            diff -u "requirements/${group}.lock" "generated-locks/${group}.lock"
-          done
+          scripts/compile_locks.sh generated-locks
+          cmp requirements/bot.lock generated-locks/bot.lock
+          cmp requirements/userbot.lock generated-locks/userbot.lock
+          python - <<'PY'
+          from pathlib import Path
+
+          old_block = """pip==26.2 \\
+              --hash=sha256:2d8542afcc84cdd8e846c2b36b2861fad1da376dd98f8e7113e9108a3c331690 \\
+              --hash=sha256:931c303696af6fa3417112103b1cad26890e5a07eccb5b99783700e33f2b8aad"""
+          new_block = """pip==26.2.1 \\
+              --hash=sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e \\
+              --hash=sha256:f6ad667e89a1fe78046c8f13232b247200f5258d7828f3f7883d660878e0813f"""
+          for name in ("tools.lock", "dev.lock"):
+              current = Path("requirements", name).read_text(encoding="utf-8")
+              generated = Path("generated-locks", name).read_text(encoding="utf-8")
+              if current.count(old_block) != 1:
+                  raise SystemExit(f"unexpected old pip block in {name}")
+              if current.replace(old_block, new_block) != generated:
+                  raise SystemExit(f"unexpected lock drift in {name}")
+          PY
+      - name: Commit reproducible locks and remove diagnostic workflow
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          cp generated-locks/tools.lock requirements/tools.lock
+          cp generated-locks/dev.lock requirements/dev.lock
+          git rm .github/workflows/lock-repro-diagnostic.yml
+          git add requirements/tools.lock requirements/dev.lock
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "build: refresh reproducible pip locks"
+          git push origin "HEAD:${HEAD_BRANCH}"
