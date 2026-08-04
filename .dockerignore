@@ -16,6 +16,8 @@ backups/
 var/
 server-data/
 monitoring/
+docs/
+!docs/
 docs/*
 !docs/privacy/
 docs/privacy/*
