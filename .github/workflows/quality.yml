@@ -36,6 +36,8 @@ jobs:
           cache-dependency-glob: requirements/*.lock
       - name: Install hashed development graph
         run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Print exact Black diff
+        run: python -m black --diff db/migrator.py tests/test_database_recovery_contract.py || true
       - name: Run changed-file quality ratchet
         run: python scripts/quality.py changed
 
