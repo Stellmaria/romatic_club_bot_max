@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -58,7 +57,7 @@ def test_supervisor_token_is_file_backed_and_not_shared_through_env() -> None:
     assert "SUPERVISOR_TOKEN_FILE_HOST=" in env_example
     assert "SUPERVISOR_TOKEN=change_me" not in env_example
     assert 'path.read_text(encoding="utf-8")' in settings
-    assert 'os.getenv' not in client
+    assert "os.getenv" not in client
     assert "EnvironmentFile=%DATA_DIR%/runtime/supervisor/supervisor.env" in unit
     assert "EnvironmentFile=%APP_DIR%/.env" not in unit
 
