@@ -1,0 +1,24 @@
+name: Schedule Task Inspect
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Locate schedule and auction variants
+        run: |
+          echo '=== RELEVANT FILES ==='
+          find bot userbot db tests -type f | sort | grep -Ei 'schedule|auction|announce|card|deck' || true
+          echo '=== RELEVANT TOKENS ==='
+          grep -RInE 'accepted_currencies|чашки_алмазы|друзья|подпис|крутк|золот|любая|friends|subscription|spin|gold|auction_kind|schedule_setup|whole_deck|custom_offer_terms' bot userbot db tests || true
