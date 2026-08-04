@@ -1,0 +1,51 @@
+name: PR 98 deterministic autofix
+
+on:
+  push:
+    branches:
+      - feat/issue-42-observability
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feat/issue-42-observability
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: '0.11.16'
+      - name: Install pinned development dependencies
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Apply repository formatting and regenerate locks
+        shell: bash
+        run: |
+          mapfile -t python_files < <(git diff --name-only origin/main...HEAD -- '*.py')
+          if ((${#python_files[@]})); then
+            python -m black "${python_files[@]}"
+          fi
+          uv pip compile --python-version 3.13 --generate-hashes --no-emit-index-url --output-file requirements/bot.lock requirements/bot.in
+          uv pip compile --python-version 3.13 --generate-hashes --no-emit-index-url --output-file requirements/userbot.lock requirements/userbot.in
+          uv pip compile --python-version 3.13 --generate-hashes --no-emit-index-url --output-file requirements/tools.lock requirements/tools.in
+          uv pip compile --python-version 3.13 --generate-hashes --no-emit-index-url --output-file requirements/dev.lock requirements/dev.in
+      - name: Commit deterministic fixes
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add --all
+          if git diff --cached --quiet; then
+            echo 'No generated changes'
+            exit 0
+          fi
+          git commit -m 'fix(ci): apply formatter and regenerate dependency locks'
+          git push origin HEAD:feat/issue-42-observability
