@@ -26,7 +26,6 @@ from bot.services.uid_verification import (
 from bot.telegram.callback_parser import split_callback_data
 from bot.telegram.states import UIDVerificationRevisionFSM
 
-
 logger = logging.getLogger(__name__)
 router = Router(name=__name__)
 
@@ -72,13 +71,7 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
         return
 
     req_id = int(parts[2] or 0)
-    flag = (
-        parts[3]
-        if len(parts) == 4
-        else parts[4]
-        if len(parts) > 4
-        else ""
-    ).strip()
+    flag = (parts[3] if len(parts) == 4 else parts[4] if len(parts) > 4 else "").strip()
 
     data = await state.get_data()
     if int(data.get("uidv_rev_req_id") or 0) != req_id:
