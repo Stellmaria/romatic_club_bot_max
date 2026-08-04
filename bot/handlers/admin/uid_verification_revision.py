@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """The UID-verification revision FSM and callbacks."""
 
 from __future__ import annotations
@@ -237,9 +238,9 @@ async def uidv_revision_send(
 
 __all__ = [
     "router",
-    "uidv_revision_start",
-    "uidv_revision_toggle",
     "uidv_revision_reason",
     "uidv_revision_reason_msg",
     "uidv_revision_send",
+    "uidv_revision_start",
+    "uidv_revision_toggle",
 ]
