@@ -1,0 +1,35 @@
+name: Container Hardening
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-hardening-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  container-hardening-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Prepare non-secret Compose environment
+        run: |
+          cp .env.example .env
+          cp .env.bot.example .env.bot
+          cp .env.userbot.example .env.userbot
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_only_password/' .env
+          sed -i 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://auction_bot:ci_only_password@postgres:5432/auction_bot#' .env.bot .env.userbot
+          sed -i 's#^SUPERVISOR_TOKEN_FILE_HOST=.*#SUPERVISOR_TOKEN_FILE_HOST=./.ci-supervisor-token#' .env
+          printf '%s\n' 'ci-only-supervisor-token-value' > .ci-supervisor-token
+      - name: Render Compose configuration
+        run: docker compose config --format json > rendered-compose.json
+      - name: Validate privilege, storage, secret and network boundaries
+        run: python scripts/validate_compose_hardening.py < rendered-compose.json
