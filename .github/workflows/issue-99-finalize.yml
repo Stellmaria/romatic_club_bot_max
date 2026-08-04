@@ -1,0 +1,144 @@
+name: Finalize issue 99
+
+on:
+  push:
+    branches:
+      - fix/issue-99-deferred-auction-publication
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONUNBUFFERED: "1"
+      BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+      UID_HASH_KEY: ci-only-hmac-key
+      UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/issue-99-deferred-auction-publication
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+
+      - name: Install pinned development dependencies
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+
+      - name: Materialize final implementation
+        run: |
+          python issue99_apply_final.py
+          rm -f issue99_apply_final.py .github/workflows/issue-99-finalize.yml
+
+      - name: Format and apply safe lint fixes
+        run: |
+          files=(
+            bot/bootstrap/routers.py
+            bot/domain/auctions/enums.py
+            bot/handlers/admin/publication_diagnostics.py
+            bot/handlers/auction/publication.py
+            bot/repositories/admin_diagnostics.py
+            bot/repositories/auction_workflows.py
+            bot/services/admin_diagnostics.py
+            bot/services/auction_workflows.py
+            bot/telegram/outbox.py
+            bot/telegram/outbox_commands.py
+            bot/use_cases/auction_publication.py
+            scripts/repair_auction_publications.py
+            tests/integration/test_deferred_publication_postgres.py
+            tests/test_auction_channel_publication_contract.py
+            tests/test_issue30_application_use_cases.py
+            tests/test_issue99_publication_regressions.py
+            tests/test_issue99_repair_plan.py
+            tests/test_issue99_userbot_confirmation.py
+            tests/test_outbox_commands.py
+            tests/test_runtime_schedule_migration.py
+            userbot/services.py
+          )
+          black "${files[@]}"
+          ruff check --fix --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --ignore S101,S603,S607 "${files[@]}"
+          black "${files[@]}"
+          black --check "${files[@]}"
+          ruff check --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --ignore S101,S603,S607 "${files[@]}"
+
+      - name: Run strict typing and async safety checks
+        run: |
+          mypy --strict \
+            bot/bootstrap/routers.py \
+            bot/domain/auctions/enums.py \
+            bot/handlers/admin/publication_diagnostics.py \
+            bot/handlers/auction/publication.py \
+            bot/repositories/admin_diagnostics.py \
+            bot/repositories/auction_workflows.py \
+            bot/services/admin_diagnostics.py \
+            bot/services/auction_workflows.py \
+            bot/telegram/outbox.py \
+            bot/telegram/outbox_commands.py \
+            bot/use_cases/auction_publication.py \
+            userbot/services.py
+          python scripts/check_async_blocking_calls.py
+
+      - name: Compile and run focused regression suite
+        run: |
+          python -m compileall -q bot database db userbot main.py config.py fsm_states.py scripts tests
+          python -m pytest -q \
+            tests/test_issue99_publication_regressions.py \
+            tests/test_issue99_repair_plan.py \
+            tests/test_issue30_application_use_cases.py \
+            tests/test_runtime_schedule_migration.py \
+            tests/test_auction_channel_publication_contract.py \
+            tests/test_issue99_userbot_confirmation.py \
+            tests/test_outbox_commands.py
+
+      - name: Run architecture and diff contracts
+        run: |
+          python scripts/check_handler_import_boundaries.py
+          python scripts/check_database_boundaries.py
+          python scripts/check_persistence_exceptions.py
+          git diff --check
+
+      - name: Commit final implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            .github/workflows/ci.yml \
+            bot/bootstrap/routers.py \
+            bot/domain/auctions/enums.py \
+            bot/handlers/admin/publication_diagnostics.py \
+            bot/handlers/auction/publication.py \
+            bot/repositories/admin_diagnostics.py \
+            bot/repositories/auction_workflows.py \
+            bot/services/admin_diagnostics.py \
+            bot/services/auction_workflows.py \
+            bot/telegram/outbox.py \
+            bot/telegram/outbox_commands.py \
+            bot/use_cases/auction_publication.py \
+            db/migrations/019_deferred_auction_publication.sql \
+            docs/operations/issue-99-deferred-publication.md \
+            scripts/repair_auction_publications.py \
+            tests/integration/test_deferred_publication_postgres.py \
+            tests/test_auction_channel_publication_contract.py \
+            tests/test_issue30_application_use_cases.py \
+            tests/test_issue99_publication_regressions.py \
+            tests/test_issue99_repair_plan.py \
+            tests/test_issue99_userbot_confirmation.py \
+            tests/test_outbox_commands.py \
+            tests/test_runtime_schedule_migration.py \
+            userbot/services.py
+          git add -u -- issue99_apply_final.py .github/workflows/issue-99-finalize.yml
+          git commit -m "fix: complete deferred auction publication recovery"
+          git push origin HEAD:fix/issue-99-deferred-auction-publication
