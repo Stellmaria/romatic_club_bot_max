@@ -43,6 +43,13 @@ _INCOMPLETE_CARD_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _message_user_id(message: Message) -> int:
+    user = message.from_user
+    if user is None:
+        raise ValueError("Telegram message has no sender")
+    return int(user.id)
+
+
 def _deck_picker_keyboard(decks: list[dict[str, object]]) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [
@@ -54,7 +61,7 @@ def _deck_picker_keyboard(decks: list[dict[str, object]]) -> InlineKeyboardMarku
     ]
     deck_buttons: list[InlineKeyboardButton] = []
     for deck in decks:
-        deck_id = int(deck["deck_id"])
+        deck_id = int(str(deck["deck_id"]))
         name = " ".join(str(deck.get("deck_name") or "Без названия").split())
         if len(name) > 28:
             name = name[:27].rstrip() + "…"
@@ -139,7 +146,7 @@ async def _restart_deck(message: Message, user_id: int, deck_id: int) -> None:
 @router.message(Command("schedule_setup"), F.chat.type == "private")
 @admin_only
 async def start_full_schedule_setup(message: Message) -> None:
-    user_id = int(message.from_user.id)
+    user_id = _message_user_id(message)
     await clear_schedule_deck_scope(user_id)
     await show_next(message, user_id)
 
@@ -190,23 +197,26 @@ async def show_incomplete_schedule_cards(message: Message) -> None:
 @router.callback_query(F.data == "schsetup:restart")
 @admin_only
 async def restart_schedule_setup_callback(call: CallbackQuery) -> None:
-    await call.answer()
-    if not call.message:
+    callback_message = call.message
+    if not isinstance(callback_message, Message):
+        await call.answer("Сообщение недоступно", show_alert=True)
         return
-    await _show_deck_picker(call.message)
+    await call.answer()
+    await _show_deck_picker(callback_message)
 
 
 @router.callback_query(F.data.startswith("schsetup:restart:"))
 @admin_only
 async def restart_selected_scope(call: CallbackQuery) -> None:
-    if not call.message:
+    callback_message = call.message
+    if not isinstance(callback_message, Message):
         await call.answer("Сообщение недоступно", show_alert=True)
         return
     scope_value = rsplit_callback_data(call.data, ":", 1)[1]
     user_id = int(call.from_user.id)
     if scope_value == "all":
         await call.answer("Начинаю проверку всех колод")
-        await _restart_all(call.message, user_id)
+        await _restart_all(callback_message, user_id)
         return
     try:
         deck_id = int(scope_value)
@@ -214,13 +224,13 @@ async def restart_selected_scope(call: CallbackQuery) -> None:
         await call.answer("Некорректная колода", show_alert=True)
         return
     await call.answer(f"Начинаю колоду №{deck_id}")
-    await _restart_deck(call.message, user_id, deck_id)
+    await _restart_deck(callback_message, user_id, deck_id)
 
 
 @router.message(Command("schedule_setup_cancel"), F.chat.type == "private")
 @admin_only
 async def cancel_extended_schedule_setup(message: Message) -> None:
-    user_id = int(message.from_user.id)
+    user_id = _message_user_id(message)
     await clear_schedule_deck_scope(user_id)
     await clear_setup_session(user_id)
     await message.answer("Мастер остановлен. Всё уже сохранённое осталось в базе.")
