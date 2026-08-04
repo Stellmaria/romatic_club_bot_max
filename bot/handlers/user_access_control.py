@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """Access guards for privileged schedule entry points."""
 
 from __future__ import annotations
