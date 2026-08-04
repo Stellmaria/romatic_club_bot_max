@@ -1,0 +1,301 @@
+--- a/bot/use_cases/auction_publication.py
++++ b/bot/use_cases/auction_publication.py
+@@ -11,6 +11,7 @@
+ BuildPayload = Callable[[Row], Awaitable[Any]]
+ Send = Callable[[Row, Any], Awaitable[int]]
+ MarkPublished = Callable[[int, int], Awaitable[bool]]
++MarkDeferred = Callable[[int], Awaitable[bool]]
+ MarkFailed = Callable[[int, str], Awaitable[Any]]
+ PostCommit = Callable[[Row, int], Awaitable[None]]
+ 
+@@ -42,12 +43,14 @@
+         send: Send,
+         mark_published: MarkPublished,
+         mark_failed: MarkFailed,
++        mark_deferred: MarkDeferred | None = None,
+         after_published: PostCommit | None = None,
+     ) -> None:
+         self._claim = claim
+         self._build_payload = build_payload
+         self._send = send
+         self._mark_published = mark_published
++        self._mark_deferred = mark_deferred
+         self._mark_failed = mark_failed
+         self._after_published = after_published
+ 
+@@ -76,6 +79,16 @@
+                 pass
+             raise
+ 
++        # Telegram can acknowledge a deferred video upload with message_id=0.
++        # This is neither success nor a delivery failure and must never be retried.
++        if message_id == 0:
++            if self._mark_deferred is None:
++                raise ApplicationInvalidState("deferred publication is not supported")
++            deferred = await self._mark_deferred(auction_id)
++            if not deferred:
++                raise ApplicationInvalidState("auction deferred publication claim was lost")
++            return PublishedAuction(auction=auction, message_id=0)
++
+         # Delivery already happened.  Never mark the lot failed here because a
+         # retry could duplicate a visible Telegram post.  Lost/unknown commit
+         # state requires operator review instead.
+--- a/bot/handlers/auction/publication.py
++++ b/bot/handlers/auction/publication.py
+@@ -247,6 +247,9 @@
+     async def mark_published(_auction_id: int, message_id: int) -> bool:
+         return await service.mark_published(_auction_id, message_id=message_id)
+ 
++    async def mark_deferred(_auction_id: int) -> bool:
++        return await service.mark_deferred(_auction_id)
++
+     async def mark_failed(_auction_id: int, error: str) -> Any:
+         return await service.mark_failed(_auction_id, error=error)
+ 
+@@ -258,6 +261,7 @@
+         build_payload=build_payload,
+         send=send,
+         mark_published=mark_published,
++        mark_deferred=mark_deferred,
+         mark_failed=mark_failed,
+         after_published=after_published,
+     )
+@@ -271,6 +275,9 @@
+             logger.warning("Auction %s cannot be claimed: %s", auction_id, exc)
+         return None
+ 
++    if result.message_id == 0:
++        logger.info("Auction %s publication deferred by Telegram", auction_id)
++        return None
+     logger.info("Published auction %s as message %s", auction_id, result.message_id)
+     return result.message_id
+ 
+--- a/bot/services/auction_workflows.py
++++ b/bot/services/auction_workflows.py
+@@ -315,6 +315,24 @@
+             message_id=int(message_id),
+         )
+ 
++    async def mark_deferred(self, auction_id: int) -> bool:
++        return await self._repository.mark_deferred(int(auction_id))
++
++    async def confirm_deferred_publication(
++        self,
++        auction_id: int,
++        *,
++        channel_message_id: int,
++        discussion_message_id: int | None = None,
++    ) -> dict[str, Any]:
++        return await self._repository.confirm_deferred_publication(
++            int(auction_id),
++            channel_message_id=int(channel_message_id),
++            discussion_message_id=(
++                int(discussion_message_id) if discussion_message_id is not None else None
++            ),
++        )
++
+     async def mark_failed(
+         self,
+         auction_id: int,
+--- a/bot/repositories/auction_workflows.py
++++ b/bot/repositories/auction_workflows.py
+@@ -761,11 +761,14 @@
+         return dict(row)
+ 
+     async def mark_published(self, auction_id: int, *, message_id: int) -> bool:
++        message_id = int(message_id)
++        if message_id <= 0:
++            raise ValueError("message_id must be positive")
+         async with self._pool.acquire() as conn:
+             row = await conn.fetchrow(
+                 """
+                 UPDATE public.auctions
+-                SET status = 'active',
++                SET status = CASE WHEN end_time <= NOW() THEN 'finished' ELSE 'active' END,
+                     message_id = $2,
+                     publication_finished_at = NOW(),
+                     publication_error = NULL,
+@@ -776,10 +779,79 @@
+                 RETURNING auction_id
+                 """,
+                 int(auction_id),
+-                int(message_id),
++                message_id,
+             )
+         return bool(row)
+ 
++    async def mark_deferred(self, auction_id: int) -> bool:
++        async with self._pool.acquire() as conn:
++            row = await conn.fetchrow(
++                """
++                UPDATE public.auctions
++                SET status = 'publication_deferred',
++                    message_id = NULL,
++                    publication_error = NULL,
++                    publication_next_attempt_at = NULL
++                WHERE auction_id = $1
++                  AND status = 'publishing'
++                  AND message_id IS NULL
++                RETURNING auction_id
++                """,
++                int(auction_id),
++            )
++        return bool(row)
++
++    async def confirm_deferred_publication(
++        self,
++        auction_id: int,
++        *,
++        channel_message_id: int,
++        discussion_message_id: int | None = None,
++    ) -> dict[str, Any]:
++        channel_message_id = int(channel_message_id)
++        if channel_message_id <= 0:
++            raise ValueError("channel_message_id must be positive")
++        async with self._pool.acquire() as conn, conn.transaction():
++            row = await conn.fetchrow(
++                "SELECT * FROM public.auctions WHERE auction_id=$1 FOR UPDATE",
++                int(auction_id),
++            )
++            if row is None:
++                raise AuctionNotFound(f"auction {auction_id} not found")
++            current = dict(row)
++            existing = current.get("message_id")
++            if existing is not None:
++                if int(existing) != channel_message_id:
++                    raise ValueError("auction is already bound to another channel message")
++                if discussion_message_id is not None and current.get("discussion_message_id") is None:
++                    await conn.execute(
++                        "UPDATE public.auctions SET discussion_message_id=$2 WHERE auction_id=$1",
++                        int(auction_id), int(discussion_message_id),
++                    )
++                    current["discussion_message_id"] = int(discussion_message_id)
++                return current
++            if str(current.get("status")) not in {
++                "publishing", "publication_deferred", "publication_failed"
++            }:
++                raise InvalidAuctionTransition(
++                    current=str(current.get("status")), target="active"
++                )
++            updated = await conn.fetchrow(
++                """
++                UPDATE public.auctions
++                SET message_id=$2,
++                    discussion_message_id=COALESCE($3, discussion_message_id),
++                    status=CASE WHEN end_time <= NOW() THEN 'finished' ELSE 'active' END,
++                    publication_finished_at=NOW(),
++                    publication_error=NULL,
++                    publication_next_attempt_at=NULL
++                WHERE auction_id=$1
++                RETURNING *
++                """,
++                int(auction_id), channel_message_id, discussion_message_id,
++            )
++        return dict(updated)
++
+     async def mark_publication_failed(
+         self,
+         auction_id: int,
+--- a/userbot/services.py
++++ b/userbot/services.py
+@@ -18,7 +18,7 @@
+ from bot.core.time import ensure_utc, utc_now
+ from bot.domain.auctions import BidFormatError, auction_bidding_closes_at
+ from bot.domain.auctions.rules import parse_bid_amount
+-from bot.services.auction_workflows import AuctionLifecycleService
++from bot.services.auction_workflows import AuctionLifecycleService, AuctionPublicationService
+ from db.auctions import get_autobid_action_by_msg_id
+ from userbot.autobid_engine import get_local_autobid_action
+ from userbot.presentation import RULES_TEXT, mention, random_warning, user_link
+@@ -399,6 +399,22 @@
+             if _norm_channel_id(source_id) != _norm_channel_id(legacy_config.AUCTION_CHANNEL_ID):
+                 channel_post = None
+ 
++    text = (getattr(message, "message", None) or "").strip()
++    lot_id = _extract_lot_id(text) if _looks_like_auction_post(text.lower()) else None
++
++    if channel_post and lot_id:
++        try:
++            publication = await AuctionPublicationService.create()
++            row = await publication.confirm_deferred_publication(
++                int(lot_id),
++                channel_message_id=int(channel_post),
++                discussion_message_id=int(message.id),
++            )
++            return int(row["auction_id"])
++        except Exception:
++            # Fall through to legacy binding for already-published rows.
++            pass
++
+     if channel_post:
+         try:
+             auction_id = await lifecycle.bind_by_channel_message(
+@@ -407,13 +423,9 @@
+             )
+             if auction_id:
+                 return int(auction_id)
+-        except Exception:  # noqa: BLE001
++        except Exception:
+             pass
+ 
+-    text = (getattr(message, "message", None) or "").strip()
+-    if not _looks_like_auction_post(text.lower()):
+-        return None
+-    lot_id = _extract_lot_id(text)
+     if not lot_id:
+         return None
+     try:
+@@ -422,7 +434,7 @@
+             discussion_message_id=int(message.id),
+         )
+         return int(auction_id) if auction_id else None
+-    except Exception:  # noqa: BLE001
++    except Exception:
+         return None
+ 
+ 
+--- /dev/null
++++ b/db/migrations/019_deferred_auction_publication.sql
+@@ -0,0 +1,42 @@
++-- Deferred Telegram video publication and positive message-id invariants.
++SET search_path = public, pg_catalog;
++
++ALTER TABLE public.auctions
++    DROP CONSTRAINT IF EXISTS chk_auctions_status;
++
++ALTER TABLE public.auctions
++    ADD CONSTRAINT chk_auctions_status
++    CHECK (status IN (
++        'draft','moderation','pending','approved','scheduled','publishing',
++        'publication_deferred','publication_failed','active','finalizing',
++        'finalization_failed','finished','rejected','cancelled','closed'
++    ));
++
++ALTER TABLE public.auctions
++    ADD CONSTRAINT chk_auctions_message_id_positive
++    CHECK (message_id IS NULL OR message_id > 0) NOT VALID;
++
++-- Known invalid sentinel. Exact production IDs are repaired by the operator tool
++-- after Telegram metadata has been verified; the migration never invents IDs.
++UPDATE public.auctions
++SET message_id = NULL,
++    status = CASE WHEN status = 'finished' THEN 'publication_failed' ELSE status END,
++    publication_error = COALESCE(publication_error, 'invalid Telegram message_id requires repair')
++WHERE message_id <= 0;
++
++ALTER TABLE public.auctions
++    VALIDATE CONSTRAINT chk_auctions_message_id_positive;
++
++ALTER TABLE public.auctions
++    ADD CONSTRAINT chk_auctions_unpublished_state_has_no_message
++    CHECK (
++        status NOT IN ('scheduled','publishing','publication_deferred')
++        OR message_id IS NULL
++    ) NOT VALID;
++
++ALTER TABLE public.auctions
++    VALIDATE CONSTRAINT chk_auctions_unpublished_state_has_no_message;
++
++CREATE INDEX IF NOT EXISTS ix_auctions_publication_deferred
++    ON public.auctions (publication_started_at, auction_id)
++    WHERE status = 'publication_deferred' AND message_id IS NULL;
