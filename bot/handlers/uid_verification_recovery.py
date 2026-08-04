@@ -14,14 +14,17 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.uid_verification_review import verif_approve as legacy_verif_approve
+from bot.repositories.uid_verification_recovery import (
+    ensure_request_uid,
+    replace_revision_uid,
+)
 from bot.services.uid_verification import (
     UIDVerificationService,
     get_uid_verification_request,
 )
 from bot.telegram.callback_parser import split_callback_data
 from bot.telegram.states import UIDVerificationFixFSM
-from bot.uid_crypto import norm_uid, uid_decrypt, uid_encrypt, uid_hash, uid_last4
-from db.core import get_db_pool
+from bot.uid_crypto import norm_uid
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +56,7 @@ class UIDRevisionRecoveryFSM(StatesGroup):
 
 
 def _valid_uid(value: str | None) -> str | None:
-    normalized = norm_uid(value)
+    normalized = norm_uid(value or "")
     return normalized if UID_RE.fullmatch(normalized) else None
 
 
@@ -86,130 +89,6 @@ async def _revision_flags(request_id: int) -> list[str]:
         for raw in flags
         if (value := str(raw).strip()) and value not in banned
     ]
-
-
-async def _ensure_request_uid(
-    request_id: int,
-    *,
-    expected_user_id: int | None,
-    allowed_statuses: set[str],
-) -> str:
-    """Validate encrypted UID fields and recover legacy plaintext rows in place."""
-
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                """
-                SELECT user_id, uid, uid_hash, uid_enc, uid_last4, status
-                FROM public.uid_verification_requests
-                WHERE id=$1
-                FOR UPDATE
-                """,
-                int(request_id),
-            )
-            if not row:
-                return "not_found"
-
-            user_id = int(row["user_id"] or 0)
-            if expected_user_id is not None and user_id != int(expected_user_id):
-                return "forbidden"
-
-            status = str(row["status"] or "").strip().lower()
-            if status not in allowed_statuses:
-                return "wrong_status"
-
-            encrypted = str(row["uid_enc"] or "").strip()
-            plain: str | None = None
-            if encrypted:
-                try:
-                    plain = _valid_uid(uid_decrypt(encrypted))
-                except Exception:
-                    plain = None
-
-            if plain is None:
-                plain = _valid_uid(str(row["uid"] or ""))
-                if plain is None:
-                    return "needs_uid"
-                encrypted = uid_encrypt(plain)
-
-            digest = uid_hash(plain)
-            last4 = uid_last4(plain)
-            stored_uid = str(row["uid"] or "").strip()
-            stored_hash = str(row["uid_hash"] or "").strip()
-            stored_last4 = str(row["uid_last4"] or "").strip()
-
-            if (
-                stored_uid != digest
-                or stored_hash != digest
-                or not str(row["uid_enc"] or "").strip()
-                or stored_last4 != last4
-            ):
-                await conn.execute(
-                    """
-                    UPDATE public.uid_verification_requests
-                    SET uid=$2,
-                        uid_hash=$2,
-                        uid_enc=$3,
-                        uid_last4=$4
-                    WHERE id=$1
-                    """,
-                    int(request_id),
-                    digest,
-                    encrypted,
-                    last4,
-                )
-            return "ready"
-
-
-async def _replace_revision_uid(
-    request_id: int,
-    *,
-    user_id: int,
-    uid: str,
-) -> str:
-    normalized = _valid_uid(uid)
-    if normalized is None:
-        return "invalid"
-
-    digest = uid_hash(normalized)
-    encrypted = uid_encrypt(normalized)
-    last4 = uid_last4(normalized)
-
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                """
-                SELECT user_id, status
-                FROM public.uid_verification_requests
-                WHERE id=$1
-                FOR UPDATE
-                """,
-                int(request_id),
-            )
-            if not row:
-                return "not_found"
-            if int(row["user_id"] or 0) != int(user_id):
-                return "forbidden"
-            if str(row["status"] or "").strip().lower() != "revision":
-                return "wrong_status"
-
-            await conn.execute(
-                """
-                UPDATE public.uid_verification_requests
-                SET uid=$2,
-                    uid_hash=$2,
-                    uid_enc=$3,
-                    uid_last4=$4
-                WHERE id=$1
-                """,
-                int(request_id),
-                digest,
-                encrypted,
-                last4,
-            )
-    return "ready"
 
 
 def _revision_text(
@@ -267,12 +146,12 @@ async def approve_uid_with_legacy_recovery(
         return
 
     try:
-        result = await _ensure_request_uid(
+        result = await ensure_request_uid(
             request_id,
             expected_user_id=None,
             allowed_statuses={"pending"},
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception(
             "Failed to preflight UID verification approval",
             extra={"request_id": request_id},
@@ -297,8 +176,8 @@ async def approve_uid_with_legacy_recovery(
         await call.answer("Заявка не найдена.", show_alert=True)
         return
 
-    original_handler = getattr(legacy_verif_approve, "__wrapped__", legacy_verif_approve)
-    await original_handler(call, bot)
+    # The original handler keeps notifications, logs and view refresh in one place.
+    await legacy_verif_approve(call, bot)
 
 
 @router.callback_query(F.data.startswith("uidv_fix|"))
@@ -350,12 +229,12 @@ async def start_uid_revision_recovery(
     )
 
     try:
-        uid_state = await _ensure_request_uid(
+        uid_state = await ensure_request_uid(
             request_id,
             expected_user_id=call.from_user.id,
             allowed_statuses={"revision"},
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception(
             "Failed to prepare UID verification revision",
             extra={"request_id": request_id, "user_id": call.from_user.id},
@@ -423,12 +302,12 @@ async def save_missing_revision_uid(
         return
 
     try:
-        result = await _replace_revision_uid(
+        result = await replace_revision_uid(
             request_id,
             user_id=message.from_user.id,
             uid=normalized,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception(
             "Failed to restore UID for revision request",
             extra={"request_id": request_id, "user_id": message.from_user.id},
