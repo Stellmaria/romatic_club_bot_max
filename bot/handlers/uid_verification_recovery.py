@@ -26,7 +26,6 @@ from bot.telegram.callback_parser import split_callback_data
 from bot.telegram.states import UIDVerificationFixFSM
 from bot.uid_crypto import norm_uid
 
-
 logger = logging.getLogger(__name__)
 router = Router(name=__name__)
 
@@ -84,11 +83,7 @@ def _revision_keyboard(
 async def _revision_flags(request_id: int) -> list[str]:
     flags = await (await UIDVerificationService.create()).revision_flags(request_id)
     banned = {"uid_proof", "reg_date"}
-    return [
-        value
-        for raw in flags
-        if (value := str(raw).strip()) and value not in banned
-    ]
+    return [value for raw in flags if (value := str(raw).strip()) and value not in banned]
 
 
 def _revision_text(
@@ -96,14 +91,8 @@ def _revision_text(
     flags: list[str],
     reason: str,
 ) -> str:
-    lines = "\n".join(
-        f"• {html.escape(_REV_FLAG_TITLES.get(flag, flag))}" for flag in flags
-    )
-    reason_block = (
-        f"\n\n<b>Комментарий модератора:</b>\n{html.escape(reason)}"
-        if reason
-        else ""
-    )
+    lines = "\n".join(f"• {html.escape(_REV_FLAG_TITLES.get(flag, flag))}" for flag in flags)
+    reason_block = f"\n\n<b>Комментарий модератора:</b>\n{html.escape(reason)}" if reason else ""
     return (
         f"🔧 <b>Доработка заявки #{request_id}</b>\n\n"
         f"<b>Нужно исправить:</b>\n{lines}"
@@ -284,9 +273,7 @@ async def save_missing_revision_uid(
 ) -> None:
     normalized = _valid_uid(message.text)
     if normalized is None:
-        await message.answer(
-            "UID должен содержать ровно 24 символа: цифры 0–9 и буквы a–f."
-        )
+        await message.answer("UID должен содержать ровно 24 символа: цифры 0–9 и буквы a–f.")
         return
 
     data = await state.get_data()
@@ -296,9 +283,7 @@ async def save_missing_revision_uid(
 
     if request_id <= 0 or not flags:
         await state.clear()
-        await message.answer(
-            "Сессия доработки устарела. Открой кнопку «Исправить заявку» заново."
-        )
+        await message.answer("Сессия доработки устарела. Открой кнопку «Исправить заявку» заново.")
         return
 
     try:
@@ -317,9 +302,7 @@ async def save_missing_revision_uid(
 
     if result != "ready":
         await state.clear()
-        await message.answer(
-            "Заявка уже изменила статус. Открой раздел верификации заново."
-        )
+        await message.answer("Заявка уже изменила статус. Открой раздел верификации заново.")
         return
 
     await state.set_state(UIDVerificationFixFSM.choosing_item)
