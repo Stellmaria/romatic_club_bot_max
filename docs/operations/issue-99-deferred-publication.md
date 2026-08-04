@@ -5,12 +5,19 @@
 1. Deploy application code and migration `019_deferred_auction_publication.sql`.
 2. Confirm the bot and userbot are healthy. The migration adds `NOT VALID`
    constraints, which protect new writes without rewriting damaged rows.
-3. Verify Telegram metadata for all six target rows. Never infer a channel post
-   ID from sequence, time proximity, or a failed publication log.
-4. Create a reviewed JSON plan and run the repair command without `--apply`.
-5. Compare every printed `before` and `after` snapshot.
-6. Run the same command with `--apply`.
-7. Run the post-condition queries below and confirm no duplicate channel posts.
+3. At userbot startup, the bounded issue #99 recovery reads the three known
+   discussion roots, verifies their forwarded source channel, verifies the two
+   known channel posts, and searches the `9243` time window for exactly one post
+   whose text contains the exact lot number.
+4. The runtime recovery first executes the transaction as a dry run. It applies
+   only proved mappings, preserves bids/owners/audit/outbox history, validates
+   both constraints, and never republishes a lot. Ambiguous or missing Telegram
+   evidence is logged and left for manual review.
+5. The bot finalizer processes restored expired rows through the normal winner
+   workflow. A restored expired row is not considered complete while it remains
+   merely `active`.
+6. Use the reviewed JSON command below only when runtime discovery reports an
+   unresolved mapping or when an operator needs an auditable manual replay.
 
 ## Required verification
 
@@ -68,9 +75,17 @@
 ```
 
 ```bash
-python scripts/repair_auction_publications.py --plan /secure/issue-99.json
-python scripts/repair_auction_publications.py --plan /secure/issue-99.json --apply
+python scripts/repair_auction_publications.py \
+  --plan /secure/issue-99.json \
+  --dry-run
+python scripts/repair_auction_publications.py \
+  --plan /secure/issue-99.json \
+  --apply
+python scripts/repair_auction_publications.py --validate-constraints
 ```
+
+Dry-run is also the default when neither `--apply` nor
+`--validate-constraints` is specified.
 
 ## Post-conditions
 
@@ -94,4 +109,6 @@ WHERE conrelid = 'public.auctions'::regclass
 
 The first query must return no rows and both constraints must be validated.
 Check bids, winners, audit history, and outbox history for all six auctions. The
-repair tool changes only publication lifecycle columns in `auctions`.
+repair layer hashes those protected records before and after every transaction
+and aborts if they change. It changes only publication lifecycle columns in
+`auctions`; final winner processing remains the normal bot finalizer's job.

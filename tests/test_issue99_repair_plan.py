@@ -90,3 +90,38 @@ def test_partial_plan_is_rejected() -> None:
 
     with pytest.raises(RepairPlanError, match="missing"):
         parse_plan(plan)
+
+
+def test_cli_exposes_explicit_dry_run_apply_and_validation_modes() -> None:
+    from scripts.repair_auction_publications import _parser
+
+    parser = _parser()
+    dry_run = parser.parse_args(["--plan", "issue99.json", "--dry-run"])
+    apply = parser.parse_args(["--plan", "issue99.json", "--apply"])
+    validate = parser.parse_args(["--validate-constraints"])
+
+    assert dry_run.dry_run is True and dry_run.apply is False
+    assert apply.apply is True and apply.dry_run is False
+    assert validate.validate_constraints is True and validate.plan is None
+
+
+def test_partial_runtime_plan_can_be_parsed_without_guessing() -> None:
+    from bot.services.auction_publication_repair import parse_issue99_plan
+
+    actions = parse_issue99_plan(
+        {
+            "repairs": [
+                {
+                    "auction_id": 9210,
+                    "action": "confirm",
+                    "channel_message_id": 12010,
+                    "discussion_message_id": 1148772,
+                }
+            ]
+        },
+        require_complete=False,
+    )
+
+    assert len(actions) == 1
+    assert actions[0].auction_id == 9210
+    assert actions[0].channel_message_id == 12010
