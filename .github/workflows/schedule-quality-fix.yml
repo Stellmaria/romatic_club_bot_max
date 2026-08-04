@@ -127,6 +127,34 @@ jobs:
               "def schedule_configuration_issues(  # noqa: C901\n",
               1,
           )
+          source = source.replace(
+              "    try:\n"
+              "        parsed = int(value) if value is not None else 0\n"
+              "    except (TypeError, ValueError):\n"
+              "        parsed = 0\n",
+              "    if isinstance(value, bool) or not isinstance(value, (str, int)):\n"
+              "        parsed = 0\n"
+              "    else:\n"
+              "        try:\n"
+              "            parsed = int(value)\n"
+              "        except ValueError:\n"
+              "            parsed = 0\n",
+              1,
+          )
+          source = source.replace(
+              "    try:\n"
+              "        parsed_amount = int(amount or 0)\n"
+              "    except (TypeError, ValueError):\n"
+              "        parsed_amount = 0\n",
+              "    if isinstance(amount, bool) or not isinstance(amount, (str, int)):\n"
+              "        parsed_amount = 0\n"
+              "    else:\n"
+              "        try:\n"
+              "            parsed_amount = int(amount)\n"
+              "        except ValueError:\n"
+              "            parsed_amount = 0\n",
+              1,
+          )
           announcements.write_text(source, encoding="utf-8")
 
           publication = Path("userbot/schedule_publication.py")
