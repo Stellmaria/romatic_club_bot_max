@@ -32,9 +32,7 @@ jobs:
           tar -tzf /tmp/schedule-patch.tar.gz
           tar -xzf /tmp/schedule-patch.tar.gz
       - name: Install locked development tools
-        run: |
-          uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-          uv pip install --system --require-hashes --no-deps -r requirements/tools.lock
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Format and validate changed files
         run: |
           files=(
@@ -48,8 +46,18 @@ jobs:
             tests/test_schedule_setup_master.py
             tests/test_schedule_special_lots.py
           )
-          pre-commit run --files "${files[@]}" || true
-          pre-commit run --files "${files[@]}"
+          python -m black "${files[@]}"
+          python -m ruff check --fix "${files[@]}"
+          python -m ruff format "${files[@]}"
+          python -m ruff check "${files[@]}"
+          python -m black --check "${files[@]}"
+          python -m mypy \
+            bot/domain/schedule_lots.py \
+            bot/domain/auctions/enums.py \
+            bot/services/schedule_setup.py \
+            db/schedule_setup.py \
+            userbot/schedule_announcements.py \
+            userbot/schedule_publication.py
           python -m pytest -q \
             tests/test_premium_schedule_announcements.py \
             tests/test_schedule_setup_master.py \
