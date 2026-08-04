@@ -1,0 +1,42 @@
+=== active exceptions ===
+
+
+=== requirements/bot.lock ===
+WARNING:pip_audit._cli:--no-deps is supported, but users are encouraged to fully hash their pinned dependencies
+WARNING:pip_audit._cli:Consider using a tool like `pip-compile`: https://pip-tools.readthedocs.io/en/latest/#using-hashes
+Found 3 known vulnerabilities in 1 package
+Name         Version ID             Fix Versions
+------------ ------- -------------- ------------
+cryptography 48.0.1  CVE-2026-69248 49.0.0
+cryptography 48.0.1  CVE-2026-69247 50.0.0
+cryptography 48.0.1  CVE-2026-69249 49.0.0
+exit=1
+
+=== requirements/userbot.lock ===
+WARNING:pip_audit._cli:--no-deps is supported, but users are encouraged to fully hash their pinned dependencies
+WARNING:pip_audit._cli:Consider using a tool like `pip-compile`: https://pip-tools.readthedocs.io/en/latest/#using-hashes
+Found 3 known vulnerabilities in 1 package
+Name         Version ID             Fix Versions
+------------ ------- -------------- ------------
+cryptography 48.0.1  CVE-2026-69248 49.0.0
+cryptography 48.0.1  CVE-2026-69247 50.0.0
+cryptography 48.0.1  CVE-2026-69249 49.0.0
+exit=1
+
+=== requirements/tools.lock ===
+WARNING:pip_audit._cli:--no-deps is supported, but users are encouraged to fully hash their pinned dependencies
+WARNING:pip_audit._cli:Consider using a tool like `pip-compile`: https://pip-tools.readthedocs.io/en/latest/#using-hashes
+No known vulnerabilities found
+exit=0
+
+=== requirements/dev.lock ===
+WARNING:pip_audit._cli:--no-deps is supported, but users are encouraged to fully hash their pinned dependencies
+WARNING:pip_audit._cli:Consider using a tool like `pip-compile`: https://pip-tools.readthedocs.io/en/latest/#using-hashes
+Found 3 known vulnerabilities in 1 package
+Name         Version ID             Fix Versions
+------------ ------- -------------- ------------
+cryptography 48.0.1  CVE-2026-69248 49.0.0
+cryptography 48.0.1  CVE-2026-69247 50.0.0
+cryptography 48.0.1  CVE-2026-69249 49.0.0
+exit=1
+
