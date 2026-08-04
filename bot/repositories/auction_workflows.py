@@ -901,6 +901,16 @@ class AuctionWorkflowRepository:
         if actual_discussion_id is not None and actual_discussion_id <= 0:
             raise ValueError("discussion_message_id must be positive")
 
+        allowed_statuses = {
+            "scheduled",
+            "publishing",
+            "publication_deferred",
+            "publication_failed",
+            "active",
+            "finalizing",
+            "finalization_failed",
+            "finished",
+        }
         async with self._pool.acquire() as conn, conn.transaction():
             locked = await conn.fetchrow(
                 "SELECT * FROM public.auctions WHERE auction_id = $1 FOR UPDATE",
@@ -910,59 +920,41 @@ class AuctionWorkflowRepository:
                 raise AuctionNotFound(f"auction {auction_id} not found")
             current = dict(locked)
             previous_status = str(current.get("status"))
-            existing_message_id = current.get("message_id")
-            existing_discussion_id = current.get("discussion_message_id")
-
-            if existing_message_id is not None:
-                if int(existing_message_id) != actual_channel_id:
-                    raise ValueError("auction is already bound to another channel message")
-                if (
-                    actual_discussion_id is not None
-                    and existing_discussion_id is not None
-                    and int(existing_discussion_id) != actual_discussion_id
-                ):
-                    raise ValueError("auction is already bound to another discussion message")
-                if actual_discussion_id is not None and existing_discussion_id is None:
-                    locked = await conn.fetchrow(
-                        """
-                        UPDATE public.auctions
-                        SET discussion_message_id = $2
-                        WHERE auction_id = $1
-                        RETURNING *
-                        """,
-                        int(auction_id),
-                        actual_discussion_id,
-                    )
-                    current = dict(locked)
-                requires_finalization = bool(
-                    await conn.fetchval(
-                        """
-                        SELECT date_trunc('minute', end_time) + INTERVAL '1 minute'
-                               <= NOW()
-                        FROM public.auctions WHERE auction_id = $1
-                        """,
-                        int(auction_id),
-                    )
-                )
-                current["_previous_status"] = previous_status
-                current["_final_status"] = str(current.get("status"))
-                current["_requires_finalization"] = requires_finalization
-                return current
-
-            if previous_status not in {
-                "publishing",
-                "publication_deferred",
-                "publication_failed",
-            }:
+            if previous_status not in allowed_statuses:
                 raise InvalidAuctionTransition(current=previous_status, target="active")
+
+            existing_message_id = current.get("message_id")
+            if (
+                existing_message_id is not None
+                and int(existing_message_id) > 0
+                and int(existing_message_id) != actual_channel_id
+            ):
+                raise ValueError("auction is already bound to another channel message")
+            existing_discussion_id = current.get("discussion_message_id")
+            if (
+                actual_discussion_id is not None
+                and existing_discussion_id is not None
+                and int(existing_discussion_id) != actual_discussion_id
+            ):
+                raise ValueError("auction is already bound to another discussion message")
 
             updated = await conn.fetchrow(
                 """
                 UPDATE public.auctions
                 SET message_id = $2,
                     discussion_message_id = COALESCE($3, discussion_message_id),
-                    status = 'active',
-                    publication_finished_at = NOW(),
+                    status = CASE
+                        WHEN status IN (
+                            'finalizing',
+                            'finalization_failed',
+                            'finished'
+                        ) THEN status
+                        ELSE 'active'
+                    END,
+                    publication_finished_at = COALESCE(
+                        publication_finished_at,
+                        NOW()
+                    ),
                     publication_error = NULL,
                     publication_next_attempt_at = NULL
                 WHERE auction_id = $1

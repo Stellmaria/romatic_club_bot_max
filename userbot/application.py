@@ -121,6 +121,7 @@ async def run_userbot_application(
     from db.lifecycle import close_db, init_db
     from db.pool import DatabaseRuntime
     from userbot.handlers import register_handlers, register_schedule_handlers
+    from userbot.publication_recovery import run_issue99_publication_recovery
     from userbot.workers import autobid_watchdog, schedule_announcement_watchdog
 
     configure_legacy_config(config)
@@ -166,6 +167,17 @@ async def run_userbot_application(
         database_started = True
         register_handlers(telegram_client)
         register_schedule_handlers(telegram_client)
+
+        try:
+            await run_issue99_publication_recovery(
+                telegram_client,
+                userbot_settings,
+            )
+        except Exception:
+            logger.exception(
+                "Issue #99 publication recovery could not complete; "
+                "userbot startup will continue for operator access"
+            )
 
         task_manager = BackgroundTaskManager()
         task_manager.start(
