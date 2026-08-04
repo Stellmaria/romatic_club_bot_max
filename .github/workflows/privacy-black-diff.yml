@@ -1,0 +1,32 @@
+name: Privacy Black Diff
+
+on:
+  push:
+    branches:
+      - feat/issue-45-privacy-foundation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  black-diff:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+          check-latest: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Print exact Black diff
+        run: python -m black --diff scripts/privacy_cleanup.py tests/test_privacy_lifecycle.py || true
