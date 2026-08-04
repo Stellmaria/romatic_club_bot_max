@@ -1,0 +1,25 @@
+name: Issue44 Black Diff
+
+on:
+  push:
+    branches:
+      - feature/issue-44-database-recovery
+
+permissions:
+  contents: read
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+      - run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - run: python -m black --diff db/migrator.py tests/test_database_recovery_contract.py
