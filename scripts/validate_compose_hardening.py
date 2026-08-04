@@ -213,6 +213,112 @@ def _validate_network_definitions(payload: Mapping[str, object]) -> None:
         _fail("romatic-supervisor-control must be internal")
 
 
+def _dependency_condition(service: Mapping[str, object], dependency: str, *, name: str) -> str:
+    dependencies = _mapping(service.get("depends_on"), field=f"services.{name}.depends_on")
+    contract = _mapping(
+        dependencies.get(dependency),
+        field=f"services.{name}.depends_on.{dependency}",
+    )
+    return str(contract.get("condition") or "")
+
+
+def _validate_runtime_permission_isolation(service: Mapping[str, object]) -> None:
+    if str(service.get("user") or "") != "0:0":
+        _fail("services.runtime-permissions.user must be the explicit bootstrap root")
+    if service.get("read_only") is not True:
+        _fail("services.runtime-permissions.read_only must be true")
+    if str(service.get("network_mode") or "") != "none":
+        _fail("services.runtime-permissions.network_mode must be none")
+    if service.get("ports") or service.get("secrets"):
+        _fail("services.runtime-permissions must not receive ports or secrets")
+    if _mount_targets(service, name="runtime-permissions") != {
+        "/runtime/bot",
+        "/runtime/userbot",
+    }:
+        _fail("services.runtime-permissions mounts must be limited to runtime directories")
+    if _tmpfs_targets(service, name="runtime-permissions") != {"/tmp"}:  # noqa: S108
+        _fail("services.runtime-permissions tmpfs must contain only /tmp")
+
+
+def _validate_runtime_permission_capabilities(service: Mapping[str, object]) -> None:
+    cap_drop = {
+        str(value).upper()
+        for value in _sequence(
+            service.get("cap_drop", []),
+            field="services.runtime-permissions.cap_drop",
+        )
+    }
+    cap_add = {
+        str(value).upper()
+        for value in _sequence(
+            service.get("cap_add", []),
+            field="services.runtime-permissions.cap_add",
+        )
+    }
+    if cap_drop != {"ALL"}:
+        _fail("services.runtime-permissions must drop all capabilities first")
+    if cap_add != {"CHOWN", "DAC_OVERRIDE", "FOWNER"}:
+        _fail("services.runtime-permissions capability allowlist is incorrect")
+
+    security_opt = {
+        str(value)
+        for value in _sequence(
+            service.get("security_opt", []),
+            field="services.runtime-permissions.security_opt",
+        )
+    }
+    if not any(value.startswith("no-new-privileges") for value in security_opt):
+        _fail("services.runtime-permissions must enable no-new-privileges")
+
+
+def _validate_runtime_permission_command(service: Mapping[str, object]) -> None:
+    command = " ".join(
+        str(part)
+        for part in _sequence(
+            service.get("command"),
+            field="services.runtime-permissions.command",
+        )
+    )
+    required_fragments = ("chown -R", "chmod 0700", "/runtime/bot", "/runtime/userbot")
+    if not all(fragment in command for fragment in required_fragments):
+        _fail("services.runtime-permissions command must normalize runtime ownership")
+
+    for field in ("mem_limit", "cpus", "pids_limit"):
+        _assert_positive_limit(service, name="runtime-permissions", field=field)
+    if not service.get("stop_grace_period"):
+        _fail("services.runtime-permissions.stop_grace_period must be explicit")
+
+
+def _validate_runtime_permission_startup(
+    service: Mapping[str, object],
+    bot: Mapping[str, object],
+    userbot: Mapping[str, object],
+) -> None:
+    bot_image = str(bot.get("image") or "")
+    if not bot_image or str(service.get("image") or "") != bot_image:
+        _fail("services.runtime-permissions must reuse the built bot image")
+    if _dependency_condition(bot, "runtime-permissions", name="bot") != (
+        "service_completed_successfully"
+    ):
+        _fail("services.bot must wait for runtime-permissions completion")
+    if _dependency_condition(userbot, "runtime-permissions", name="userbot") != (
+        "service_completed_successfully"
+    ):
+        _fail("services.userbot must wait for runtime-permissions completion")
+
+
+def _validate_runtime_permissions(
+    payload: Mapping[str, object],
+    bot: Mapping[str, object],
+    userbot: Mapping[str, object],
+) -> None:
+    service = _service(payload, "runtime-permissions")
+    _validate_runtime_permission_isolation(service)
+    _validate_runtime_permission_capabilities(service)
+    _validate_runtime_permission_command(service)
+    _validate_runtime_permission_startup(service, bot, userbot)
+
+
 def validate_compose_hardening(payload: Mapping[str, object]) -> None:
     """Validate bot/userbot privilege, storage, network and readiness boundaries."""
 
@@ -228,6 +334,7 @@ def validate_compose_hardening(payload: Mapping[str, object]) -> None:
     _validate_healthchecks(bot, userbot)
     _validate_service_networks(bot, userbot, postgres, supervisor)
     _validate_network_definitions(payload)
+    _validate_runtime_permissions(payload, bot, userbot)
 
 
 def main() -> int:
