@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any
 
 CURRENT_COMMAND_VERSION = 1
 
@@ -29,7 +30,7 @@ Validator = Callable[[Mapping[str, Any]], dict[str, Any]]
 
 def _require_int(payload: Mapping[str, Any], key: str) -> int:
     value = payload.get(key)
-    if isinstance(value, bool):
+    if value is None or isinstance(value, bool):
         raise OutboxCommandError(f"{key} must be an integer")
     try:
         return int(value)
@@ -53,9 +54,19 @@ def _validate_copy_message(payload: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _validate_refresh_auction_publication(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    auction_id = _require_int(payload, "auction_id")
+    if auction_id <= 0:
+        raise OutboxCommandError("refresh_auction_publication.auction_id must be positive")
+    return {"auction_id": auction_id}
+
+
 _REGISTRY: dict[tuple[str, int], Validator] = {
     ("send_message", 1): _validate_send_message,
     ("copy_message", 1): _validate_copy_message,
+    ("refresh_auction_publication", 1): _validate_refresh_auction_publication,
 }
 
 
@@ -95,7 +106,5 @@ def decode_command(raw: Mapping[str, Any], *, legacy_method: str | None = None) 
 
     validator = _REGISTRY.get((command_type, version))
     if validator is None:
-        raise OutboxCommandError(
-            f"unsupported outbox command: {command_type!r} version {version}"
-        )
+        raise OutboxCommandError(f"unsupported outbox command: {command_type!r} version {version}")
     return OutboxCommand(command_type, version, validator(payload))

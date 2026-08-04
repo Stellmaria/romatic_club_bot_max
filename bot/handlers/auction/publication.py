@@ -1,9 +1,9 @@
+# ruff: noqa: C901, RUF006
 from __future__ import annotations
 
 import asyncio
 import logging
 import re
-from datetime import datetime
 from typing import Any
 
 from aiogram import Bot
@@ -13,6 +13,7 @@ from aiogram.exceptions import (
     TelegramNetworkError,
 )
 
+from bot.core.legacy_config import legacy_config
 from bot.core.time import moscow_date, utc_now
 from bot.handlers.admin.helper.admin_constants import (
     MAX_TG_CAPTION_LEN,
@@ -20,16 +21,15 @@ from bot.handlers.admin.helper.admin_constants import (
     render_auction_caption,
 )
 from bot.handlers.admin.helper.user_helpers import get_owner_refs
-from bot.handlers.auction.winner import post_rules_under_lot
+from bot.handlers.auction.winner import post_rules_under_lot  # type: ignore[attr-defined]
 from bot.services.auction_workflows import AuctionPublicationService
-from bot.use_cases.auction_publication import PublishAuctionCommand, PublishAuctionUseCase
-from bot.telegram.media import bot_send_media_any
-from bot.core.legacy_config import legacy_config
 from bot.services.handler_persistence import (
     count_sold_by_card_id,
     count_sold_same_card,
     list_auctions,
 )
+from bot.telegram.media import bot_send_media_any
+from bot.use_cases.auction_publication import PublishAuctionCommand, PublishAuctionUseCase
 
 logger = logging.getLogger("auction_bot.publication")
 
@@ -88,11 +88,13 @@ def _media_id(*records: dict[str, Any]) -> str | None:
     return None
 
 
-async def _publication_context(auction: dict[str, Any]) -> tuple[dict, dict, dict, int]:
+async def _publication_context(
+    auction: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], int]:
     auction_id = int(auction["auction_id"])
     owners_count = 1
     try:
-        owners = await get_owner_refs(auction_id)
+        owners = await get_owner_refs(auction_id)  # type: ignore[no-untyped-call]
         refs = {item.strip() for item in str(owners or "").split(",") if item.strip()}
         owners_count = len(refs) or 1
     except Exception:
@@ -140,11 +142,9 @@ async def _send_publication(
     target: int | str,
     media: str | None,
     caption: str,
-):
+) -> Any:
     if len(caption) > MAX_TG_CAPTION_LEN:
-        raise ValueError(
-            f"auction caption is too long: {len(caption)} > {MAX_TG_CAPTION_LEN}"
-        )
+        raise ValueError(f"auction caption is too long: {len(caption)} > {MAX_TG_CAPTION_LEN}")
 
     if media:
         message = await bot_send_media_any(
@@ -173,19 +173,15 @@ async def publish_auction_lot(
     channel_id: int | str | None = None,
     lot_number: int | None = None,
     publication_service: AuctionPublicationService | None = None,
-    channel_username: str | None | object = _UNSET,
+    channel_username: str | object | None = _UNSET,
 ) -> int | None:
     """Publish one lot through a framework-neutral application use case."""
     if channel_id is None:
         channel_id = legacy_config.AUCTION_CHANNEL_ID
     resolved_channel_username = (
-        legacy_config.AUCTION_CHANNEL_USERNAME
-        if channel_username is _UNSET
-        else channel_username
+        legacy_config.AUCTION_CHANNEL_USERNAME if channel_username is _UNSET else channel_username
     )
-    if resolved_channel_username is not None and not isinstance(
-        resolved_channel_username, str
-    ):
+    if resolved_channel_username is not None and not isinstance(resolved_channel_username, str):
         raise TypeError("channel_username must be a string or None")
     del lot_number
 
@@ -247,6 +243,9 @@ async def publish_auction_lot(
     async def mark_published(_auction_id: int, message_id: int) -> bool:
         return await service.mark_published(_auction_id, message_id=message_id)
 
+    async def mark_deferred(_auction_id: int) -> bool:
+        return await service.mark_deferred(_auction_id)
+
     async def mark_failed(_auction_id: int, error: str) -> Any:
         return await service.mark_failed(_auction_id, error=error)
 
@@ -259,6 +258,7 @@ async def publish_auction_lot(
         send=send,
         mark_published=mark_published,
         mark_failed=mark_failed,
+        mark_deferred=mark_deferred,
         after_published=after_published,
     )
     try:
@@ -271,6 +271,12 @@ async def publish_auction_lot(
             logger.warning("Auction %s cannot be claimed: %s", auction_id, exc)
         return None
 
+    if result.message_id == 0:
+        logger.info(
+            "auction_publication_deferred auction_id=%s",
+            auction_id,
+        )
+        return None
     logger.info("Published auction %s as message %s", auction_id, result.message_id)
     return result.message_id
 
@@ -284,8 +290,7 @@ async def get_lot_number_for_day(auction: dict[str, Any]) -> int:
         (
             lot
             for lot in lots
-            if lot.get("start_time")
-            and moscow_date(lot["start_time"]) == moscow_date(start_time)
+            if lot.get("start_time") and moscow_date(lot["start_time"]) == moscow_date(start_time)
         ),
         key=lambda lot: (lot["start_time"], lot["auction_id"]),
     )

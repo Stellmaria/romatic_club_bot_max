@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
 
@@ -264,6 +265,7 @@ class AuctionWorkflowRepository:
         *,
         start_time: datetime,
         end_time: datetime,
+        publication_chat_id: int | None = None,
     ) -> dict[str, Any]:
         start_time = ensure_utc(require_aware(start_time, name="start_time"))
         end_time = ensure_utc(require_aware(end_time, name="end_time"))
@@ -271,6 +273,13 @@ class AuctionWorkflowRepository:
             raise ValueError("end_time must be greater than start_time")
 
         async with self._pool.acquire() as conn, conn.transaction():
+            current_row = await conn.fetchrow(
+                "SELECT * FROM public.auctions WHERE auction_id = $1 FOR UPDATE",
+                int(auction_id),
+            )
+            if current_row is None:
+                raise AuctionNotFound(f"auction {auction_id} not found")
+
             for schedule_day in sorted(
                 {moscow_date(start_time).toordinal(), moscow_date(end_time).toordinal()}
             ):
@@ -279,42 +288,107 @@ class AuctionWorkflowRepository:
                     0x41554354,
                     int(schedule_day),
                 )
-            conflict = await self._has_prohibited_slot_overlap(
+            if await self._has_prohibited_slot_overlap(
                 conn,
                 auction_id=int(auction_id),
                 start_time=start_time,
-            )
-            if conflict:
+            ):
                 raise AuctionSlotConflict(f"auction slot {start_time!s} - {end_time!s} is occupied")
-            row = await conn.fetchrow(
-                """
+
+            current = dict(current_row)
+            message_id = current.get("message_id")
+            if message_id is None:
+                if str(current.get("status")) not in {
+                    "approved",
+                    "scheduled",
+                    "publication_failed",
+                    "publication_deferred",
+                }:
+                    raise InvalidAuctionTransition(
+                        current=str(current.get("status")), target="scheduled"
+                    )
+                row = await conn.fetchrow(
+                    """
                     UPDATE public.auctions
                     SET start_time = $2,
                         end_time = $3,
+                        status = 'scheduled',
+                        message_id = NULL,
+                        discussion_message_id = NULL,
+                        publication_started_at = NULL,
+                        publication_finished_at = NULL,
+                        publication_attempts = 0,
+                        publication_error = NULL,
+                        publication_next_attempt_at = NULL,
                         notified_start = FALSE,
                         notified_1min = FALSE,
                         notified_end = FALSE
                     WHERE auction_id = $1
-                      AND status = 'scheduled'
-                      AND message_id IS NULL
                     RETURNING *
                     """,
+                    int(auction_id),
+                    start_time,
+                    end_time,
+                )
+                return dict(row)
+
+            actual_message_id = int(message_id)
+            if actual_message_id <= 0:
+                raise ValueError(
+                    "published auction has a non-positive message_id and requires repair"
+                )
+            if str(current.get("status")) not in {
+                "scheduled",
+                "active",
+                "finished",
+                "finalization_failed",
+            }:
+                raise InvalidAuctionTransition(current=str(current.get("status")), target="active")
+            if publication_chat_id is None or int(publication_chat_id) == 0:
+                raise ValueError("publication_chat_id is required to refresh a published auction")
+
+            row = await conn.fetchrow(
+                """
+                UPDATE public.auctions
+                SET start_time = $2,
+                    end_time = $3,
+                    status = 'active',
+                    finalization_started_at = NULL,
+                    finalization_finished_at = NULL,
+                    finalization_error = NULL,
+                    notified_start = FALSE,
+                    notified_1min = FALSE,
+                    notified_end = FALSE
+                WHERE auction_id = $1
+                RETURNING *
+                """,
                 int(auction_id),
                 start_time,
                 end_time,
             )
-            if not row:
-                current = await conn.fetchval(
-                    "SELECT status FROM public.auctions WHERE auction_id = $1",
-                    int(auction_id),
+            command = {
+                "command_type": "refresh_auction_publication",
+                "version": 1,
+                "payload": {"auction_id": int(auction_id)},
+            }
+            await conn.execute(
+                """
+                INSERT INTO public.telegram_outbox (
+                    dedupe_key, topic, method, chat_id, payload
                 )
-                if current is None:
-                    raise AuctionNotFound(f"auction {auction_id} not found")
-                raise InvalidAuctionTransition(
-                    current=str(current),
-                    target="scheduled",
-                )
-        return dict(row)
+                VALUES ($1, 'auction', 'refresh_auction_publication', $2, $3::jsonb)
+                ON CONFLICT (dedupe_key) DO NOTHING
+                """,
+                (
+                    f"auction:{int(auction_id)}:refresh:"
+                    f"{start_time.isoformat()}:{end_time.isoformat()}"
+                ),
+                int(publication_chat_id),
+                json.dumps(command),
+            )
+            result = dict(row)
+            result["_publication_refresh_queued"] = True
+            return result
 
     async def update_moderatable_field(
         self,
@@ -686,6 +760,16 @@ class AuctionWorkflowRepository:
             )
         return int(row["auction_id"]) if row else None
 
+    async def get_publication(self, auction_id: int) -> dict[str, Any]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM public.auctions WHERE auction_id = $1",
+                int(auction_id),
+            )
+        if row is None:
+            raise AuctionNotFound(f"auction {auction_id} not found")
+        return dict(row)
+
     async def claim_due(
         self,
         *,
@@ -761,6 +845,9 @@ class AuctionWorkflowRepository:
         return dict(row)
 
     async def mark_published(self, auction_id: int, *, message_id: int) -> bool:
+        actual_message_id = int(message_id)
+        if actual_message_id <= 0:
+            raise ValueError("message_id must be positive")
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
@@ -776,9 +863,122 @@ class AuctionWorkflowRepository:
                 RETURNING auction_id
                 """,
                 int(auction_id),
-                int(message_id),
+                actual_message_id,
             )
         return bool(row)
+
+    async def mark_deferred(self, auction_id: int) -> bool:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                UPDATE public.auctions
+                SET status = 'publication_deferred',
+                    message_id = NULL,
+                    publication_error = NULL,
+                    publication_next_attempt_at = NULL
+                WHERE auction_id = $1
+                  AND status = 'publishing'
+                  AND message_id IS NULL
+                RETURNING auction_id
+                """,
+                int(auction_id),
+            )
+        return bool(row)
+
+    async def confirm_deferred_publication(
+        self,
+        auction_id: int,
+        *,
+        channel_message_id: int,
+        discussion_message_id: int | None = None,
+    ) -> dict[str, Any]:
+        actual_channel_id = int(channel_message_id)
+        if actual_channel_id <= 0:
+            raise ValueError("channel_message_id must be positive")
+        actual_discussion_id = (
+            int(discussion_message_id) if discussion_message_id is not None else None
+        )
+        if actual_discussion_id is not None and actual_discussion_id <= 0:
+            raise ValueError("discussion_message_id must be positive")
+
+        async with self._pool.acquire() as conn, conn.transaction():
+            locked = await conn.fetchrow(
+                "SELECT * FROM public.auctions WHERE auction_id = $1 FOR UPDATE",
+                int(auction_id),
+            )
+            if locked is None:
+                raise AuctionNotFound(f"auction {auction_id} not found")
+            current = dict(locked)
+            previous_status = str(current.get("status"))
+            existing_message_id = current.get("message_id")
+            existing_discussion_id = current.get("discussion_message_id")
+
+            if existing_message_id is not None:
+                if int(existing_message_id) != actual_channel_id:
+                    raise ValueError("auction is already bound to another channel message")
+                if (
+                    actual_discussion_id is not None
+                    and existing_discussion_id is not None
+                    and int(existing_discussion_id) != actual_discussion_id
+                ):
+                    raise ValueError("auction is already bound to another discussion message")
+                if actual_discussion_id is not None and existing_discussion_id is None:
+                    locked = await conn.fetchrow(
+                        """
+                        UPDATE public.auctions
+                        SET discussion_message_id = $2
+                        WHERE auction_id = $1
+                        RETURNING *
+                        """,
+                        int(auction_id),
+                        actual_discussion_id,
+                    )
+                    current = dict(locked)
+                requires_finalization = bool(
+                    await conn.fetchval(
+                        """
+                        SELECT date_trunc('minute', end_time) + INTERVAL '1 minute'
+                               <= NOW()
+                        FROM public.auctions WHERE auction_id = $1
+                        """,
+                        int(auction_id),
+                    )
+                )
+                current["_previous_status"] = previous_status
+                current["_final_status"] = str(current.get("status"))
+                current["_requires_finalization"] = requires_finalization
+                return current
+
+            if previous_status not in {
+                "publishing",
+                "publication_deferred",
+                "publication_failed",
+            }:
+                raise InvalidAuctionTransition(current=previous_status, target="active")
+
+            updated = await conn.fetchrow(
+                """
+                UPDATE public.auctions
+                SET message_id = $2,
+                    discussion_message_id = COALESCE($3, discussion_message_id),
+                    status = 'active',
+                    publication_finished_at = NOW(),
+                    publication_error = NULL,
+                    publication_next_attempt_at = NULL
+                WHERE auction_id = $1
+                RETURNING *,
+                    (date_trunc('minute', end_time) + INTERVAL '1 minute'
+                        <= NOW()) AS requires_finalization
+                """,
+                int(auction_id),
+                actual_channel_id,
+                actual_discussion_id,
+            )
+            result = dict(updated)
+            result["_previous_status"] = previous_status
+            result["_final_status"] = str(result.get("status"))
+            result["_requires_finalization"] = bool(result.pop("requires_finalization", False))
+            return result
 
     async def mark_publication_failed(
         self,

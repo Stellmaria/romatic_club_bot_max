@@ -1,3 +1,4 @@
+# ruff: noqa: ARG002
 from __future__ import annotations
 
 import asyncio
@@ -5,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import bot.telegram.outbox as outbox_module
 from bot.telegram.outbox import TelegramRateLimiter, deliver_outbox_batch
 from bot.telegram.outbox_commands import (
     OutboxCommandError,
@@ -35,12 +37,20 @@ def test_unknown_or_invalid_command_is_rejected() -> None:
         build_command("delete_everything", {"text": "nope"})
 
     with pytest.raises(OutboxCommandError):
-        decode_command(
-            {"command_type": "send_message", "version": 999, "payload": {"text": "x"}}
-        )
+        decode_command({"command_type": "send_message", "version": 999, "payload": {"text": "x"}})
 
     with pytest.raises(OutboxCommandError):
         build_command("copy_message", {"from_chat_id": 1})
+
+    with pytest.raises(OutboxCommandError):
+        build_command("refresh_auction_publication", {"auction_id": 0})
+
+
+def test_refresh_auction_publication_command_is_typed() -> None:
+    command = build_command("refresh_auction_publication", {"auction_id": "42"})
+
+    assert command.command_type == "refresh_auction_publication"
+    assert command.payload == {"auction_id": 42}
 
 
 class _Repository:
@@ -105,3 +115,38 @@ async def test_parallel_delivery_preserves_order_inside_chat() -> None:
     assert bot.overlap_detected is False
     assert [text for chat_id, text in bot.order if chat_id == 10] == ["a", "b"]
     assert [text for chat_id, text in bot.order if chat_id == 20] == ["x", "y"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_publication_command_uses_existing_message_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    async def refresh(_bot: object, *, auction_id: int) -> int:
+        calls.append(auction_id)
+        return 88004
+
+    monkeypatch.setattr(outbox_module, "_refresh_auction_publication", refresh)
+    rows = [
+        {
+            "outbox_id": 5,
+            "chat_id": -100123,
+            "method": "send_message",
+            "payload": build_command(
+                "refresh_auction_publication",
+                {"auction_id": 42},
+            ).as_json(),
+        }
+    ]
+    repository = _Repository(rows)
+
+    delivered = await deliver_outbox_batch(
+        _Bot(),
+        repository,  # type: ignore[arg-type]
+        limiter=TelegramRateLimiter(global_rate=10000, per_chat_rate=10000),
+    )
+
+    assert delivered == 1
+    assert calls == [42]
+    assert repository.sent == [5]

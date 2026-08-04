@@ -13,6 +13,7 @@ class AuctionStatus(str, Enum):
     APPROVED = "approved"
     SCHEDULED = "scheduled"
     PUBLISHING = "publishing"
+    PUBLICATION_DEFERRED = "publication_deferred"
     ACTIVE = "active"
     FINALIZING = "finalizing"
     FINISHED = "finished"

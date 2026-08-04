@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from bot.core.legacy_config import legacy_config
+from bot.core.time import ensure_utc
 from bot.domain.auctions import AuctionKind, Currency, normalize_currency_choices
 from bot.domain.auctions.rules import assert_kind_access
 from bot.domain.auctions.workflows import AuctionDraft, PublicationFailure
-from bot.core.time import ensure_utc
 from bot.repositories.auction_workflows import AuctionWorkflowRepository
 from db.core import get_db_pool
 
@@ -16,7 +17,7 @@ class AuctionCreationService:
         self._repository = repository
 
     @classmethod
-    async def create(cls) -> "AuctionCreationService":
+    async def create(cls) -> AuctionCreationService:
         return cls(AuctionWorkflowRepository(await get_db_pool()))
 
     async def submit(
@@ -90,7 +91,7 @@ class AuctionModerationService:
         self._repository = repository
 
     @classmethod
-    async def create(cls) -> "AuctionModerationService":
+    async def create(cls) -> AuctionModerationService:
         return cls(AuctionWorkflowRepository(await get_db_pool()))
 
     async def schedule(
@@ -123,6 +124,7 @@ class AuctionModerationService:
             int(auction_id),
             start_time=ensure_utc(start_time),
             end_time=ensure_utc(end_time),
+            publication_chat_id=int(legacy_config.AUCTION_CHANNEL_ID),
         )
 
     async def update_field(
@@ -184,7 +186,7 @@ class AuctionOwnerService:
         self._repository = repository
 
     @classmethod
-    async def create(cls) -> "AuctionOwnerService":
+    async def create(cls) -> AuctionOwnerService:
         return cls(AuctionWorkflowRepository(await get_db_pool()))
 
     async def update_field(
@@ -241,7 +243,7 @@ class AuctionLifecycleService:
         self._repository = repository
 
     @classmethod
-    async def create(cls) -> "AuctionLifecycleService":
+    async def create(cls) -> AuctionLifecycleService:
         return cls(AuctionWorkflowRepository(await get_db_pool()))
 
     async def requeue_publication(self, auction_id: int) -> dict[str, Any]:
@@ -287,13 +289,14 @@ class AuctionPublicationService:
         self._repository = repository
 
     @classmethod
-    async def create(cls) -> "AuctionPublicationService":
+    async def create(cls) -> AuctionPublicationService:
         return cls(AuctionWorkflowRepository(await get_db_pool()))
 
     async def recover_stale(self) -> list[int]:
-        return await self._repository.fail_stale_publications(
-            older_than_minutes=15
-        )
+        return await self._repository.fail_stale_publications(older_than_minutes=15)
+
+    async def get_publication(self, auction_id: int) -> dict[str, Any]:
+        return await self._repository.get_publication(int(auction_id))
 
     async def claim_due(
         self,
@@ -313,6 +316,24 @@ class AuctionPublicationService:
         return await self._repository.mark_published(
             int(auction_id),
             message_id=int(message_id),
+        )
+
+    async def mark_deferred(self, auction_id: int) -> bool:
+        return await self._repository.mark_deferred(int(auction_id))
+
+    async def confirm_deferred_publication(
+        self,
+        auction_id: int,
+        *,
+        channel_message_id: int,
+        discussion_message_id: int | None = None,
+    ) -> dict[str, Any]:
+        return await self._repository.confirm_deferred_publication(
+            int(auction_id),
+            channel_message_id=int(channel_message_id),
+            discussion_message_id=(
+                int(discussion_message_id) if discussion_message_id is not None else None
+            ),
         )
 
     async def mark_failed(

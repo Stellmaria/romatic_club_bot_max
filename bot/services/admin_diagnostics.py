@@ -14,7 +14,7 @@ class AdminDiagnosticsQueries:
         self._repository = repository
 
     @classmethod
-    async def create(cls) -> "AdminDiagnosticsQueries":
+    async def create(cls) -> AdminDiagnosticsQueries:
         return cls(AdminDiagnosticsRepository(await get_db_pool()))
 
     async def delayed_luxury_lots(self) -> list[dict[str, Any]]:
@@ -31,3 +31,6 @@ class AdminDiagnosticsQueries:
         after: datetime,
     ) -> list[dict[str, Any]]:
         return await self._repository.owners_with_multiple_future_lots(after=after)
+
+    async def auction_publication_health(self) -> dict[str, Any]:
+        return await self._repository.auction_publication_health()
