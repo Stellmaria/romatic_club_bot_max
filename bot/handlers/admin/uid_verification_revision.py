@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import html
 import logging
+from contextlib import suppress
 
 from aiogram import Bot, F, Router, types
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -21,8 +23,8 @@ from bot.services.uid_verification import (
     get_uid_verification_request,
     set_uid_verification_request_revision,
 )
-from bot.telegram.states import UIDVerificationRevisionFSM
 from bot.telegram.callback_parser import split_callback_data
+from bot.telegram.states import UIDVerificationRevisionFSM
 
 
 logger = logging.getLogger(__name__)
@@ -52,7 +54,7 @@ async def uidv_revision_start(call: types.CallbackQuery, state: FSMContext) -> N
     )
     try:
         await call.message.edit_text(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
-    except Exception:
+    except TelegramBadRequest:
         await call.message.answer(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
     await call.answer()
 
@@ -70,12 +72,22 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
         return
 
     req_id = int(parts[2] or 0)
-    flag = (parts[3] if len(parts) == 4 else parts[4] if len(parts) > 4 else "").strip()
+    flag = (
+        parts[3]
+        if len(parts) == 4
+        else parts[4]
+        if len(parts) > 4
+        else ""
+    ).strip()
 
     data = await state.get_data()
     if int(data.get("uidv_rev_req_id") or 0) != req_id:
         await state.set_state(UIDVerificationRevisionFSM.choosing_flags)
-        await state.update_data(uidv_rev_req_id=req_id, uidv_rev_flags=[], uidv_rev_reason="")
+        await state.update_data(
+            uidv_rev_req_id=req_id,
+            uidv_rev_flags=[],
+            uidv_rev_reason="",
+        )
         data = await state.get_data()
 
     chosen = set(data.get("uidv_rev_flags") or [])
@@ -90,15 +102,12 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
     chosen_list = sort_rev_flags(chosen)
     await state.update_data(uidv_rev_flags=chosen_list)
 
-    try:
-        await call.answer()
-    except Exception:
-        pass
+    await call.answer()
 
-    try:
-        await call.message.edit_reply_markup(reply_markup=kb_uidv_revision(req_id, chosen_list, reason))
-    except Exception:
-        pass
+    with suppress(TelegramBadRequest):
+        await call.message.edit_reply_markup(
+            reply_markup=kb_uidv_revision(req_id, chosen_list, reason)
+        )
 
 
 @router.callback_query(F.data.startswith("uidv|rev_reason|"))
@@ -113,10 +122,7 @@ async def uidv_revision_reason(call: types.CallbackQuery, state: FSMContext) -> 
     await state.set_state(UIDVerificationRevisionFSM.waiting_reason)
     await state.update_data(uidv_rev_req_id=req_id)
 
-    try:
-        await call.answer()
-    except Exception:
-        pass
+    await call.answer()
 
     await call.message.answer(
         "✏️ Напиши причину/комментарий, что именно не так и что нужно исправить.\n"
@@ -145,7 +151,11 @@ async def uidv_revision_reason_msg(message: types.Message, state: FSMContext) ->
 
 @router.callback_query(F.data.startswith("uidv|rev_send|"))
 @admin_only
-async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: Bot) -> None:
+async def uidv_revision_send(
+    call: types.CallbackQuery,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
     parts = split_callback_data(call.data or "", "|")
     if len(parts) < 3:
         await call.answer("Некорректная кнопка.", show_alert=True)
@@ -214,7 +224,7 @@ async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: 
             reply_markup=kb.as_markup(),
             protect_content=False,
         )
-    except Exception:
+    except TelegramAPIError:
         delivered = False
         logger.exception(
             "Failed to notify user about UID verification revision",
