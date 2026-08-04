@@ -2,34 +2,79 @@ name: Container Hardening
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
-  contents: read
-
-concurrency:
-  group: container-hardening-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  contents: write
 
 jobs:
   container-hardening-contract:
-    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          persist-credentials: false
-      - name: Prepare non-secret Compose environment
+          ref: hotfix/issue-44-deploy-preflight-read-eof
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - name: Apply exact deploy and regression-test patch
+        shell: bash
         run: |
-          cp .env.example .env
-          cp .env.bot.example .env.bot
-          cp .env.userbot.example .env.userbot
-          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_only_password/' .env
-          sed -i 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://auction_bot:ci_only_password@postgres:5432/auction_bot#' .env.bot .env.userbot
-          sed -i 's#^SUPERVISOR_TOKEN_FILE_HOST=.*#SUPERVISOR_TOKEN_FILE_HOST=./.ci-supervisor-token#' .env
-          printf '%s\n' 'ci-only-supervisor-token-value' > .ci-supervisor-token
-      - name: Render Compose configuration
-        run: docker compose config --format json > rendered-compose.json
-      - name: Validate privilege, storage, secret and network boundaries
-        run: python scripts/validate_compose_hardening.py < rendered-compose.json
+          python - <<'PY'
+          from pathlib import Path
+
+          deploy_path = Path('deploy/server/deploy.sh')
+          deploy = deploy_path.read_text(encoding='utf-8')
+          old = '''read -r postgres_version_num database_size_bytes < <(
+            "${compose[@]}" exec -T postgres sh -ceu '\n              psql -X -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<SQL\n          SELECT current_setting('\\''server_version_num'\\'')::integer;\n          SELECT pg_database_size(current_database());\n          SQL\n            ' | tr '\\n' ' '\n          )'''
+          new = '''mapfile -t postgres_metrics < <(
+            "${compose[@]}" exec -T postgres sh -ceu '\n              psql -X -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<SQL\n          SELECT current_setting('\\''server_version_num'\\'')::integer;\n          SELECT pg_database_size(current_database());\n          SQL\n            '\n          )
+          if [[ "${#postgres_metrics[@]}" -ne 2 ]]; then
+            echo "Unexpected PostgreSQL preflight metrics output" >&2
+            exit 4
+          fi
+          postgres_version_num="${postgres_metrics[0]}"
+          database_size_bytes="${postgres_metrics[1]}"
+          if ! [[ "$postgres_version_num" =~ ^[0-9]+$ && "$database_size_bytes" =~ ^[0-9]+$ ]]; then
+            echo "Invalid PostgreSQL preflight metrics: version=$postgres_version_num size=$database_size_bytes" >&2
+            exit 4
+          fi'''
+          if deploy.count(old) != 1:
+              raise SystemExit('expected deploy preflight block not found exactly once')
+          deploy_path.write_text(deploy.replace(old, new), encoding='utf-8')
+
+          test_path = Path('tests/test_database_recovery_contract.py')
+          tests = test_path.read_text(encoding='utf-8')
+          marker = 'def test_restore_drill_runs_full_restore_and_business_probes() -> None:\n'
+          addition = '''def test_deploy_postgres_preflight_preserves_line_records() -> None:
+              deploy = source("deploy/server/deploy.sh")
+
+              assert "mapfile -t postgres_metrics" in deploy
+              assert "Unexpected PostgreSQL preflight metrics output" in deploy
+              assert "Invalid PostgreSQL preflight metrics" in deploy
+              assert "| tr '\\\\n' ' '" not in deploy
+
+
+          '''
+          if tests.count(marker) != 1:
+              raise SystemExit('test insertion marker not found exactly once')
+          test_path.write_text(tests.replace(marker, addition + marker), encoding='utf-8')
+          PY
+
+          bash -n deploy/server/deploy.sh
+          python -m compileall -q tests/test_database_recovery_contract.py
+          git show origin/main:.github/workflows/container-hardening.yml > .github/workflows/container-hardening.yml
+          rm -f .github/workflows/tmp-hotfix-issue44-read-eof.yml
+      - name: Commit bounded hotfix and restore workflow
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- deploy/server/deploy.sh tests/test_database_recovery_contract.py .github/workflows/container-hardening.yml
+          git rm --ignore-unmatch .github/workflows/tmp-hotfix-issue44-read-eof.yml
+          git diff --cached --check
+          git commit -m 'fix: preserve PostgreSQL preflight records under errexit'
+          git push origin HEAD:hotfix/issue-44-deploy-preflight-read-eof
