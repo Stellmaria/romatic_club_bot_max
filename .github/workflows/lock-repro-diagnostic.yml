@@ -37,6 +37,13 @@ jobs:
           path: generated-locks/*.lock
           if-no-files-found: error
           retention-days: 1
+      - name: Upload current lock files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: current-locks
+          path: requirements/*.lock
+          if-no-files-found: error
+          retention-days: 1
       - name: Show reproducibility diff
         run: |
           for group in bot userbot tools dev; do
