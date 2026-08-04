@@ -12,6 +12,8 @@ from bot.services.privacy_exports import (
     PrivacyExportService,
 )
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.asyncio
 async def test_privacy_export_is_read_only_except_append_only_audit(
