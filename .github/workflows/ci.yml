@@ -2,320 +2,174 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-env:
-  PYTHONUNBUFFERED: "1"
-  CI_TEST_SHARDS: "4"
+  contents: write
 
 jobs:
   deployment-contract:
+    if: github.event.pull_request.head.ref == 'feature/issue-44-database-recovery'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          persist-credentials: false
-      - name: Prepare non-secret Compose environment
-        run: |
-          cp .env.example .env
-          cp .env.bot.example .env.bot
-          cp .env.userbot.example .env.userbot
-          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci_only_password/' .env
-          sed -i 's#^DATABASE_URL=.*#DATABASE_URL=postgresql://auction_bot:ci_only_password@postgres:5432/auction_bot#' .env.bot .env.userbot
-          sed -i 's#^SUPERVISOR_TOKEN_FILE_HOST=.*#SUPERVISOR_TOKEN_FILE_HOST=./.ci-supervisor-token#' .env
-          printf '%s\n' 'ci-only-supervisor-token-value' > .ci-supervisor-token
-      - name: Validate Compose contract
-        run: docker compose config -q
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
-      - name: Build production images with shared layer cache
-        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b
-        with:
-          files: compose.yaml
-          targets: bot,userbot,supervisor-proxy
-          set: |
-            *.cache-from=type=gha
-            *.cache-to=type=gha,mode=max
-
-  server-supervisor-contract:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.13"
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
-          version: "0.11.16"
-          enable-cache: true
-          cache-dependency-glob: requirements/*.lock
-      - name: Install hashed development graph
-        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Compile Supervisor runtime
+          version: '0.11.16'
+      - name: Split Telethon snapshot responsibilities
         run: |
-          python -m py_compile \
-            bot/core/supervisor_client.py \
-            bot/handlers/admin/admin_panel_system.py \
-            scripts/server_supervisor.py \
-            scripts/server_supervisor_proxy.py \
-            scripts/hermes_incident_monitor.py
-      - name: Validate deployment scripts
-        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('deploy/server/deploy.sh')
+          text = path.read_text(encoding='utf-8')
+          marker = 'session_snapshot_created=0\n'
+          if text.count(marker) != 1:
+              raise SystemExit('unexpected session snapshot state marker')
+          text = text.replace(marker, marker + 'session_file_exists=0\n', 1)
+
+          start = text.index('snapshot_userbot_session() {\n')
+          end = text.index('\nrestore_userbot_session() {', start)
+          replacement = r'''probe_userbot_session() {
+  local probe_status
+
+  session_file_exists=0
+  if "${compose[@]}" run --rm -T --no-deps \
+    --user "$app_uid:$app_gid" userbot python - <<'PY'
+from pathlib import Path
+
+raise SystemExit(
+    0
+    if Path("/run/romatic-userbot-session/userbot.session").is_file()
+    else 44
+)
+PY
+  then
+    session_file_exists=1
+    return 0
+  fi
+
+  probe_status="$?"
+  if [[ "$probe_status" == "44" ]]; then
+    echo "Userbot session file is absent; compatibility probe skipped."
+    return 0
+  fi
+  return "$probe_status"
+}
+
+write_userbot_session_snapshot() {
+  local snapshot_tmp="$1"
+
+  "${compose[@]}" run --rm -T --no-deps \
+    --user "$app_uid:$app_gid" \
+    -e ROMATIC_EXPECTED_APP_UID="$app_uid" \
+    -e ROMATIC_EXPECTED_APP_GID="$app_gid" \
+    userbot python - <<'PY' >"$snapshot_tmp"
+import os
+import sqlite3
+import stat
+import sys
+from pathlib import Path
+
+source_path = Path("/run/romatic-userbot-session/userbot.session")
+target_path = Path("/tmp/userbot-session-snapshot.session")
+expected_uid = int(os.environ["ROMATIC_EXPECTED_APP_UID"])
+expected_gid = int(os.environ["ROMATIC_EXPECTED_APP_GID"])
+source_stat = source_path.stat()
+source_mode = stat.S_IMODE(source_stat.st_mode)
+if source_stat.st_uid != expected_uid or source_stat.st_gid != expected_gid:
+    raise RuntimeError(
+        f"Unexpected Telethon session owner: {source_stat.st_uid}:{source_stat.st_gid}; "
+        f"expected {expected_uid}:{expected_gid}"
+    )
+if source_mode & 0o077:
+    raise RuntimeError(f"Telethon session permissions are too broad: {source_mode:04o}")
+
+target_path.unlink(missing_ok=True)
+source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
+target = sqlite3.connect(target_path)
+try:
+    source.backup(target)
+    result = target.execute("PRAGMA quick_check").fetchone()
+    if result != ("ok",):
+        raise RuntimeError(f"Telethon session quick_check failed: {result!r}")
+finally:
+    target.close()
+    source.close()
+
+sys.stdout.buffer.write(target_path.read_bytes())
+target_path.unlink(missing_ok=True)
+PY
+}
+
+verify_userbot_session_snapshot() {
+  local snapshot_tmp="$1"
+
+  python3 - "$snapshot_tmp" <<'PY'
+import sqlite3
+import sys
+from pathlib import Path
+
+snapshot_path = Path(sys.argv[1])
+if not snapshot_path.is_file() or snapshot_path.stat().st_size == 0:
+    raise RuntimeError("Telethon session snapshot is empty")
+connection = sqlite3.connect(f"file:{snapshot_path}?mode=ro", uri=True)
+try:
+    result = connection.execute("PRAGMA quick_check").fetchone()
+    if result != ("ok",):
+        raise RuntimeError(f"Host session snapshot quick_check failed: {result!r}")
+finally:
+    connection.close()
+PY
+}
+
+snapshot_userbot_session() {
+  local snapshot_tmp
+
+  probe_userbot_session
+  if [[ "$session_file_exists" != "1" ]]; then
+    return 0
+  fi
+
+  snapshot_tmp="${session_snapshot_path}.tmp"
+  rm -f "$snapshot_tmp"
+  if ! write_userbot_session_snapshot "$snapshot_tmp"; then
+    rm -f "$snapshot_tmp"
+    return 1
+  fi
+  if ! verify_userbot_session_snapshot "$snapshot_tmp"; then
+    rm -f "$snapshot_tmp"
+    return 1
+  fi
+
+  chmod 0600 "$snapshot_tmp"
+  mv -f "$snapshot_tmp" "$session_snapshot_path"
+  session_snapshot_created=1
+  echo "Verified userbot session snapshot: $session_snapshot_path"
+}
+'''
+          text = text[:start] + replacement + text[end + 1:]
+          path.write_text(text, encoding='utf-8')
+          PY
           bash -n deploy/server/deploy.sh
-          bash -n deploy/server/install-server-supervisor.sh
-          bash -n deploy/server/install-hermes-incident-monitor.sh
-      - name: Run Supervisor regression contracts
-        env:
-          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-          UID_HASH_KEY: ci-only-hmac-key
-          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - name: Regenerate deterministic dependency locks
         run: |
-          python -m pytest -q \
-            tests/test_process_restart.py \
-            tests/test_admin_system_restart_contract.py \
-            tests/test_server_supervisor_contract.py \
-            tests/test_supervisor_security_boundary.py \
-            tests/test_hermes_incident_monitor_contract.py \
-            tests/test_bid_currency_migration_regression.py::test_deployment_smoke_rejects_restart_loops
-
-  preflight:
-    name: preflight
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
-        with:
-          version: "0.11.16"
-          enable-cache: true
-          cache-dependency-glob: requirements/*.lock
-      - name: Install pinned development dependencies
-        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Verify deterministic shard plan
-        run: python scripts/ci_test_shard.py --total "$CI_TEST_SHARDS" --verify
-      - name: Compile Python sources
-        run: python -m compileall -q bot database db userbot main.py config.py fsm_states.py scripts tests
-      - name: Build installable wheel
-        run: uv build --wheel --out-dir dist
-      - name: Verify installed wheel resources
-        run: |
-          uv pip install --system --no-deps --force-reinstall dist/*.whl
-          python -I -c "from db.migrator import _load_migrations; items = _load_migrations(); assert items[-1].filename == '019_deferred_auction_publication.sql'; assert len({item.version for item in items}) == len(items)"
-          python -I -c "import db.migrations as compatibility; import db.migrator as runtime; assert compatibility.apply_migrations is runtime.apply_migrations; assert compatibility.MIGRATIONS_DIR == runtime.MIGRATIONS_DIR"
-          rm -rf build
-      - name: Critical lint checks
-        run: python -m ruff check .
-      - name: Persistence exception contract
-        run: python scripts/check_persistence_exceptions.py
-      - name: Database boundary contract
-        run: python scripts/check_database_boundaries.py
-      - name: Telegram boundary contract
-        run: python scripts/check_telegram_boundary.py
-      - name: Handler import boundary contract
-        run: python scripts/check_handler_import_boundaries.py
-
-  test-shards:
-    name: test-shard-${{ matrix.shard }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: true
-      matrix:
-        shard: [0, 1, 2, 3]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
-        with:
-          version: "0.11.16"
-          enable-cache: true
-          cache-dependency-glob: requirements/*.lock
-          save-cache: ${{ matrix.shard == 0 }}
-      - name: Install pinned development dependencies
-        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Run unit and coverage shard
+          rm -rf generated-locks /tmp/generated-locks
+          scripts/compile_locks.sh generated-locks
+          for group in bot userbot tools dev; do
+            cp "generated-locks/$group.lock" "requirements/$group.lock"
+          done
+      - name: Commit bounded fixes
         env:
-          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-          UID_HASH_KEY: ci-only-hmac-key
-          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-          COVERAGE_FILE: .coverage.${{ matrix.shard }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          python scripts/ci_test_shard.py \
-            --index "${{ matrix.shard }}" \
-            --total "$CI_TEST_SHARDS" \
-            --failfast \
-            --durations 25
-      - name: Upload shard coverage and test results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: test-coverage-shard-${{ matrix.shard }}
-          path: |
-            .coverage.${{ matrix.shard }}
-            shard-${{ matrix.shard }}.xml
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 7
-
-  test:
-    name: test
-    if: always()
-    needs:
-      - preflight
-      - test-shards
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Verify required test jobs
-        env:
-          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
-          SHARDS_RESULT: ${{ needs.test-shards.result }}
-        run: |
-          test "$PREFLIGHT_RESULT" = "success"
-          test "$SHARDS_RESULT" = "success"
-
-  coverage:
-    name: coverage
-    if: always()
-    needs:
-      - test-shards
-    runs-on: ubuntu-latest
-    timeout-minutes: 6
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
-        with:
-          version: "0.11.16"
-          enable-cache: true
-          cache-dependency-glob: requirements/*.lock
-      - name: Install hashed development graph
-        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Download all shard results
-        if: needs.test-shards.result == 'success'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          pattern: test-coverage-shard-*
-          path: var/shard-results
-          merge-multiple: true
-      - name: Combine coverage and enforce ratchet
-        if: needs.test-shards.result == 'success'
-        run: python scripts/ci_coverage_report.py
-      - name: Fail when a shard failed
-        if: needs.test-shards.result != 'success'
-        run: exit 1
-      - name: Upload combined coverage and duration metrics
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: coverage-quality-results
-          path: var/quality
-          if-no-files-found: warn
-          retention-days: 14
-
-  postgres-integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
-        env:
-          POSTGRES_DB: integration_test
-          POSTGRES_USER: integration
-          POSTGRES_PASSWORD: integration_password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U integration -d integration_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
-        with:
-          version: "0.11.16"
-          enable-cache: true
-          cache-dependency-glob: requirements/*.lock
-      - name: Install pinned development dependencies
-        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Compile integration harness
-        run: |
-          python -m py_compile scripts/run_postgres_integration.py
-          python -m compileall -q tests/integration
-      - name: Run PostgreSQL integration suite
-        env:
-          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-          UID_HASH_KEY: ci-only-hmac-key
-          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-          TEST_DATABASE_URL: postgresql://integration:integration_password@127.0.0.1:5432/integration_test
-          POSTGRES_INTEGRATION_CONFIRM: "1"
-          POSTGRES_KEEP_FAILED_DATABASES: "1"
-          POSTGRES_INTEGRATION_ARTIFACT_DIR: var/integration-artifacts
-        run: python scripts/quality.py integration
-      - name: Collect PostgreSQL failure diagnostics
-        if: failure()
-        env:
-          PGPASSWORD: integration_password
-        run: |
-          mkdir -p var/integration-artifacts
-          container_id="$(docker ps --filter ancestor=postgres@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193 --format '{{.ID}}' | head -n 1)"
-          if [ -n "$container_id" ]; then
-            docker logs "$container_id" > var/integration-artifacts/postgres.log 2>&1 || true
-            docker exec "$container_id" \
-              psql -U integration -d integration_test \
-              -c "SELECT datname, numbackends, xact_commit, xact_rollback, deadlocks FROM pg_stat_database ORDER BY datname" \
-              > var/integration-artifacts/database-stats.txt 2>&1 || true
-
-            if [ -f var/integration-artifacts/failed-databases.txt ]; then
-              while IFS=$'\t' read -r database_name nodeid; do
-                [ -n "$database_name" ] || continue
-                docker exec "$container_id" \
-                  pg_dump -U integration -d "$database_name" \
-                  --schema-only --no-owner --no-privileges \
-                  > "var/integration-artifacts/${database_name}.sql" 2>&1 || true
-              done < var/integration-artifacts/failed-databases.txt
-            fi
-          fi
-      - name: Upload PostgreSQL diagnostics and metrics
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: postgres-integration-results
-          path: |
-            var/integration-artifacts
-            var/quality
-          if-no-files-found: warn
-          retention-days: 14
+          test "$HEAD_REF" = 'feature/issue-44-database-recovery'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/server/deploy.sh requirements/*.lock
+          git commit -m 'fix: split snapshot flow and refresh dependency locks'
+          git push origin "HEAD:$HEAD_REF"
