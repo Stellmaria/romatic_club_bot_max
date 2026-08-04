@@ -132,17 +132,9 @@ def _assert_common_runtime(service: Mapping[str, object], *, name: str) -> None:
         _fail(f"services.{name} must not publish host ports")
 
 
-def validate_compose_hardening(payload: Mapping[str, object]) -> None:
-    """Validate bot/userbot privilege, storage, network and readiness boundaries."""
-
-    bot = _service(payload, "bot")
-    userbot = _service(payload, "userbot")
-    postgres = _service(payload, "postgres")
-    supervisor = _service(payload, "supervisor-proxy")
-
-    _assert_common_runtime(bot, name="bot")
-    _assert_common_runtime(userbot, name="userbot")
-
+def _validate_writable_paths(
+    bot: Mapping[str, object], userbot: Mapping[str, object]
+) -> None:
     if _mount_targets(bot, name="bot") != {"/app/var"}:
         _fail("services.bot writable mounts must be limited to /app/var")
     if _mount_targets(userbot, name="userbot") != {
@@ -151,8 +143,11 @@ def validate_compose_hardening(payload: Mapping[str, object]) -> None:
     }:
         _fail("services.userbot writable mounts must be runtime and Telethon session only")
 
-    bot_secrets = _secret_sources(bot, name="bot")
-    if bot_secrets != {"supervisor_token"}:
+
+def _validate_supervisor_secrets(
+    bot: Mapping[str, object], userbot: Mapping[str, object]
+) -> None:
+    if _secret_sources(bot, name="bot") != {"supervisor_token"}:
         _fail("services.bot must receive only the supervisor_token secret")
     if "supervisor_token" in _secret_sources(userbot, name="userbot"):
         _fail("services.userbot must not receive the supervisor token")
@@ -172,39 +167,75 @@ def validate_compose_hardening(payload: Mapping[str, object]) -> None:
         if userbot_environment.get(field) not in {"", None}:
             _fail(f"services.userbot.{field} must be empty")
 
+
+def _validate_healthchecks(
+    bot: Mapping[str, object], userbot: Mapping[str, object]
+) -> None:
     if "/readyz" not in _healthcheck_command(bot, name="bot"):
         _fail("services.bot healthcheck must use application readiness")
     if "userbot.healthcheck" not in _healthcheck_command(userbot, name="userbot"):
         _fail("services.userbot healthcheck must use the bounded readiness module")
 
+
+def _validate_service_networks(
+    bot: Mapping[str, object],
+    userbot: Mapping[str, object],
+    postgres: Mapping[str, object],
+    supervisor: Mapping[str, object],
+) -> None:
     application_network = "romatic-application"
     database_network = "romatic-database"
     supervisor_network = "romatic-supervisor-control"
 
-    bot_networks = _network_names(bot, name="bot")
-    if bot_networks != {application_network, database_network, supervisor_network}:
+    if _network_names(bot, name="bot") != {
+        application_network,
+        database_network,
+        supervisor_network,
+    }:
         _fail("services.bot network allowlist is incorrect")
-
-    userbot_networks = _network_names(userbot, name="userbot")
-    if userbot_networks != {application_network, database_network}:
+    if _network_names(userbot, name="userbot") != {
+        application_network,
+        database_network,
+    }:
         _fail("services.userbot network allowlist is incorrect")
-
     if _network_names(postgres, name="postgres") != {database_network}:
         _fail("services.postgres must be isolated to the database network")
+
     supervisor_networks = _network_names(supervisor, name="supervisor-proxy")
     if application_network in supervisor_networks or database_network in supervisor_networks:
         _fail("services.supervisor-proxy must not join application or database networks")
 
+
+def _validate_network_definitions(payload: Mapping[str, object]) -> None:
     networks = _mapping(payload.get("networks"), field="networks")
-    application = _mapping(networks.get(application_network), field=application_network)
-    database = _mapping(networks.get(database_network), field=database_network)
-    control = _mapping(networks.get(supervisor_network), field=supervisor_network)
+    application = _mapping(networks.get("romatic-application"), field="romatic-application")
+    database = _mapping(networks.get("romatic-database"), field="romatic-database")
+    control = _mapping(
+        networks.get("romatic-supervisor-control"), field="romatic-supervisor-control"
+    )
     if bool(application.get("internal", False)):
         _fail("romatic-application must permit required outbound Telegram access")
     if database.get("internal") is not True:
         _fail("romatic-database must be internal")
     if control.get("internal") is not True:
         _fail("romatic-supervisor-control must be internal")
+
+
+def validate_compose_hardening(payload: Mapping[str, object]) -> None:
+    """Validate bot/userbot privilege, storage, network and readiness boundaries."""
+
+    bot = _service(payload, "bot")
+    userbot = _service(payload, "userbot")
+    postgres = _service(payload, "postgres")
+    supervisor = _service(payload, "supervisor-proxy")
+
+    _assert_common_runtime(bot, name="bot")
+    _assert_common_runtime(userbot, name="userbot")
+    _validate_writable_paths(bot, userbot)
+    _validate_supervisor_secrets(bot, userbot)
+    _validate_healthchecks(bot, userbot)
+    _validate_service_networks(bot, userbot, postgres, supervisor)
+    _validate_network_definitions(payload)
 
 
 def main() -> int:
