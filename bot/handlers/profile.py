@@ -21,9 +21,7 @@ async def user_profile(message: types.Message) -> None:
     if message.from_user is None:
         return
     subscribed = await is_subscribed(message.from_user.id)
-    notification_status = (
-        "Подписан ✅" if subscribed else "Не подписан"
-    )  # noqa: RUF001
+    notification_status = "Подписан ✅" if subscribed else "Не подписан"  # noqa: RUF001
 
     try:
         uid = await get_user_verified_uid(message.from_user.id)
