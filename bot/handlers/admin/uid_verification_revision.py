@@ -112,9 +112,7 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
     await call.answer()
 
     with suppress(TelegramBadRequest):
-        await message.edit_reply_markup(
-            reply_markup=kb_uidv_revision(req_id, chosen_list, reason)
-        )
+        await message.edit_reply_markup(reply_markup=kb_uidv_revision(req_id, chosen_list, reason))
 
 
 @router.callback_query(F.data.startswith("uidv|rev_reason|"))
@@ -199,9 +197,7 @@ async def uidv_revision_send(
     admin_id = call.from_user.id
     admin_username = call.from_user.username or call.from_user.full_name
 
-    set_revision = (
-        uidv_service.set_uid_verification_request_revision  # type: ignore[attr-defined]
-    )
+    set_revision = uidv_service.set_uid_verification_request_revision  # type: ignore[attr-defined]
     ok = await set_revision(
         req_id,
         moderator_id=admin_id,
