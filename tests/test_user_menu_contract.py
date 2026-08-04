@@ -2,7 +2,6 @@ from pathlib import Path
 
 from bot.bootstrap.routers import get_router_registry
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -17,6 +16,7 @@ def test_user_keyboard_exposes_public_sections_only() -> None:
         "🎴 Подать лот",
         "📦 Мои лоты",
         "📅 Сегодня",
+        "🛍 Биржа",
         "🔔 Уведомления",
         "🃏 Подписки",
         "👤 Профиль",
@@ -27,14 +27,12 @@ def test_user_keyboard_exposes_public_sections_only() -> None:
     ):
         assert label in source
 
-    layout = source[
-        source.index("USER_MENU_LAYOUT") : source.index("def build_user_main_keyboard")
-    ]
+    layout = source[source.index("USER_MENU_LAYOUT") : source.index("def build_user_main_keyboard")]
     assert "USER_MENU_TODAY" in layout
+    assert "USER_MENU_EXCHANGE" in layout
     assert "USER_MENU_SCHEDULE" not in layout
-    assert "USER_MENU_EXCHANGE" not in layout
 
-    # Constants remain only so stale Telegram keyboards can be rejected safely.
+    # The schedule constant remains so stale Telegram keyboards can be rejected safely.
     assert 'USER_MENU_SCHEDULE = "📆 Расписание"' in source
     assert 'USER_MENU_EXCHANGE = "🛍 Биржа"' in source
     assert "is_persistent=True" in source
@@ -53,7 +51,7 @@ def test_user_menu_routes_public_buttons_to_existing_flows() -> None:
     assert "UIDVerificationFSM.waiting_for_uid" in source
     assert "LuxScheduleFSM.choosing_month" in source
     assert 'F.data.startswith("notify_toggle_")' in source
-    assert "USER_MESSAGES[\"commands_info\"]" not in source
+    assert 'USER_MESSAGES["commands_info"]' not in source
 
 
 def test_today_is_public_while_other_schedule_entries_are_guarded() -> None:
@@ -64,20 +62,24 @@ def test_today_is_public_while_other_schedule_entries_are_guarded() -> None:
     assert "show_day_schedule(message, to_moscow(utc_now()).date())" in source
     assert 'Command("day")' in source
     assert 'Command("day", "today")' not in source
-    assert 'F.text == USER_MENU_SCHEDULE' in source
+    assert "F.text == USER_MENU_SCHEDULE" in source
     assert 'F.data.startswith("user_schedule|")' in source
     assert 'F.data.startswith("user_day|")' in source
 
 
-def test_exchange_entry_points_are_admin_only() -> None:
-    source = _source("bot/handlers/user_access_control.py")
+def test_exchange_entry_points_are_public() -> None:
+    access = _source("bot/handlers/user_access_control.py")
+    menu = _source("bot/handlers/user_menu.py")
 
-    assert 'F.text == USER_MENU_EXCHANGE' in source
-    assert 'F.data.startswith("user_exchange|")' in source
-    assert 'F.data.startswith("ex_view:")' in source
-    assert "StateFilter(*_EXCHANGE_STATES)" in source
-    assert "await is_admin" in source
-    assert "await state.clear()" in source
+    assert "USER_MENU_EXCHANGE" not in access
+    assert "ExchangeFSM" not in access
+    assert "Биржа доступна только администраторам" not in access
+
+    assert "F.text == USER_MENU_EXCHANGE" in menu
+    assert 'F.data == "user_exchange|root"' in menu
+    assert 'F.data == "user_exchange|create"' in menu
+    assert 'F.data == "ex_view:decks"' in menu
+    assert "start_exchange_submission(call.message, state)" in menu
 
 
 def test_luxury_schedule_access_remains_available() -> None:
@@ -101,8 +103,9 @@ def test_user_menu_has_universal_home_and_corrected_button_help() -> None:
     assert "Здесь всё работает через кнопки" in menu
     assert "Как пользоваться ботом" in access
     assert "📅 <b>Сегодня</b> — аукционы, которые идут в течение текущего дня." in access
+    assert "🛍 <b>Биржа</b> — выставление карт и просмотр принятых предложений." in access
     assert "Расписание по другим дням доступно администраторам и Лакшери-пользователям" in access
-    assert "Биржа является административной функцией" in access
+    assert "Биржа является административной функцией" not in access
     assert "Кнопка «🏠 Меню»" in access
 
 
