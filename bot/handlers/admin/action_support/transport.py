@@ -1,3 +1,4 @@
+# ruff: noqa: BLE001, RUF001, RUF022, UP007, UP035, UP045
 """Shared Telegram delivery, cancellation and access helpers."""
 
 from __future__ import annotations
