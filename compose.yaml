@@ -16,6 +16,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      romatic-database: {}
 
   supervisor-proxy:
     image: ${SUPERVISOR_PROXY_IMAGE:-romatic-server-supervisor-proxy:local}
@@ -64,6 +66,8 @@ services:
       args:
         REQUIREMENTS_LOCK: requirements/bot.lock
     restart: unless-stopped
+    init: true
+    user: "${ROMATIC_APP_UID:-10001}:${ROMATIC_APP_GID:-10001}"
     env_file:
       - ${BOT_ENV_FILE:-.env.bot}
     environment:
@@ -75,13 +79,35 @@ services:
     command: ["python", "main.py"]
     volumes:
       - ${ROMATIC_DATA_DIR:-./server-data}/runtime/bot:/app/var
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import json, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8081/readyz', timeout=3); payload = json.load(response); assert response.status == 200 and payload.get('ready') is True and payload.get('database') is True
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: ${BOT_MEMORY_LIMIT:-512m}
+    cpus: ${BOT_CPU_LIMIT:-1.0}
+    pids_limit: ${BOT_PIDS_LIMIT:-256}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: ${BOT_STOP_GRACE_PERIOD:-45s}
     depends_on:
       postgres:
         condition: service_healthy
       supervisor-proxy:
-        condition: service_started
+        condition: service_healthy
     networks:
-      default: {}
+      romatic-application: {}
+      romatic-database: {}
       romatic-supervisor-control: {}
 
   userbot:
@@ -90,6 +116,7 @@ services:
       args:
         REQUIREMENTS_LOCK: requirements/userbot.lock
     restart: unless-stopped
+    init: true
     user: "${ROMATIC_APP_UID:-10001}:${ROMATIC_APP_GID:-10001}"
     env_file:
       - ${USERBOT_ENV_FILE:-.env.userbot}
@@ -106,6 +133,9 @@ services:
     volumes:
       - ${ROMATIC_DATA_DIR:-./server-data}/runtime/userbot:/app/var
       - ${ROMATIC_DATA_DIR:-./server-data}/userbot-session:/run/romatic-userbot-session
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     healthcheck:
       test:
         - CMD
@@ -120,11 +150,20 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    mem_limit: ${USERBOT_MEMORY_LIMIT:-512m}
+    cpus: ${USERBOT_CPU_LIMIT:-1.0}
+    pids_limit: ${USERBOT_PIDS_LIMIT:-256}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: ${USERBOT_STOP_GRACE_PERIOD:-45s}
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      default: {}
+      romatic-application: {}
+      romatic-database: {}
 
 volumes:
   postgres_data:
@@ -134,6 +173,13 @@ secrets:
     file: ${SUPERVISOR_TOKEN_FILE_HOST:-./server-data/runtime/supervisor/token}
 
 networks:
+  romatic-application:
+    name: ${ROMATIC_APPLICATION_NETWORK:-romatic-application}
+    driver: bridge
+  romatic-database:
+    name: ${ROMATIC_DATABASE_NETWORK:-romatic-database}
+    driver: bridge
+    internal: true
   romatic-supervisor-control:
     name: ${ROMATIC_SUPERVISOR_NETWORK:-romatic-supervisor-control}
     driver: bridge
