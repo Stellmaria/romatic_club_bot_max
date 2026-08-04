@@ -67,7 +67,6 @@ async def privacy_export(
             f"Идентификатор: <code>{result.correlation_id}</code>"
         ),
         parse_mode="HTML",
-        protect_content=True,
     )
     logger.info(
         "Privacy export delivered",
