@@ -1,0 +1,40 @@
+name: Hotfix Type Fix
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-type-fix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: true
+      - name: Annotate reply markup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("bot/handlers/admin/action_support/transport.py")
+          text = path.read_text(encoding="utf-8")
+          old = "    call: CallbackQuery, new_text: str, reply_markup=None, silent: bool = False\n"
+          new = "    call: CallbackQuery,\n    new_text: str,\n    reply_markup: InlineKeyboardMarkup | None = None,\n    silent: bool = False,\n"
+          if old not in text:
+              raise SystemExit("expected safe_edit_message signature not found")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Format and commit
+        run: |
+          python -m pip install black==26.5.1
+          python -m black bot/handlers/admin/action_support/transport.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- bot/handlers/admin/action_support/transport.py
+          git commit -m "fix: type safe edit reply markup"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
