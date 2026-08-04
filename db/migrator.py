@@ -154,8 +154,7 @@ def _parse_migration_policy(*, filename: str, version: int, sql: str) -> Migrati
         rollback = RollbackStrategy(metadata["rollback"].casefold())
     except ValueError as error:
         raise RuntimeError(
-            f"Migration {filename} has unsupported rollback policy: "
-            f"{metadata['rollback']!r}"
+            f"Migration {filename} has unsupported rollback policy: " f"{metadata['rollback']!r}"
         ) from error
 
     note = metadata["note"].strip()
@@ -180,8 +179,7 @@ def _load_migrations(directory: Path = MIGRATIONS_DIR) -> list[Migration]:
         match = MIGRATION_NAME_RE.fullmatch(path.name)
         if not match:
             raise RuntimeError(
-                f"Неверное имя миграции {path.name!r}. "
-                "Ожидается формат 001_description.sql"
+                f"Неверное имя миграции {path.name!r}. " "Ожидается формат 001_description.sql"
             )
 
         version = int(match.group("version"))
@@ -297,8 +295,7 @@ async def _ensure_migration_table(conn: asyncpg.Connection) -> None:
                 legacy_name,
             )
 
-    await conn.execute(
-        """
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS public.schema_migrations (
             filename          text PRIMARY KEY,
             version           integer NOT NULL UNIQUE,
@@ -307,18 +304,15 @@ async def _ensure_migration_table(conn: asyncpg.Connection) -> None:
             execution_ms      integer NOT NULL,
             postgres_version  text NOT NULL
         )
-        """
-    )
+        """)
 
 
 async def _applied_migrations(conn: asyncpg.Connection) -> dict[str, asyncpg.Record]:
-    rows = await conn.fetch(
-        """
+    rows = await conn.fetch("""
         SELECT filename, version, checksum, applied_at
         FROM public.schema_migrations
         ORDER BY version
-        """
-    )
+        """)
     return {str(row["filename"]): row for row in rows}
 
 
@@ -443,11 +437,7 @@ async def apply_migrations(
                     )
 
                 conflicting = next(
-                    (
-                        row
-                        for row in applied.values()
-                        if int(row["version"]) == migration.version
-                    ),
+                    (row for row in applied.values() if int(row["version"]) == migration.version),
                     None,
                 )
                 if conflicting is not None:
@@ -577,20 +567,16 @@ async def _execute_command(command: str) -> dict[str, Any]:
         allow_contract=_allow_contract_from_env(),
     )
     after = await plan_database_url(settings.url)
-    applied_policies = [
-        item for item in before["pending"] if item["filename"] in set(applied)
-    ]
+    applied_policies = [item for item in before["pending"] if item["filename"] in set(applied)]
     return {
         "applied": applied,
         "applied_count": len(applied),
         "applied_policies": applied_policies,
         "code_rollback_safe": all(
-            item["rollback"] == RollbackStrategy.CODE_ONLY_SAFE.value
-            for item in applied_policies
+            item["rollback"] == RollbackStrategy.CODE_ONLY_SAFE.value for item in applied_policies
         ),
         "requires_forward_fix": any(
-            item["rollback"] != RollbackStrategy.CODE_ONLY_SAFE.value
-            for item in applied_policies
+            item["rollback"] != RollbackStrategy.CODE_ONLY_SAFE.value for item in applied_policies
         ),
         "current_version": after["current_version"],
         "target_version": after["target_version"],
