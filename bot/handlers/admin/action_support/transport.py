@@ -1,4 +1,5 @@
-"""Shared Telegram and Telethon delivery, cancellation and access helpers."""
+# ruff: noqa: BLE001, RUF001, RUF022, UP007, UP035, UP045
+"""Shared Telegram delivery, cancellation and access helpers."""
 
 from __future__ import annotations
 
@@ -13,7 +14,6 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User
-from telethon.tl.functions.messages import SendMessageRequest
 
 from bot.core.legacy_config import legacy_config
 from bot.core.time import to_moscow
@@ -67,9 +67,7 @@ def _human_wait(delta: timedelta) -> str:
     return " ".join(parts)
 
 
-def _resolve_bot_from_message(
-        message: Message, given: Optional[Bot] = None
-) -> Optional[Bot]:
+def _resolve_bot_from_message(message: Message, given: Optional[Bot] = None) -> Optional[Bot]:
     if isinstance(given, Bot):
         return given
     mb = getattr(message, "bot", None)
@@ -108,9 +106,7 @@ def format_date_time_block(st: Any, et: Any) -> str:
     et_dt = parse_datetime_field(et)
     if isinstance(st_dt, datetime) and isinstance(et_dt, datetime):
         date = st_dt.strftime("%d.%m.%Y")
-        return (
-            f"<b>Назначен на:</b> {date} {st_dt:%H:%M}–{et_dt:%H:%M} (МСК)\n"
-        )
+        return f"<b>Назначен на:</b> {date} {st_dt:%H:%M}–{et_dt:%H:%M} (МСК)\n"
     return ""
 
 
@@ -193,7 +189,12 @@ def owner_required(
 owner_or_secret_required = owner_required
 
 
-async def safe_edit_message(call: CallbackQuery, new_text: str, reply_markup=None, silent: bool = False) -> None:
+async def safe_edit_message(
+    call: CallbackQuery,
+    new_text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    silent: bool = False,
+) -> None:
     m = as_message(call)
     if m is None:
         await call.answer(tg_clean(new_text)[:190], show_alert=True)
@@ -217,7 +218,9 @@ async def safe_edit_message(call: CallbackQuery, new_text: str, reply_markup=Non
     bot: Optional[Bot] = require_bot(call)
     chat_id: Optional[Union[int, str]] = getattr(getattr(m, "chat", None), "id", None)
     if bot is not None and chat_id is not None:
-        await bot.send_message(chat_id, tg_clean(new_text), reply_markup=reply_markup, parse_mode="HTML")
+        await bot.send_message(
+            chat_id, tg_clean(new_text), reply_markup=reply_markup, parse_mode="HTML"
+        )
 
 
 async def notify_owners(bot: Bot, text: str, silent: bool = False) -> None:
@@ -229,11 +232,13 @@ async def notify_owners(bot: Bot, text: str, silent: bool = False) -> None:
                 print(f"[OWNER NOTIFY ERROR] {owner_id}: {e}")
 
 
-async def send_log_to_chats(client_api, text: str) -> None:
+async def send_log_to_chats(client_api: Any, text: str) -> None:
+    """Send log text through the supplied Telegram client without importing Telethon."""
+
     for chat_id in legacy_config.ADMIN_LOG_CHATS:
         try:
             entity = await client_api.get_entity(chat_id)
-            await client_api(SendMessageRequest(peer=entity, message=text))
+            await client_api.send_message(entity, text)
             print(f"[LOG OK] Сообщение отправлено в лог-чат {chat_id}")
         except Exception as e:
             print(f"[LOG ERROR] {e}")
@@ -254,31 +259,19 @@ async def verify_log_chats(bot: Bot) -> None:
 
 def get_cancel_text(state_name: Optional[str]) -> str:
     cancel_map: dict[str, str] = {
-        "ModActionFSM:waiting_for_unluxury_user": (
-            CANCEL_TEXTS["removeluxury_cancel"][0]
-        ),
-        "ModActionFSM:waiting_for_luxury_user": (
-            CANCEL_TEXTS["giveluxury_cancel"][0]
-        ),
-        "ModActionFSM:waiting_for_admin_user": (
-            CANCEL_TEXTS["addadmin_cancel"][0]
-        ),
-        "ModActionFSM:waiting_for_admin_remove_user": (
-            CANCEL_TEXTS["removeadmin_cancel"][0]
-        ),
+        "ModActionFSM:waiting_for_unluxury_user": (CANCEL_TEXTS["removeluxury_cancel"][0]),
+        "ModActionFSM:waiting_for_luxury_user": (CANCEL_TEXTS["giveluxury_cancel"][0]),
+        "ModActionFSM:waiting_for_admin_user": (CANCEL_TEXTS["addadmin_cancel"][0]),
+        "ModActionFSM:waiting_for_admin_remove_user": (CANCEL_TEXTS["removeadmin_cancel"][0]),
         "ModActionFSM:waiting_for_trusted_user": "Выдача доверия отменена.",
-        "ModActionFSM:waiting_for_untrusted_user": (
-            "Снятие доверия отменена."
-        ),
+        "ModActionFSM:waiting_for_untrusted_user": ("Снятие доверия отменена."),
     }
     key = state_name if isinstance(state_name, str) else ""
     default_msg = str(CANCEL_MSG)
     return cancel_map.get(key, default_msg)
 
 
-async def process_universal_cancel_text(
-        message: Message, state: FSMContext
-) -> None:
+async def process_universal_cancel_text(message: Message, state: FSMContext) -> None:
     cancel_text = get_cancel_text(await state.get_state())
     await state.clear()
     await message.answer(
@@ -287,9 +280,7 @@ async def process_universal_cancel_text(
     )
 
 
-async def process_universal_cancel_callback(
-        call: CallbackQuery, state: FSMContext
-) -> None:
+async def process_universal_cancel_callback(call: CallbackQuery, state: FSMContext) -> None:
     cancel_text = get_cancel_text(await state.get_state())
     await state.clear()
 
@@ -321,7 +312,9 @@ async def process_universal_cancel_callback(
     await call.answer()
 
 
-async def send_lot_card_safe(message: Message, lot: Mapping[str, Any], text: str, kb: InlineKeyboardMarkup) -> None:
+async def send_lot_card_safe(
+    message: Message, lot: Mapping[str, Any], text: str, kb: InlineKeyboardMarkup
+) -> None:
     image_id = lot.get("image_id") or lot.get("card_image_id")
     try:
         if image_id:
@@ -347,7 +340,6 @@ async def send_lot_card_safe(message: Message, lot: Mapping[str, Any], text: str
                 )
 
 
-
 # Public compatibility aliases. Cross-feature imports must use these names.
 ensure_sender = _ensure_sender
 human_wait = _human_wait
@@ -355,4 +347,29 @@ resolve_bot_from_message = _resolve_bot_from_message
 safe_strip = _safe_strip
 to_msk = _to_msk
 
-__all__ = ['_safe_strip', 'parse_datetime_field', '_to_msk', '_human_wait', '_resolve_bot_from_message', '_ensure_sender', 'as_message', 'require_bot', '_call_maybe_await', 'format_date_time_block', 'owner_or_secret_required', 'safe_edit_message', 'notify_owners', 'send_log_to_chats', 'verify_log_chats', 'get_cancel_text', 'process_universal_cancel_text', 'process_universal_cancel_callback', 'send_lot_card_safe', 'ensure_sender', 'human_wait', 'resolve_bot_from_message', 'safe_strip', 'to_msk']
+__all__ = [
+    "_safe_strip",
+    "parse_datetime_field",
+    "_to_msk",
+    "_human_wait",
+    "_resolve_bot_from_message",
+    "_ensure_sender",
+    "as_message",
+    "require_bot",
+    "_call_maybe_await",
+    "format_date_time_block",
+    "owner_or_secret_required",
+    "safe_edit_message",
+    "notify_owners",
+    "send_log_to_chats",
+    "verify_log_chats",
+    "get_cancel_text",
+    "process_universal_cancel_text",
+    "process_universal_cancel_callback",
+    "send_lot_card_safe",
+    "ensure_sender",
+    "human_wait",
+    "resolve_bot_from_message",
+    "safe_strip",
+    "to_msk",
+]
