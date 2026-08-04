@@ -97,7 +97,7 @@ async def test_discovers_all_issue99_actions_from_exact_telegram_metadata() -> N
             message_id=1149326,
             channel_message_id=12021,
         ),
-        (settings.auction_channel_id, 5927): _channel_message(3797, message_id=5927),
+        (settings.auction_channel_id, 5948): _channel_message(3797, message_id=5948),
         (settings.auction_channel_id, 10139): _channel_message(7523, message_id=10139),
     }
     client = _Client(
@@ -124,6 +124,7 @@ async def test_discovers_all_issue99_actions_from_exact_telegram_metadata() -> N
     assert by_id[9210].channel_message_id == 12010
     assert by_id[9210].discussion_message_id == 1148772
     assert by_id[3797].action == "normalize_published"
+    assert by_id[3797].channel_message_id == 5948
     assert by_id[9243].channel_message_id == 12043
 
 
@@ -147,7 +148,7 @@ async def test_rejects_discussion_root_forwarded_from_another_channel() -> None:
             message_id=1149326,
             channel_message_id=12021,
         ),
-        (settings.auction_channel_id, 5927): _channel_message(3797, message_id=5927),
+        (settings.auction_channel_id, 5948): _channel_message(3797, message_id=5948),
         (settings.auction_channel_id, 10139): _channel_message(7523, message_id=10139),
     }
 
@@ -181,7 +182,7 @@ async def test_rejects_ambiguous_channel_search_for_9243() -> None:
             message_id=1149326,
             channel_message_id=12021,
         ),
-        (settings.auction_channel_id, 5927): _channel_message(3797, message_id=5927),
+        (settings.auction_channel_id, 5948): _channel_message(3797, message_id=5948),
         (settings.auction_channel_id, 10139): _channel_message(7523, message_id=10139),
     }
 
