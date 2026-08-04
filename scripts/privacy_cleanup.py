@@ -73,14 +73,10 @@ def _validate_retention_policy(class_name: str, raw_policy: object) -> dict[str,
         raise InventoryError(f"retention class {class_name!r} has invalid status")
 
     days = raw_policy.get("days")
-    if days is not None and (
-        not isinstance(days, int) or isinstance(days, bool) or days <= 0
-    ):
+    if days is not None and (not isinstance(days, int) or isinstance(days, bool) or days <= 0):
         raise InventoryError(f"retention class {class_name!r} days must be positive")
     if raw_policy.get("destructive_enabled") is not False:
-        raise InventoryError(
-            f"retention class {class_name!r} must keep destructive_enabled=false"
-        )
+        raise InventoryError(f"retention class {class_name!r} must keep destructive_enabled=false")
     return raw_policy
 
 
@@ -97,18 +93,14 @@ def _validate_retention_classes(value: object) -> dict[str, dict[str, Any]]:
 
 
 def _require_string_list(dataset_id: str, field_name: str, value: object) -> list[str]:
-    if not isinstance(value, list) or not all(
-        isinstance(item, str) and item for item in value
-    ):
+    if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
         raise InventoryError(f"dataset {dataset_id!r} {field_name} must contain strings")
     return value
 
 
 def _require_non_empty_string(dataset_id: str, field_name: str, value: object) -> str:
     if not isinstance(value, str) or not value:
-        raise InventoryError(
-            f"dataset {dataset_id!r} {field_name} must be a non-empty string"
-        )
+        raise InventoryError(f"dataset {dataset_id!r} {field_name} must be a non-empty string")
     return value
 
 
@@ -160,9 +152,7 @@ def _validate_dataset_policy(
             f"dataset {dataset_id!r} references unknown retention class {retention_class!r}"
         )
     if raw_dataset["backup_presence"] is not True:
-        raise InventoryError(
-            f"dataset {dataset_id!r} must explicitly acknowledge backup presence"
-        )
+        raise InventoryError(f"dataset {dataset_id!r} must explicitly acknowledge backup presence")
     return retention_class
 
 
@@ -189,9 +179,7 @@ def _validate_cleanup_rule(
     if raw_rule.get("status") != "approved":
         raise InventoryError(f"cleanup rule {rule_id!r} must be explicitly approved")
     if raw_rule.get("destructive_enabled") is not False:
-        raise InventoryError(
-            f"cleanup rule {rule_id!r} must keep destructive_enabled=false"
-        )
+        raise InventoryError(f"cleanup rule {rule_id!r} must keep destructive_enabled=false")
     if retention_policy.get("status") != "approved" or not isinstance(
         retention_policy.get("days"), int
     ):
@@ -342,9 +330,7 @@ async def _run_plan(args: argparse.Namespace) -> int:
     if not args.offline:
         database_url = os.environ.get("DATABASE_URL", "").strip()
         if not database_url:
-            raise InventoryError(
-                "DATABASE_URL is required unless --offline is explicitly selected"
-            )
+            raise InventoryError("DATABASE_URL is required unless --offline is explicitly selected")
         connection, counter = await _database_counter(database_url)
 
     try:
