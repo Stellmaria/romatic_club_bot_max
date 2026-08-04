@@ -32,7 +32,7 @@ def test_migration_discovery_fails_closed_for_missing_resources() -> None:
         try:
             _load_migrations(Path(directory))
         except RuntimeError as error:
-            assert "нет SQL-миграций" in str(error)
+            assert "No SQL migrations found" in str(error)
         else:  # pragma: no cover
             raise AssertionError("an empty migration package was accepted")
 
