@@ -1,4 +1,4 @@
-name: Privacy Black Diff
+name: Privacy Black Format
 
 on:
   push:
@@ -7,15 +7,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  issues: write
+  contents: write
 
 jobs:
-  black-diff:
+  black-format:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
+      - name: Checkout feature branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feat/issue-45-privacy-foundation
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
@@ -29,25 +30,18 @@ jobs:
           cache-dependency-glob: requirements/*.lock
       - name: Install development graph
         run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Capture exact Black diff
+      - name: Format bounded privacy files
         run: |
-          python -m black --diff scripts/privacy_cleanup.py tests/test_privacy_lifecycle.py \
-            > /tmp/privacy-black.diff || true
-          test -s /tmp/privacy-black.diff
-      - name: Publish diagnostic diff to PR
-        env:
-          GH_TOKEN: ${{ github.token }}
+          python -m black scripts/privacy_cleanup.py tests/test_privacy_lifecycle.py
+          git diff --check
+      - name: Commit formatter output when needed
         run: |
-          python - <<'PY' > /tmp/comment.md
-          from pathlib import Path
-
-          diff = Path('/tmp/privacy-black.diff').read_text(encoding='utf-8')
-          print('<!-- privacy-black-diagnostic -->')
-          print('Temporary exact Black diff for PR #116:')
-          print('```diff')
-          print(diff[:60000])
-          print('```')
-          PY
-          gh api repos/${{ github.repository }}/issues/116/comments \
-            --method POST \
-            --raw-field body="$(cat /tmp/comment.md)"
+          if git diff --quiet -- scripts/privacy_cleanup.py tests/test_privacy_lifecycle.py; then
+            echo "black_format=no_changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- scripts/privacy_cleanup.py tests/test_privacy_lifecycle.py
+          git commit -m "style: apply Black to privacy foundation"
+          git push origin HEAD:feat/issue-45-privacy-foundation
