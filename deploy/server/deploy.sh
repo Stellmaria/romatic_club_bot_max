@@ -85,9 +85,10 @@ exec > >(tee -a "$deployment_log") 2>&1
 echo "Deployment log: $deployment_log"
 
 snapshot_userbot_session() {
-  local exists_status
+  local exists_status snapshot_tmp
 
-  if "${compose[@]}" run --rm --no-deps --user 0:0 userbot python - <<'PY'
+  if "${compose[@]}" run --rm -T --no-deps \
+    --user "$app_uid:$app_gid" userbot python - <<'PY'
 from pathlib import Path
 
 raise SystemExit(
@@ -107,11 +108,13 @@ PY
     return "$exists_status"
   fi
 
-  "${compose[@]}" run --rm --no-deps --user 0:0 \
+  snapshot_tmp="${session_snapshot_path}.tmp"
+  rm -f "$snapshot_tmp"
+  if ! "${compose[@]}" run --rm -T --no-deps \
+    --user "$app_uid:$app_gid" \
     -e ROMATIC_EXPECTED_APP_UID="$app_uid" \
     -e ROMATIC_EXPECTED_APP_GID="$app_gid" \
-    -v "$data_dir/backups:/backup" \
-    userbot python - "$(basename "$session_snapshot_path")" <<'PY'
+    userbot python - <<'PY' >"$snapshot_tmp"
 import os
 import sqlite3
 import stat
@@ -119,7 +122,7 @@ import sys
 from pathlib import Path
 
 source_path = Path("/run/romatic-userbot-session/userbot.session")
-target_path = Path("/backup") / sys.argv[1]
+target_path = Path("/tmp/userbot-session-snapshot.session")
 expected_uid = int(os.environ["ROMATIC_EXPECTED_APP_UID"])
 expected_gid = int(os.environ["ROMATIC_EXPECTED_APP_GID"])
 
@@ -136,6 +139,7 @@ if source_mode & 0o077:
         f"Telethon session permissions are too broad: {source_mode:04o}"
     )
 
+target_path.unlink(missing_ok=True)
 source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
 target = sqlite3.connect(target_path)
 try:
@@ -147,12 +151,38 @@ finally:
     target.close()
     source.close()
 
-os.chown(target_path, 0, expected_gid)
-os.chmod(target_path, 0o640)
-print(f"Verified userbot session snapshot: {target_path}")
+sys.stdout.buffer.write(target_path.read_bytes())
+target_path.unlink(missing_ok=True)
 PY
+  then
+    rm -f "$snapshot_tmp"
+    return 1
+  fi
 
-  test -s "$session_snapshot_path"
+  if ! python3 - "$snapshot_tmp" <<'PY'
+import sqlite3
+import sys
+from pathlib import Path
+
+snapshot_path = Path(sys.argv[1])
+if not snapshot_path.is_file() or snapshot_path.stat().st_size == 0:
+    raise RuntimeError("Telethon session snapshot is empty")
+
+connection = sqlite3.connect(f"file:{snapshot_path}?mode=ro", uri=True)
+try:
+    result = connection.execute("PRAGMA quick_check").fetchone()
+    if result != ("ok",):
+        raise RuntimeError(f"Host session snapshot quick_check failed: {result!r}")
+finally:
+    connection.close()
+PY
+  then
+    rm -f "$snapshot_tmp"
+    return 1
+  fi
+
+  chmod 0600 "$snapshot_tmp"
+  mv -f "$snapshot_tmp" "$session_snapshot_path"
   session_snapshot_created=1
   echo "Verified userbot session snapshot: $session_snapshot_path"
 }
@@ -164,29 +194,18 @@ restore_userbot_session() {
 
   echo "Restoring pre-deploy Telethon session snapshot..." >&2
   "${compose[@]}" stop userbot >&2 || true
-  "${compose[@]}" run --rm --no-deps --user 0:0 \
-    -e ROMATIC_EXPECTED_APP_UID="$app_uid" \
-    -e ROMATIC_EXPECTED_APP_GID="$app_gid" \
-    -v "$session_snapshot_path:/tmp/userbot-session.snapshot:ro" \
-    userbot python - <<'PY'
+  cat "$session_snapshot_path" | "${compose[@]}" run --rm -T --no-deps \
+    --user "$app_uid:$app_gid" userbot python -c '
 import os
-import shutil
 import sqlite3
+import sys
 from pathlib import Path
 
-source_path = Path("/tmp/userbot-session.snapshot")
 session_file = Path("/run/romatic-userbot-session/userbot.session")
 restore_path = Path(f"{session_file}.restore")
-expected_uid = int(os.environ["ROMATIC_EXPECTED_APP_UID"])
-expected_gid = int(os.environ["ROMATIC_EXPECTED_APP_GID"])
-
-source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
-try:
-    result = source.execute("PRAGMA quick_check").fetchone()
-    if result != ("ok",):
-        raise RuntimeError(f"Snapshot quick_check failed: {result!r}")
-finally:
-    source.close()
+payload = sys.stdin.buffer.read()
+if not payload:
+    raise RuntimeError("Telethon session snapshot payload is empty")
 
 session_file.parent.mkdir(parents=True, exist_ok=True)
 for candidate in (
@@ -197,11 +216,17 @@ for candidate in (
 ):
     candidate.unlink(missing_ok=True)
 
-shutil.copyfile(source_path, restore_path)
-os.chown(restore_path, expected_uid, expected_gid)
+restore_path.write_bytes(payload)
 os.chmod(restore_path, 0o600)
-os.replace(restore_path, session_file)
+connection = sqlite3.connect(f"file:{restore_path}?mode=ro", uri=True)
+try:
+    result = connection.execute("PRAGMA quick_check").fetchone()
+    if result != ("ok",):
+        raise RuntimeError(f"Snapshot quick_check failed: {result!r}")
+finally:
+    connection.close()
 
+os.replace(restore_path, session_file)
 connection = sqlite3.connect(f"file:{session_file}?mode=ro", uri=True)
 try:
     result = connection.execute("PRAGMA quick_check").fetchone()
@@ -211,7 +236,7 @@ finally:
     connection.close()
 
 print("Telethon session restored")
-PY
+'
   session_mutated=0
   echo "Telethon session restored from $session_snapshot_path" >&2
 }
@@ -312,20 +337,22 @@ PY
 
 if [[ "$session_snapshot_created" == "1" ]]; then
   echo "Checking target Telethon against an isolated session copy..."
-  "${compose[@]}" run --rm --no-deps \
-    -v "$session_snapshot_path:/tmp/session-source.session:ro" \
-    userbot python - <<'PY'
-import shutil
+  cat "$session_snapshot_path" | "${compose[@]}" run --rm -T --no-deps \
+    --user "$app_uid:$app_gid" userbot python -c '
+import sys
 from pathlib import Path
 
 from telethon.sessions import SQLiteSession
 
 from userbot.session_schema import repair_session_schema
 
-source_path = Path("/tmp/session-source.session")
+payload = sys.stdin.buffer.read()
+if not payload:
+    raise RuntimeError("Telethon session snapshot payload is empty")
+
 probe_path = Path("/tmp/session-probe/userbot.session")
 probe_path.parent.mkdir(parents=True, exist_ok=True)
-shutil.copyfile(source_path, probe_path)
+probe_path.write_bytes(payload)
 probe_path.chmod(0o600)
 repair_session_schema(probe_path)
 
@@ -337,7 +364,7 @@ finally:
     session.close()
 
 print("Target Telethon session compatibility preflight OK")
-PY
+'
 
   echo "Stopping userbot before live Telethon session migration..."
   "${compose[@]}" stop userbot

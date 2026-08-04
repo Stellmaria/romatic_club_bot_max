@@ -176,6 +176,18 @@ def test_deploy_snapshots_and_restores_telethon_session_transactionally() -> Non
     assert deploy.index("snapshot_userbot_session") < deploy.index('git reset --hard "$target_sha"')
 
 
+def test_deploy_session_transfer_respects_hardened_application_uid() -> None:
+    deploy = source("deploy/server/deploy.sh")
+
+    assert '--user "$app_uid:$app_gid"' in deploy
+    assert "--user 0:0" not in deploy
+    assert "sys.stdout.buffer.write(target_path.read_bytes())" in deploy
+    assert 'cat "$session_snapshot_path" |' in deploy
+    assert '-v "$data_dir/backups:/backup"' not in deploy
+    assert '-v "$session_snapshot_path:' not in deploy
+    assert 'chmod 0600 "$snapshot_tmp"' in deploy
+
+
 def test_panel_does_not_report_pidless_or_restarting_container_as_healthy() -> None:
     panel = source("bot/handlers/admin/admin_panel_system.py")
 
