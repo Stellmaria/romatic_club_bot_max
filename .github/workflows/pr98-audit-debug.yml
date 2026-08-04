@@ -1,4 +1,4 @@
-name: PR98 Audit Debug
+name: PR98 Dependency Fix
 
 on:
   push:
@@ -8,11 +8,15 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: pr98-dependency-fix
+  cancel-in-progress: true
+
 jobs:
-  inspect:
+  fix:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -24,31 +28,25 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           version: "0.11.16"
-      - name: Install hashed security tooling
-        run: uv pip install --system --require-hashes --no-deps -r requirements/tools.lock
-      - name: Capture exact dependency audit output
+      - name: Regenerate canonical locks
+        shell: bash
+        run: scripts/compile_locks.sh requirements
+      - name: Verify the updated locked graphs
         shell: bash
         run: |
-          mkdir -p .tmp
-          set +e
-          {
-            echo '=== active exceptions ==='
-            python scripts/check_vulnerability_exceptions.py --format pip-audit
-            echo
-            read -r -a ignores <<< "$(python scripts/check_vulnerability_exceptions.py --format pip-audit)"
-            for lock in requirements/bot.lock requirements/userbot.lock requirements/tools.lock requirements/dev.lock; do
-              echo "=== $lock ==="
-              pip-audit --strict --progress-spinner=off --disable-pip --no-deps -r "$lock" "${ignores[@]}"
-              echo "exit=$?"
-              echo
-            done
-          } > .tmp/pr98-audit-output.txt 2>&1
-          exit 0
-      - name: Publish audit output
+          uv pip install --system --require-hashes --no-deps -r requirements/tools.lock
+          read -r -a ignores <<< "$(python scripts/check_vulnerability_exceptions.py --format pip-audit)"
+          for lock in requirements/bot.lock requirements/userbot.lock requirements/tools.lock requirements/dev.lock; do
+            pip-audit --strict --progress-spinner=off --disable-pip --no-deps -r "$lock" "${ignores[@]}"
+          done
+      - name: Publish regenerated locks
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .tmp/pr98-audit-output.txt
-          git commit -m 'chore: capture dependency audit output'
+          git add requirements/bot.lock requirements/userbot.lock requirements/tools.lock requirements/dev.lock
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'build(deps): regenerate locks for cryptography 50'
           git push origin HEAD:feat/issue-42-observability
