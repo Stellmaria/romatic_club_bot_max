@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
 import os
 import struct
+from contextlib import suppress
 from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -21,14 +23,10 @@ HEADER = struct.Struct(">8s12sQ")
 def _load_key(path: Path) -> bytes:
     raw = path.read_bytes().strip()
     candidates = [raw]
-    try:
+    with suppress(ValueError, binascii.Error):
         candidates.append(base64.urlsafe_b64decode(raw))
-    except Exception:
-        pass
-    try:
+    with suppress(ValueError, UnicodeDecodeError):
         candidates.append(bytes.fromhex(raw.decode("ascii")))
-    except Exception:
-        pass
     for key in candidates:
         if len(key) == 32:
             return key
