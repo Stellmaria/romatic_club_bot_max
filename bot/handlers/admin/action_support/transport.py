@@ -1,4 +1,4 @@
-"""Shared Telegram and Telethon delivery, cancellation and access helpers."""
+"""Shared Telegram delivery, cancellation and access helpers."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User
-from telethon.tl.functions.messages import SendMessageRequest
 
 from bot.core.legacy_config import legacy_config
 from bot.core.time import to_moscow
@@ -229,11 +228,13 @@ async def notify_owners(bot: Bot, text: str, silent: bool = False) -> None:
                 print(f"[OWNER NOTIFY ERROR] {owner_id}: {e}")
 
 
-async def send_log_to_chats(client_api, text: str) -> None:
+async def send_log_to_chats(client_api: Any, text: str) -> None:
+    """Send log text through the supplied Telegram client without importing Telethon."""
+
     for chat_id in legacy_config.ADMIN_LOG_CHATS:
         try:
             entity = await client_api.get_entity(chat_id)
-            await client_api(SendMessageRequest(peer=entity, message=text))
+            await client_api.send_message(entity, text)
             print(f"[LOG OK] Сообщение отправлено в лог-чат {chat_id}")
         except Exception as e:
             print(f"[LOG ERROR] {e}")
@@ -345,7 +346,6 @@ async def send_lot_card_safe(message: Message, lot: Mapping[str, Any], text: str
                     reply_markup=kb,
                     parse_mode="HTML",
                 )
-
 
 
 # Public compatibility aliases. Cross-feature imports must use these names.
