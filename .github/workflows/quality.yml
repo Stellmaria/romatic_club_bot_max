@@ -1,180 +1,269 @@
-name: Issue44 Snapshot and Lock Fix
+name: Quality Gates
 
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   changed-code-quality:
-    if: github.event.pull_request.head.ref == 'feature/issue-44-database-recovery'
+    name: changed-code-quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Run changed-file quality ratchet
+        run: python scripts/quality.py changed
+
+  typing-and-architecture:
+    name: typing-and-architecture
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
-          version: '0.11.16'
-      - name: Split Telethon snapshot responsibilities
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Run strict package typing ratchet
+        run: python scripts/quality.py typing
+      - name: Run architecture gates
+        env:
+          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          UID_HASH_KEY: ci-only-hmac-key
+          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: python scripts/quality.py architecture
+      - name: Upload typing metrics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: typing-ratchet-results
+          path: var/quality/mypy-results.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  security-boundary:
+    name: security-boundary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Verify immutable references
+        run: python scripts/check_immutable_references.py
+      - name: Validate bounded vulnerability exceptions
+        run: python scripts/check_vulnerability_exceptions.py
+      - name: Run security boundary contracts
+        run: python scripts/quality.py security
+      - name: Verify UID encryption rotation continuity
+        run: python -m pytest -q tests/test_uid_key_rotation.py tests/test_python_runtime_contract.py
+
+  dependency-security:
+    name: dependency-security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install hashed security tooling
+        run: uv pip install --system --require-hashes --no-deps -r requirements/tools.lock
+      - name: Verify lock reproducibility
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('deploy/server/deploy.sh')
-          text = path.read_text(encoding='utf-8')
-          marker = 'session_snapshot_created=0\n'
-          if text.count(marker) != 1:
-              raise SystemExit('unexpected session snapshot state marker')
-          text = text.replace(marker, marker + 'session_file_exists=0\n', 1)
-
-          start = text.index('snapshot_userbot_session() {\n')
-          end = text.index('\nrestore_userbot_session() {', start)
-          replacement = r'''probe_userbot_session() {
-  local probe_status
-
-  session_file_exists=0
-  if "${compose[@]}" run --rm -T --no-deps \
-    --user "$app_uid:$app_gid" userbot python - <<'PY'
-from pathlib import Path
-
-raise SystemExit(
-    0
-    if Path("/run/romatic-userbot-session/userbot.session").is_file()
-    else 44
-)
-PY
-  then
-    session_file_exists=1
-    return 0
-  fi
-
-  probe_status="$?"
-  if [[ "$probe_status" == "44" ]]; then
-    echo "Userbot session file is absent; compatibility probe skipped."
-    return 0
-  fi
-  return "$probe_status"
-}
-
-write_userbot_session_snapshot() {
-  local snapshot_tmp="$1"
-
-  "${compose[@]}" run --rm -T --no-deps \
-    --user "$app_uid:$app_gid" \
-    -e ROMATIC_EXPECTED_APP_UID="$app_uid" \
-    -e ROMATIC_EXPECTED_APP_GID="$app_gid" \
-    userbot python - <<'PY' >"$snapshot_tmp"
-import os
-import sqlite3
-import stat
-import sys
-from pathlib import Path
-
-source_path = Path("/run/romatic-userbot-session/userbot.session")
-target_path = Path("/tmp/userbot-session-snapshot.session")
-expected_uid = int(os.environ["ROMATIC_EXPECTED_APP_UID"])
-expected_gid = int(os.environ["ROMATIC_EXPECTED_APP_GID"])
-source_stat = source_path.stat()
-source_mode = stat.S_IMODE(source_stat.st_mode)
-if source_stat.st_uid != expected_uid or source_stat.st_gid != expected_gid:
-    raise RuntimeError(
-        f"Unexpected Telethon session owner: {source_stat.st_uid}:{source_stat.st_gid}; "
-        f"expected {expected_uid}:{expected_gid}"
-    )
-if source_mode & 0o077:
-    raise RuntimeError(f"Telethon session permissions are too broad: {source_mode:04o}")
-
-target_path.unlink(missing_ok=True)
-source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
-target = sqlite3.connect(target_path)
-try:
-    source.backup(target)
-    result = target.execute("PRAGMA quick_check").fetchone()
-    if result != ("ok",):
-        raise RuntimeError(f"Telethon session quick_check failed: {result!r}")
-finally:
-    target.close()
-    source.close()
-
-sys.stdout.buffer.write(target_path.read_bytes())
-target_path.unlink(missing_ok=True)
-PY
-}
-
-verify_userbot_session_snapshot() {
-  local snapshot_tmp="$1"
-
-  python3 - "$snapshot_tmp" <<'PY'
-import sqlite3
-import sys
-from pathlib import Path
-
-snapshot_path = Path(sys.argv[1])
-if not snapshot_path.is_file() or snapshot_path.stat().st_size == 0:
-    raise RuntimeError("Telethon session snapshot is empty")
-connection = sqlite3.connect(f"file:{snapshot_path}?mode=ro", uri=True)
-try:
-    result = connection.execute("PRAGMA quick_check").fetchone()
-    if result != ("ok",):
-        raise RuntimeError(f"Host session snapshot quick_check failed: {result!r}")
-finally:
-    connection.close()
-PY
-}
-
-snapshot_userbot_session() {
-  local snapshot_tmp
-
-  probe_userbot_session
-  if [[ "$session_file_exists" != "1" ]]; then
-    return 0
-  fi
-
-  snapshot_tmp="${session_snapshot_path}.tmp"
-  rm -f "$snapshot_tmp"
-  if ! write_userbot_session_snapshot "$snapshot_tmp"; then
-    rm -f "$snapshot_tmp"
-    return 1
-  fi
-  if ! verify_userbot_session_snapshot "$snapshot_tmp"; then
-    rm -f "$snapshot_tmp"
-    return 1
-  fi
-
-  chmod 0600 "$snapshot_tmp"
-  mv -f "$snapshot_tmp" "$session_snapshot_path"
-  session_snapshot_created=1
-  echo "Verified userbot session snapshot: $session_snapshot_path"
-}
-'''
-          text = text[:start] + replacement + text[end + 1:]
-          path.write_text(text, encoding='utf-8')
-          PY
-          bash -n deploy/server/deploy.sh
-      - name: Regenerate all deterministic dependency locks
-        run: |
-          rm -rf generated-locks /tmp/generated-locks
+          mkdir generated-locks
           scripts/compile_locks.sh generated-locks
           for group in bot userbot tools dev; do
-            cp "generated-locks/$group.lock" "requirements/$group.lock"
+            diff -u "requirements/${group}.lock" "generated-locks/${group}.lock"
           done
-      - name: Commit bounded fixes
-        env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      - name: Audit every locked dependency graph
         run: |
-          test "$HEAD_REF" = 'feature/issue-44-database-recovery'
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add \
-            deploy/server/deploy.sh \
-            requirements/bot.lock \
-            requirements/userbot.lock \
-            requirements/tools.lock \
-            requirements/dev.lock
-          git commit -m 'fix: split snapshot flow and refresh dependency locks'
-          git push origin "HEAD:$HEAD_REF"
+          read -r -a ignores <<< "$(python scripts/check_vulnerability_exceptions.py --format pip-audit)"
+          for lock in requirements/bot.lock requirements/userbot.lock requirements/tools.lock requirements/dev.lock; do
+            pip-audit --strict --progress-spinner=off --disable-pip --no-deps -r "$lock" "${ignores[@]}"
+          done
+      - name: Enforce dependency license policy
+        run: |
+          python -m venv .license-policy
+          .license-policy/bin/python scripts/check_dependency_licenses.py requirements/dev.lock
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan pull-request commits and repository history
+        uses: gitleaks/gitleaks-action@bcfb9cce635345aac9996cedc19b2de8e01b894f
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+
+  container-security:
+    name: container-security (${{ matrix.service }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [bot, userbot, supervisor, postgres]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build or select immutable image
+        id: image
+        env:
+          SERVICE: ${{ matrix.service }}
+          SHA: ${{ github.sha }}
+        run: |
+          case "$SERVICE" in
+            bot)
+              ref="romatic-bot:${SHA}"
+              docker build --pull=false --build-arg REQUIREMENTS_LOCK=requirements/bot.lock --tag "$ref" .
+              ;;
+            userbot)
+              ref="romatic-userbot:${SHA}"
+              docker build --pull=false --build-arg REQUIREMENTS_LOCK=requirements/userbot.lock --tag "$ref" .
+              ;;
+            supervisor)
+              ref="romatic-supervisor:${SHA}"
+              docker build --pull=false --file Dockerfile.server-supervisor-proxy --tag "$ref" .
+              ;;
+            postgres)
+              ref="romatic-postgres:${SHA}"
+              docker build --pull=false --file Dockerfile.postgres --tag "$ref" .
+              ;;
+            *) exit 2 ;;
+          esac
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+      - name: Materialize active Trivy exceptions
+        run: python scripts/check_vulnerability_exceptions.py --format trivy > .trivyignore
+      - name: Block fixed high and critical image vulnerabilities
+        uses: aquasecurity/trivy-action@2736533278103862a861f4a35ebac3e97854d956
+        with:
+          image-ref: ${{ steps.image.outputs.ref }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+  security-static:
+    name: security-static
+    if: always()
+    needs: [security-boundary, dependency-security, secret-scan, container-security]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verify all blocking supply-chain jobs
+        env:
+          BOUNDARY: ${{ needs.security-boundary.result }}
+          DEPENDENCIES: ${{ needs.dependency-security.result }}
+          SECRETS: ${{ needs.secret-scan.result }}
+          CONTAINERS: ${{ needs.container-security.result }}
+        run: |
+          test "$BOUNDARY" = success
+          test "$DEPENDENCIES" = success
+          test "$SECRETS" = success
+          test "$CONTAINERS" = success
+
+  branch-protection-contract:
+    name: branch-protection-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify main required checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          expected = {
+              "changed-code-quality",
+              "typing-and-architecture",
+              "coverage",
+              "security-static",
+              "deployment-contract",
+              "server-supervisor-contract",
+              "test",
+              "postgres-integration",
+          }
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['REPOSITORY']}/branches/main",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "User-Agent": "romatic-club-quality-gates",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              branch = json.load(response)
+          if not branch.get("protected"):
+              raise SystemExit("main is not protected")
+          status_checks = branch.get("protection", {}).get("required_status_checks", {})
+          contexts = set(status_checks.get("contexts", []))
+          missing = sorted(expected - contexts)
+          if missing:
+              raise SystemExit("main is missing required checks: " + ", ".join(missing))
+          print("main required checks verified:", ", ".join(sorted(expected)))
+          PY
