@@ -390,14 +390,24 @@ echo "Starting PostgreSQL and validating deployment capacity..."
 "${compose[@]}" up -d postgres
 wait_service postgres
 
-read -r postgres_version_num database_size_bytes < <(
+mapfile -t postgres_metrics < <(
   "${compose[@]}" exec -T postgres sh -ceu '
     psql -X -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<SQL
 SELECT current_setting('\''server_version_num'\'')::integer;
 SELECT pg_database_size(current_database());
 SQL
-  ' | tr '\n' ' '
+  '
 )
+if [[ "${#postgres_metrics[@]}" -ne 2 ]]; then
+  echo "Unexpected PostgreSQL preflight metrics output" >&2
+  exit 4
+fi
+postgres_version_num="${postgres_metrics[0]}"
+database_size_bytes="${postgres_metrics[1]}"
+if ! [[ "$postgres_version_num" =~ ^[0-9]+$ && "$database_size_bytes" =~ ^[0-9]+$ ]]; then
+  echo "Invalid PostgreSQL preflight metrics: version=$postgres_version_num size=$database_size_bytes" >&2
+  exit 4
+fi
 if ((postgres_version_num / 10000 != 17)); then
   echo "Unsupported production PostgreSQL major: $postgres_version_num" >&2
   exit 4
