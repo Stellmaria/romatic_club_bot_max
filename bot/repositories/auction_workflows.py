@@ -761,11 +761,14 @@ class AuctionWorkflowRepository:
         return dict(row)
 
     async def mark_published(self, auction_id: int, *, message_id: int) -> bool:
+        message_id = int(message_id)
+        if message_id <= 0:
+            raise ValueError("message_id must be positive")
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
                 UPDATE public.auctions
-                SET status = 'active',
+                SET status = CASE WHEN end_time <= NOW() THEN 'finished' ELSE 'active' END,
                     message_id = $2,
                     publication_finished_at = NOW(),
                     publication_error = NULL,
@@ -776,9 +779,78 @@ class AuctionWorkflowRepository:
                 RETURNING auction_id
                 """,
                 int(auction_id),
-                int(message_id),
+                message_id,
             )
         return bool(row)
+
+    async def mark_deferred(self, auction_id: int) -> bool:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                UPDATE public.auctions
+                SET status = 'publication_deferred',
+                    message_id = NULL,
+                    publication_error = NULL,
+                    publication_next_attempt_at = NULL
+                WHERE auction_id = $1
+                  AND status = 'publishing'
+                  AND message_id IS NULL
+                RETURNING auction_id
+                """,
+                int(auction_id),
+            )
+        return bool(row)
+
+    async def confirm_deferred_publication(
+        self,
+        auction_id: int,
+        *,
+        channel_message_id: int,
+        discussion_message_id: int | None = None,
+    ) -> dict[str, Any]:
+        channel_message_id = int(channel_message_id)
+        if channel_message_id <= 0:
+            raise ValueError("channel_message_id must be positive")
+        async with self._pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT * FROM public.auctions WHERE auction_id=$1 FOR UPDATE",
+                int(auction_id),
+            )
+            if row is None:
+                raise AuctionNotFound(f"auction {auction_id} not found")
+            current = dict(row)
+            existing = current.get("message_id")
+            if existing is not None:
+                if int(existing) != channel_message_id:
+                    raise ValueError("auction is already bound to another channel message")
+                if discussion_message_id is not None and current.get("discussion_message_id") is None:
+                    await conn.execute(
+                        "UPDATE public.auctions SET discussion_message_id=$2 WHERE auction_id=$1",
+                        int(auction_id), int(discussion_message_id),
+                    )
+                    current["discussion_message_id"] = int(discussion_message_id)
+                return current
+            if str(current.get("status")) not in {
+                "publishing", "publication_deferred", "publication_failed"
+            }:
+                raise InvalidAuctionTransition(
+                    current=str(current.get("status")), target="active"
+                )
+            updated = await conn.fetchrow(
+                """
+                UPDATE public.auctions
+                SET message_id=$2,
+                    discussion_message_id=COALESCE($3, discussion_message_id),
+                    status=CASE WHEN end_time <= NOW() THEN 'finished' ELSE 'active' END,
+                    publication_finished_at=NOW(),
+                    publication_error=NULL,
+                    publication_next_attempt_at=NULL
+                WHERE auction_id=$1
+                RETURNING *
+                """,
+                int(auction_id), channel_message_id, discussion_message_id,
+            )
+        return dict(updated)
 
     async def mark_publication_failed(
         self,

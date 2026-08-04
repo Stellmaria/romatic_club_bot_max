@@ -11,6 +11,7 @@ Claim = Callable[[int], Awaitable[Row]]
 BuildPayload = Callable[[Row], Awaitable[Any]]
 Send = Callable[[Row, Any], Awaitable[int]]
 MarkPublished = Callable[[int, int], Awaitable[bool]]
+MarkDeferred = Callable[[int], Awaitable[bool]]
 MarkFailed = Callable[[int, str], Awaitable[Any]]
 PostCommit = Callable[[Row, int], Awaitable[None]]
 
@@ -42,12 +43,14 @@ class PublishAuctionUseCase:
         send: Send,
         mark_published: MarkPublished,
         mark_failed: MarkFailed,
+        mark_deferred: MarkDeferred | None = None,
         after_published: PostCommit | None = None,
     ) -> None:
         self._claim = claim
         self._build_payload = build_payload
         self._send = send
         self._mark_published = mark_published
+        self._mark_deferred = mark_deferred
         self._mark_failed = mark_failed
         self._after_published = after_published
 
@@ -75,6 +78,16 @@ class PublishAuctionUseCase:
             except Exception:
                 pass
             raise
+
+        # Telegram can acknowledge a deferred video upload with message_id=0.
+        # This is neither success nor a delivery failure and must never be retried.
+        if message_id == 0:
+            if self._mark_deferred is None:
+                raise ApplicationInvalidState("deferred publication is not supported")
+            deferred = await self._mark_deferred(auction_id)
+            if not deferred:
+                raise ApplicationInvalidState("auction deferred publication claim was lost")
+            return PublishedAuction(auction=auction, message_id=0)
 
         # Delivery already happened.  Never mark the lot failed here because a
         # retry could duplicate a visible Telegram post.  Lost/unknown commit

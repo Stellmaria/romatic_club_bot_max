@@ -247,6 +247,9 @@ async def publish_auction_lot(
     async def mark_published(_auction_id: int, message_id: int) -> bool:
         return await service.mark_published(_auction_id, message_id=message_id)
 
+    async def mark_deferred(_auction_id: int) -> bool:
+        return await service.mark_deferred(_auction_id)
+
     async def mark_failed(_auction_id: int, error: str) -> Any:
         return await service.mark_failed(_auction_id, error=error)
 
@@ -258,6 +261,7 @@ async def publish_auction_lot(
         build_payload=build_payload,
         send=send,
         mark_published=mark_published,
+        mark_deferred=mark_deferred,
         mark_failed=mark_failed,
         after_published=after_published,
     )
@@ -271,6 +275,9 @@ async def publish_auction_lot(
             logger.warning("Auction %s cannot be claimed: %s", auction_id, exc)
         return None
 
+    if result.message_id == 0:
+        logger.info("Auction %s publication deferred by Telegram", auction_id)
+        return None
     logger.info("Published auction %s as message %s", auction_id, result.message_id)
     return result.message_id
 

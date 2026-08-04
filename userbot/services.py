@@ -18,7 +18,7 @@ from bot.core.legacy_config import legacy_config
 from bot.core.time import ensure_utc, utc_now
 from bot.domain.auctions import BidFormatError, auction_bidding_closes_at
 from bot.domain.auctions.rules import parse_bid_amount
-from bot.services.auction_workflows import AuctionLifecycleService
+from bot.services.auction_workflows import AuctionLifecycleService, AuctionPublicationService
 from db.auctions import get_autobid_action_by_msg_id
 from userbot.autobid_engine import get_local_autobid_action
 from userbot.presentation import RULES_TEXT, mention, random_warning, user_link
@@ -399,6 +399,22 @@ async def _try_bind_root_message(message: Any) -> int | None:
             if _norm_channel_id(source_id) != _norm_channel_id(legacy_config.AUCTION_CHANNEL_ID):
                 channel_post = None
 
+    text = (getattr(message, "message", None) or "").strip()
+    lot_id = _extract_lot_id(text) if _looks_like_auction_post(text.lower()) else None
+
+    if channel_post and lot_id:
+        try:
+            publication = await AuctionPublicationService.create()
+            row = await publication.confirm_deferred_publication(
+                int(lot_id),
+                channel_message_id=int(channel_post),
+                discussion_message_id=int(message.id),
+            )
+            return int(row["auction_id"])
+        except Exception:
+            # Fall through to legacy binding for already-published rows.
+            pass
+
     if channel_post:
         try:
             auction_id = await lifecycle.bind_by_channel_message(
@@ -407,13 +423,9 @@ async def _try_bind_root_message(message: Any) -> int | None:
             )
             if auction_id:
                 return int(auction_id)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
-    text = (getattr(message, "message", None) or "").strip()
-    if not _looks_like_auction_post(text.lower()):
-        return None
-    lot_id = _extract_lot_id(text)
     if not lot_id:
         return None
     try:
@@ -422,7 +434,7 @@ async def _try_bind_root_message(message: Any) -> int | None:
             discussion_message_id=int(message.id),
         )
         return int(auction_id) if auction_id else None
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 

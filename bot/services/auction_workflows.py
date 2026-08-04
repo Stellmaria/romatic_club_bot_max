@@ -315,6 +315,24 @@ class AuctionPublicationService:
             message_id=int(message_id),
         )
 
+    async def mark_deferred(self, auction_id: int) -> bool:
+        return await self._repository.mark_deferred(int(auction_id))
+
+    async def confirm_deferred_publication(
+        self,
+        auction_id: int,
+        *,
+        channel_message_id: int,
+        discussion_message_id: int | None = None,
+    ) -> dict[str, Any]:
+        return await self._repository.confirm_deferred_publication(
+            int(auction_id),
+            channel_message_id=int(channel_message_id),
+            discussion_message_id=(
+                int(discussion_message_id) if discussion_message_id is not None else None
+            ),
+        )
+
     async def mark_failed(
         self,
         auction_id: int,
