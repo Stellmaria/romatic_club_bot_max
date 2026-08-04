@@ -20,8 +20,8 @@ _DISCUSSION_ROOTS = {
     9221: 1149326,
 }
 _KNOWN_CHANNEL_POSTS = {
-    3797: 5948,
-    7523: 10139,
+    3797: (5948, 5927),
+    7523: (10139, None),
 }
 _SEARCH_FALLBACKS = {
     9243: datetime(2026, 8, 3, 16, 30, tzinfo=UTC),
@@ -97,6 +97,7 @@ async def _from_known_channel_post(
     *,
     auction_id: int,
     channel_message_id: int,
+    expected_previous_channel_message_id: int | None,
 ) -> PublicationRepairAction:
     message = await telegram_client.get_messages(
         int(settings.auction_channel_id),
@@ -106,8 +107,13 @@ async def _from_known_channel_post(
         raise ValueError("known channel post does not contain the expected auction number")
     return PublicationRepairAction(
         auction_id=int(auction_id),
-        action="normalize_published",
+        action=(
+            "replace_published"
+            if expected_previous_channel_message_id is not None
+            else "normalize_published"
+        ),
         channel_message_id=int(channel_message_id),
+        expected_previous_channel_message_id=expected_previous_channel_message_id,
     )
 
 
@@ -190,7 +196,10 @@ async def discover_issue99_repair_actions(
             ),
         )
 
-    for auction_id, channel_message_id in _KNOWN_CHANNEL_POSTS.items():
+    for auction_id, (
+        channel_message_id,
+        expected_previous_channel_message_id,
+    ) in _KNOWN_CHANNEL_POSTS.items():
         if auction_id not in by_id:
             unresolved.append({"auction_id": auction_id, "error": "database row is missing"})
             continue
@@ -201,6 +210,9 @@ async def discover_issue99_repair_actions(
                 settings,
                 auction_id=auction_id,
                 channel_message_id=channel_message_id,
+                expected_previous_channel_message_id=(
+                    expected_previous_channel_message_id
+                ),
             ),
         )
 
