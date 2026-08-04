@@ -5,7 +5,6 @@ import re
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE = ROOT / "database"
 ARCHIVED_MIGRATIONS = DATABASE / "migrations"
@@ -69,8 +68,7 @@ def _strip_line_comments(sql: str) -> str:
 
 def _create_table_blocks(sql: str) -> list[tuple[str, str]]:
     pattern = re.compile(
-        r"^create\s+table(?:\s+if\s+not\s+exists)?\s+"
-        r"(?:public\.)?([a-z_]\w*)\s*\(",
+        r"^create\s+table(?:\s+if\s+not\s+exists)?\s+" r"(?:public\.)?([a-z_]\w*)\s*\(",
         re.IGNORECASE | re.MULTILINE,
     )
     blocks: list[tuple[str, str]] = []
@@ -143,18 +141,14 @@ def _table_columns(sql: str) -> dict[str, set[str]]:
 
 
 def _named_constraints(sql: str) -> set[str]:
-    return {
-        name.lower()
-        for name in re.findall(r"(?i)\bconstraint\s+([a-z_]\w*)", sql)
-    }
+    return {name.lower() for name in re.findall(r"(?i)\bconstraint\s+([a-z_]\w*)", sql)}
 
 
 def _index_names(sql: str) -> set[str]:
     return {
         name.lower()
         for name in re.findall(
-            r"(?im)^create\s+(?:unique\s+)?index"
-            r"(?:\s+if\s+not\s+exists)?\s+([a-z_]\w*)",
+            r"(?im)^create\s+(?:unique\s+)?index" r"(?:\s+if\s+not\s+exists)?\s+([a-z_]\w*)",
             sql,
         )
     }
