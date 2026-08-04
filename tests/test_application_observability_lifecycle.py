@@ -241,9 +241,7 @@ def _install_run_bot_fakes(
     monkeypatch.setattr(
         application,
         "configure_logging",
-        lambda level, **kwargs: state.update(
-            logging_configuration=(level, kwargs)
-        ),
+        lambda level, **kwargs: state.update(logging_configuration=(level, kwargs)),
     )
     monkeypatch.setattr(
         application.SupervisorClient,
@@ -281,9 +279,7 @@ def _install_run_bot_fakes(
     monkeypatch.setattr(
         container_module.ApplicationContainer,
         "build",
-        staticmethod(
-            lambda **kwargs: state.update(container_kwargs=kwargs) or object()
-        ),
+        staticmethod(lambda **kwargs: state.update(container_kwargs=kwargs) or object()),
     )
     monkeypatch.setattr(observability, "MetricsRegistry", FakeMetricsRegistry)
     monkeypatch.setattr(observability, "HealthProbeServer", FakeHealthProbeServer)
@@ -318,9 +314,7 @@ async def test_run_bot_starts_observability_and_closes_every_resource(
         "database_pool_min_size": 2.0,
         "database_pool_max_size": 12.0,
     }
-    assert state["metric_calls"] == [
-        ("application_starts_total", {"process": "bot"})
-    ]
+    assert state["metric_calls"] == [("application_starts_total", {"process": "bot"})]
     assert state["events"] == [
         "database.start",
         "supervisor.start",
