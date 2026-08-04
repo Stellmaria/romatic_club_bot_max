@@ -38,7 +38,7 @@ if ! [[ "$HEALTH_STABLE_POLLS" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-data_dir="$(python3 - "$ENV_FILE" <<'PY'
+read -r data_dir app_uid app_gid < <(python3 - "$ENV_FILE" <<'PY'
 from pathlib import Path
 import sys
 
@@ -48,10 +48,19 @@ for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
     if not stripped or stripped.startswith("#") or "=" not in line:
         continue
     key, value = line.split("=", 1)
-    values[key.strip()] = value.strip()
-print(values.get("ROMATIC_DATA_DIR", "/srv/romatic-club-max/server-data"))
+    values[key.strip()] = value.strip().strip('"').strip("'")
+print(
+    values.get("ROMATIC_DATA_DIR", "/srv/romatic-club-max/server-data"),
+    values.get("ROMATIC_APP_UID", "10001"),
+    values.get("ROMATIC_APP_GID", "10001"),
+)
 PY
-)"
+)
+
+if ! [[ "$app_uid" =~ ^[1-9][0-9]*$ && "$app_gid" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ROMATIC_APP_UID and ROMATIC_APP_GID must be positive integers." >&2
+  exit 2
+fi
 
 mkdir -p "$data_dir/backups" "$data_dir/runtime/supervisor" "$data_dir/runtime/docker-config"
 chmod 0700 "$data_dir/runtime/docker-config"
@@ -62,35 +71,71 @@ compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 previous_sha="$(git rev-parse HEAD)"
 deployment_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_path="$data_dir/backups/predeploy-${deployment_stamp}-${previous_sha:0:12}.dump"
-session_dir="$data_dir/userbot-session"
-session_file="$session_dir/userbot.session"
 session_snapshot_path="$data_dir/backups/userbot-session-predeploy-${deployment_stamp}-${previous_sha:0:12}.session"
-session_probe_dir="$data_dir/runtime/supervisor/userbot-session-probe-$$"
+deployment_log="$data_dir/runtime/supervisor/deploy-${deployment_stamp}-${previous_sha:0:12}.log"
 session_snapshot_created=0
-session_owner_uid=""
-session_owner_gid=""
-session_mode=""
+session_mutated=0
 code_switched=0
 runtime_replaced=0
 
-cleanup_session_probe() {
-  rm -rf "$session_probe_dir"
-}
+: >"$deployment_log"
+chmod 0600 "$deployment_log"
+exec > >(tee -a "$deployment_log") 2>&1
+
+echo "Deployment log: $deployment_log"
 
 snapshot_userbot_session() {
-  if [[ ! -f "$session_file" ]]; then
-    echo "Userbot session file is absent; compatibility probe skipped: $session_file"
-    return 0
+  local exists_status
+
+  if "${compose[@]}" run --rm --no-deps --user 0:0 userbot python - <<'PY'
+from pathlib import Path
+
+raise SystemExit(
+    0
+    if Path("/run/romatic-userbot-session/userbot.session").is_file()
+    else 44
+)
+PY
+  then
+    :
+  else
+    exists_status="$?"
+    if [[ "$exists_status" == "44" ]]; then
+      echo "Userbot session file is absent; compatibility probe skipped."
+      return 0
+    fi
+    return "$exists_status"
   fi
 
-  session_owner_uid="$(stat -c '%u' "$session_file")"
-  session_owner_gid="$(stat -c '%g' "$session_file")"
-  session_mode="$(stat -c '%a' "$session_file")"
-  python3 - "$session_file" "$session_snapshot_path" <<'PYTHON'
+  "${compose[@]}" run --rm --no-deps --user 0:0 \
+    -e ROMATIC_EXPECTED_APP_UID="$app_uid" \
+    -e ROMATIC_EXPECTED_APP_GID="$app_gid" \
+    -v "$data_dir/backups:/backup" \
+    userbot python - "$(basename "$session_snapshot_path")" <<'PY'
+import os
 import sqlite3
+import stat
 import sys
+from pathlib import Path
 
-source_path, target_path = sys.argv[1:]
+source_path = Path("/run/romatic-userbot-session/userbot.session")
+target_path = Path("/backup") / sys.argv[1]
+expected_uid = int(os.environ["ROMATIC_EXPECTED_APP_UID"])
+expected_gid = int(os.environ["ROMATIC_EXPECTED_APP_GID"])
+
+source_stat = source_path.stat()
+source_mode = stat.S_IMODE(source_stat.st_mode)
+if source_stat.st_uid != expected_uid or source_stat.st_gid != expected_gid:
+    raise RuntimeError(
+        "Unexpected Telethon session owner: "
+        f"{source_stat.st_uid}:{source_stat.st_gid}, "
+        f"expected {expected_uid}:{expected_gid}"
+    )
+if source_mode & 0o077:
+    raise RuntimeError(
+        f"Telethon session permissions are too broad: {source_mode:04o}"
+    )
+
 source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
 target = sqlite3.connect(target_path)
 try:
@@ -101,59 +146,93 @@ try:
 finally:
     target.close()
     source.close()
-PYTHON
-  chmod 0600 "$session_snapshot_path"
+
+os.chown(target_path, 0, expected_gid)
+os.chmod(target_path, 0o640)
+print(f"Verified userbot session snapshot: {target_path}")
+PY
+
+  test -s "$session_snapshot_path"
   session_snapshot_created=1
   echo "Verified userbot session snapshot: $session_snapshot_path"
-}
-
-prepare_session_probe() {
-  cleanup_session_probe
-  mkdir -p "$session_probe_dir"
-  cp "$session_snapshot_path" "$session_probe_dir/userbot.session"
-  chown "$session_owner_uid:$session_owner_gid"     "$session_probe_dir" "$session_probe_dir/userbot.session"
-  chmod 0700 "$session_probe_dir"
-  chmod "0$session_mode" "$session_probe_dir/userbot.session"
 }
 
 restore_userbot_session() {
   if [[ "$session_snapshot_created" != "1" ]]; then
     return 0
   fi
+
   echo "Restoring pre-deploy Telethon session snapshot..." >&2
   "${compose[@]}" stop userbot >&2 || true
-  mkdir -p "$session_dir"
-  rm -f     "$session_file"     "$session_file-journal"     "$session_file-shm"     "$session_file-wal"
-  install     -o "$session_owner_uid"     -g "$session_owner_gid"     -m "0$session_mode"     "$session_snapshot_path"     "$session_file.restore"
-  mv -f "$session_file.restore" "$session_file"
-  python3 - "$session_file" <<'PYTHON'
+  "${compose[@]}" run --rm --no-deps --user 0:0 \
+    -e ROMATIC_EXPECTED_APP_UID="$app_uid" \
+    -e ROMATIC_EXPECTED_APP_GID="$app_gid" \
+    -v "$session_snapshot_path:/tmp/userbot-session.snapshot:ro" \
+    userbot python - <<'PY'
+import os
+import shutil
 import sqlite3
-import sys
+from pathlib import Path
 
-connection = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+source_path = Path("/tmp/userbot-session.snapshot")
+session_file = Path("/run/romatic-userbot-session/userbot.session")
+restore_path = Path(f"{session_file}.restore")
+expected_uid = int(os.environ["ROMATIC_EXPECTED_APP_UID"])
+expected_gid = int(os.environ["ROMATIC_EXPECTED_APP_GID"])
+
+source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
+try:
+    result = source.execute("PRAGMA quick_check").fetchone()
+    if result != ("ok",):
+        raise RuntimeError(f"Snapshot quick_check failed: {result!r}")
+finally:
+    source.close()
+
+session_file.parent.mkdir(parents=True, exist_ok=True)
+for candidate in (
+    Path(f"{session_file}-journal"),
+    Path(f"{session_file}-shm"),
+    Path(f"{session_file}-wal"),
+    restore_path,
+):
+    candidate.unlink(missing_ok=True)
+
+shutil.copyfile(source_path, restore_path)
+os.chown(restore_path, expected_uid, expected_gid)
+os.chmod(restore_path, 0o600)
+os.replace(restore_path, session_file)
+
+connection = sqlite3.connect(f"file:{session_file}?mode=ro", uri=True)
 try:
     result = connection.execute("PRAGMA quick_check").fetchone()
     if result != ("ok",):
-        raise RuntimeError(f"Restored Telethon session quick_check failed: {result!r}")
+        raise RuntimeError(f"Restored session quick_check failed: {result!r}")
 finally:
     connection.close()
-PYTHON
+
+print("Telethon session restored")
+PY
+  session_mutated=0
   echo "Telethon session restored from $session_snapshot_path" >&2
 }
 
 rollback_code() {
   local exit_code="$?"
   local session_restore_ok=1
-  cleanup_session_probe || true
+  local session_was_mutated="$session_mutated"
+
+  trap - ERR INT TERM
   if [[ "$code_switched" == "1" ]]; then
     echo "Deployment failed; rolling application code back to $previous_sha" >&2
-    if [[ "$runtime_replaced" == "1" ]] && ! restore_userbot_session; then
+    if [[ "$session_mutated" == "1" ]] && ! restore_userbot_session; then
       session_restore_ok=0
       echo "Telethon session restore failed; userbot will remain stopped." >&2
     fi
+
     git reset --hard "$previous_sha" >&2 || true
     "${compose[@]}" build postgres bot userbot supervisor-proxy >&2 || true
-    if [[ "$runtime_replaced" == "1" ]]; then
+
+    if [[ "$runtime_replaced" == "1" || "$session_was_mutated" == "1" ]]; then
       if [[ "$session_restore_ok" == "1" ]]; then
         "${compose[@]}" up -d postgres supervisor-proxy bot userbot >&2 || true
       else
@@ -162,11 +241,13 @@ rollback_code() {
     else
       echo "Running containers were not replaced; runtime left untouched." >&2
     fi
+
     echo "Database was not automatically restored." >&2
     echo "Verified pre-deploy dump: $backup_path" >&2
     if [[ "$session_snapshot_created" == "1" ]]; then
       echo "Verified pre-deploy Telethon session: $session_snapshot_path" >&2
     fi
+    echo "Full deployment log: $deployment_log" >&2
   fi
   exit "$exit_code"
 }
@@ -231,15 +312,55 @@ PY
 
 if [[ "$session_snapshot_created" == "1" ]]; then
   echo "Checking target Telethon against an isolated session copy..."
-  prepare_session_probe
-  "${compose[@]}" run --rm --no-deps     -e USERBOT_SESSION=/tmp/session-probe/userbot     -v "$session_probe_dir:/tmp/session-probe"     userbot python - <<'PY'
+  "${compose[@]}" run --rm --no-deps \
+    -v "$session_snapshot_path:/tmp/session-source.session:ro" \
+    userbot python - <<'PY'
+import shutil
+from pathlib import Path
+
 from telethon.sessions import SQLiteSession
 
+from userbot.session_schema import repair_session_schema
+
+source_path = Path("/tmp/session-source.session")
+probe_path = Path("/tmp/session-probe/userbot.session")
+probe_path.parent.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(source_path, probe_path)
+probe_path.chmod(0o600)
+repair_session_schema(probe_path)
+
 session = SQLiteSession("/tmp/session-probe/userbot")
-session.close()
+try:
+    if session.auth_key is None:
+        raise RuntimeError("Target Telethon session has no auth key")
+finally:
+    session.close()
+
 print("Target Telethon session compatibility preflight OK")
 PY
-  cleanup_session_probe
+
+  echo "Stopping userbot before live Telethon session migration..."
+  "${compose[@]}" stop userbot
+  session_mutated=1
+  "${compose[@]}" run --rm --no-deps userbot python - <<'PY'
+from pathlib import Path
+
+from telethon.sessions import SQLiteSession
+
+from userbot.session import secure_session_files
+from userbot.session_schema import repair_session_schema
+
+session_path = Path("/run/romatic-userbot-session/userbot.session")
+changed = repair_session_schema(session_path)
+session = SQLiteSession("/run/romatic-userbot-session/userbot")
+try:
+    if session.auth_key is None:
+        raise RuntimeError("Live Telethon session has no auth key")
+finally:
+    session.close()
+secure_session_files("/run/romatic-userbot-session/userbot")
+print("Live Telethon session repaired" if changed else "Live Telethon session schema OK")
+PY
 fi
 
 echo "Deploying $target_sha..."
@@ -317,6 +438,7 @@ config = BotProcessSettings.from_env(project_root="/app")
 assert config.bot.bot_token, "BOT_TOKEN is empty"
 assert config.database.url, "DATABASE_URL is empty"
 
+
 async def main() -> None:
     connection = await asyncpg.connect(os.environ["DATABASE_URL"])
     try:
@@ -324,6 +446,7 @@ async def main() -> None:
         assert value == 1
     finally:
         await connection.close()
+
 
 asyncio.run(main())
 print("Romatic server smoke OK")
@@ -373,11 +496,12 @@ fi
 
 code_switched=0
 runtime_replaced=0
-cleanup_session_probe
+session_mutated=0
 trap - ERR INT TERM
 echo "Romatic Club deployment succeeded: $deployed_sha"
 echo "Verified pre-deploy backup: $backup_path"
 if [[ "$session_snapshot_created" == "1" ]]; then
   echo "Verified pre-deploy Telethon session: $session_snapshot_path"
 fi
+echo "Full deployment log: $deployment_log"
 "${compose[@]}" ps

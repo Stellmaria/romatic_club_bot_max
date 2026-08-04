@@ -1,7 +1,8 @@
+"""Regression contracts for the production deployment gate."""
+
 from __future__ import annotations
 
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOY = ROOT / "deploy/server/deploy.sh"
@@ -41,7 +42,8 @@ def test_preflight_failure_leaves_running_containers_untouched() -> None:
 
     assert "code_switched=0" in script
     assert "runtime_replaced=0" in script
-    assert 'if [[ "$runtime_replaced" == "1" ]]' in script
+    assert "session_mutated=0" in script
+    assert 'if [[ "$runtime_replaced" == "1" || "$session_was_mutated" == "1" ]]' in script
     assert "Running containers were not replaced; runtime left untouched." in script
 
 
