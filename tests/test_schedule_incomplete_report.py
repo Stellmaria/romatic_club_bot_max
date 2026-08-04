@@ -1,4 +1,3 @@
-# ruff: noqa: RUF001
 from __future__ import annotations
 
 from bot.handlers.admin.schedule_setup_restart import (
