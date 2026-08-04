@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from cryptography.exceptions import InvalidTag
 
 from scripts.backup_archive import encrypt, verify
 
@@ -123,7 +124,7 @@ def test_backup_archive_encrypts_and_detects_tampering(tmp_path: Path) -> None:
     tampered = bytearray(archive_path.read_bytes())
     tampered[-20] ^= 0x01
     archive_path.write_bytes(tampered)
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidTag):
         verify(archive_path, key_path)
 
 
