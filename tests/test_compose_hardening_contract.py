@@ -20,13 +20,13 @@ def _runtime_service(*, healthcheck: str, networks: tuple[str, ...]) -> dict[str
         "user": "10001:10001",
         "cap_drop": ["ALL"],
         "security_opt": ["no-new-privileges:true"],
-        "tmpfs": ["/tmp:size=64m,mode=1777"],
+        "tmpfs": ["/tmp:size=64m,mode=1777"],  # noqa: S108
         "mem_limit": 536870912,
         "cpus": 1.0,
         "pids_limit": 256,
         "stop_grace_period": "45s",
         "healthcheck": {"test": ["CMD", "python", "-c", healthcheck]},
-        "networks": {name: None for name in networks},
+        "networks": dict.fromkeys(networks),
     }
 
 
