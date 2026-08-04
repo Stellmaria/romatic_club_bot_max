@@ -105,11 +105,19 @@ def _assert_common_runtime(service: Mapping[str, object], *, name: str) -> None:
         _fail(f"services.{name}.init must be true")
     _assert_non_root(service, name=name)
 
-    cap_drop = {str(value).upper() for value in service.get("cap_drop", [])}
+    cap_drop = {
+        str(value).upper()
+        for value in _sequence(service.get("cap_drop", []), field=f"services.{name}.cap_drop")
+    }
     if "ALL" not in cap_drop:
         _fail(f"services.{name}.cap_drop must contain ALL")
 
-    security_opt = {str(value) for value in service.get("security_opt", [])}
+    security_opt = {
+        str(value)
+        for value in _sequence(
+            service.get("security_opt", []), field=f"services.{name}.security_opt"
+        )
+    }
     if not any(value.startswith("no-new-privileges") for value in security_opt):
         _fail(f"services.{name}.security_opt must enable no-new-privileges")
 
@@ -180,8 +188,6 @@ def validate_compose_hardening(payload: Mapping[str, object]) -> None:
     userbot_networks = _network_names(userbot, name="userbot")
     if userbot_networks != {application_network, database_network}:
         _fail("services.userbot network allowlist is incorrect")
-    if supervisor_network in userbot_networks:
-        _fail("services.userbot must not join the Supervisor control network")
 
     if _network_names(postgres, name="postgres") != {database_network}:
         _fail("services.postgres must be isolated to the database network")
