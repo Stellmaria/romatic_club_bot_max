@@ -90,9 +90,7 @@ def test_proxy_is_isolated_from_docker_and_checkout() -> None:
 
     assert "Dockerfile.server-supervisor-proxy" in service
     assert "read_only: true" in service
-    assert (
-        'user: "${ROMATIC_SUPERVISOR_GID:-10001}:' '${ROMATIC_SUPERVISOR_GID:-10001}"'
-    ) in service
+    assert ('user: "${ROMATIC_SUPERVISOR_GID:-10001}:${ROMATIC_SUPERVISOR_GID:-10001}"') in service
     assert "cap_drop:\n      - ALL" in service
     assert "no-new-privileges:true" in service
     assert "docker.sock" not in service
@@ -162,3 +160,28 @@ def test_installer_generates_token_and_runtime_directories() -> None:
     assert "runtime/docker-config" in installer
     assert "systemctl restart romatic-server-supervisor.service" in installer
     assert "systemctl reload romatic-compose.service" in installer
+
+
+def test_deploy_snapshots_and_restores_telethon_session_transactionally() -> None:
+    deploy = source("deploy/server/deploy.sh")
+
+    assert "snapshot_userbot_session" in deploy
+    assert 'sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)' in deploy
+    assert "source.backup(target)" in deploy
+    assert "PRAGMA quick_check" in deploy
+    assert "Target Telethon session compatibility preflight OK" in deploy
+    assert 'SQLiteSession("/tmp/session-probe/userbot")' in deploy
+    assert "restore_userbot_session" in deploy
+    assert "Telethon session restore failed; userbot will remain stopped." in deploy
+    assert deploy.index("snapshot_userbot_session") < deploy.index('git reset --hard "$target_sha"')
+
+
+def test_panel_does_not_report_pidless_or_restarting_container_as_healthy() -> None:
+    panel = source("bot/handlers/admin/admin_panel_system.py")
+
+    assert 'status == "running"' in panel
+    assert "isinstance(pid, int)" in panel
+    assert "pid > 0" in panel
+    assert 'health in {"", "healthy"}' in panel
+    assert 'status == "restarting"' in panel
+    assert 'return "⚠️", f"не здоров' in panel
