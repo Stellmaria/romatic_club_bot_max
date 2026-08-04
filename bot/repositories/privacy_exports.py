@@ -179,7 +179,7 @@ EXPORT_SOURCES = (
 
 
 class PrivacyExportRepository:
-    """Read explicitly allowlisted subject data and append privacy audit evidence."""
+    """Read allowlisted subject data and own all PostgreSQL transaction boundaries."""
 
     def __init__(self, pool: asyncpg.Pool):
         self._pool = pool
@@ -211,45 +211,42 @@ class PrivacyExportRepository:
 
     async def collect(
         self,
-        connection: asyncpg.Connection,
         subject_user_id: int,
     ) -> dict[str, dict[str, list[dict[str, Any]]]]:
         datasets: dict[str, dict[str, list[dict[str, Any]]]] = {}
-        for source in EXPORT_SOURCES:
-            columns = await self._available_columns(connection, source)
-            if not columns:
-                continue
-            selected = ", ".join(self._quote_identifier(column) for column in columns)
-            table = self._quote_identifier(source.table)
-            subject_column = self._quote_identifier(source.subject_column)
-            query = (
-                f"SELECT {selected} FROM public.{table} "  # noqa: S608
-                f"WHERE {subject_column} = $1"
-            )
-            rows = await connection.fetch(query, int(subject_user_id))
-            datasets.setdefault(source.dataset_id, {})[source.table] = [dict(row) for row in rows]
+        async with self._pool.acquire() as connection, connection.transaction():
+            for source in EXPORT_SOURCES:
+                columns = await self._available_columns(connection, source)
+                if not columns:
+                    continue
+                selected = ", ".join(self._quote_identifier(column) for column in columns)
+                table = self._quote_identifier(source.table)
+                subject_column = self._quote_identifier(source.subject_column)
+                query = (
+                    f"SELECT {selected} FROM public.{table} "  # noqa: S608
+                    f"WHERE {subject_column} = $1"
+                )
+                rows = await connection.fetch(query, int(subject_user_id))
+                datasets.setdefault(source.dataset_id, {})[source.table] = [
+                    dict(row) for row in rows
+                ]
         return datasets
 
-    async def append_audit(
+    async def append_audit_event(self, *, action_type: str, details: str) -> None:
+        async with self._pool.acquire() as connection, connection.transaction():
+            await connection.execute(
+                """
+                INSERT INTO public.audit_logs (user_id, action_type, auction_id, details)
+                VALUES (NULL, $1, NULL, $2)
+                """,
+                action_type,
+                details,
+            )
+
+    async def fetch_audit_by_correlation_id(
         self,
-        connection: asyncpg.Connection,
-        *,
-        action_type: str,
-        details: str,
-    ) -> None:
-        await connection.execute(
-            """
-            INSERT INTO public.audit_logs (user_id, action_type, auction_id, details)
-            VALUES (NULL, $1, NULL, $2)
-            """,
-            action_type,
-            details,
-        )
-
-    def acquire(self) -> Any:
-        return self._pool.acquire()
-
-    async def fetch_audit_by_correlation_id(self, correlation_id: UUID) -> dict[str, Any] | None:
+        correlation_id: UUID,
+    ) -> dict[str, Any] | None:
         async with self._pool.acquire() as connection:
             row = await connection.fetchrow(
                 """

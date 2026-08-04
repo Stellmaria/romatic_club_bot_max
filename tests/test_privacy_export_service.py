@@ -19,66 +19,18 @@ class _Clock:
         return datetime(2026, 8, 5, tzinfo=UTC)
 
 
-class _Transaction:
-    def __init__(self, connection: _Connection) -> None:
-        self._connection = connection
-
-    async def __aenter__(self) -> None:
-        return None
-
-    async def __aexit__(self, exc_type: object, *_args: object) -> None:
-        self._connection.transaction_exit_exceptions.append(exc_type)
-
-
-class _Connection:
-    def __init__(self) -> None:
-        self.transaction_exit_exceptions: list[object] = []
-
-    def transaction(self) -> _Transaction:
-        return _Transaction(self)
-
-
-class _Acquire:
-    def __init__(self, connection: _Connection) -> None:
-        self._connection = connection
-
-    async def __aenter__(self) -> _Connection:
-        return self._connection
-
-    async def __aexit__(self, *_args: object) -> None:
-        return None
-
-
-class _Pool:
-    def __init__(self) -> None:
-        self.connection = _Connection()
-
-    def acquire(self) -> _Acquire:
-        return _Acquire(self.connection)
-
-
 class _Repository:
     def __init__(self) -> None:
-        self._pool = _Pool()
         self.audits: list[tuple[str, dict[str, Any]]] = []
 
-    async def collect(self, _connection: object, subject_user_id: int) -> dict[str, Any]:
+    async def collect(self, subject_user_id: int) -> dict[str, Any]:
         return {
             "identity_profiles": {
                 "users": [{"user_id": subject_user_id, "username": "tester"}],
             },
         }
 
-    def acquire(self) -> _Acquire:
-        return self._pool.acquire()
-
-    async def append_audit(
-        self,
-        _connection: object,
-        *,
-        action_type: str,
-        details: str,
-    ) -> None:
+    async def append_audit_event(self, *, action_type: str, details: str) -> None:
         self.audits.append((action_type, json.loads(details)))
 
 
@@ -138,4 +90,3 @@ async def test_cross_subject_export_is_denied_after_audit_commit(inventory: Path
 
     assert repository.audits[0][0] == "privacy.export.denied"
     assert repository.audits[0][1]["reason"] == "self-service-subject-mismatch"
-    assert repository._pool.connection.transaction_exit_exceptions == [None]
