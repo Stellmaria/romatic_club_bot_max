@@ -56,6 +56,16 @@ def _require_fernet() -> MultiFernet:
     return _fernet
 
 
+def identity_digest(domain: str, value: str) -> str:
+    """Return a domain-separated keyed digest without exposing identity values."""
+
+    normalized_domain = domain.strip().lower()
+    if not normalized_domain:
+        raise ValueError("identity digest domain must be non-empty")
+    payload = f"{normalized_domain}\x00{value.strip()}".encode("utf-8")
+    return hmac.new(_require_hash_key(), payload, hashlib.sha256).hexdigest()
+
+
 def norm_uid(uid: str | None) -> str:
     return (uid or "").strip().lower().replace(" ", "")
 
@@ -100,6 +110,7 @@ def mask_uid_by_last4(last4: str | None) -> str:
 __all__ = (
     "UIDCryptoNotConfigured",
     "configure_uid_crypto",
+    "identity_digest",
     "mask_uid",
     "mask_uid_by_last4",
     "norm_uid",
