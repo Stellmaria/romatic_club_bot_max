@@ -7,7 +7,6 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
-
 USER_MENU_ADD_LOT = "🎴 Подать лот"
 USER_MENU_MY_LOTS = "📦 Мои лоты"
 USER_MENU_TODAY = "📅 Сегодня"
@@ -24,10 +23,11 @@ USER_MENU_HOME = "🏠 Меню"
 
 USER_MENU_LAYOUT: tuple[tuple[str, ...], ...] = (
     (USER_MENU_ADD_LOT, USER_MENU_MY_LOTS),
-    (USER_MENU_TODAY, USER_MENU_NOTIFICATIONS),
-    (USER_MENU_SUBSCRIPTIONS, USER_MENU_PROFILE),
-    (USER_MENU_LUXURY, USER_MENU_SUPPORT),
-    (USER_MENU_HELP, USER_MENU_HOME),
+    (USER_MENU_TODAY, USER_MENU_EXCHANGE),
+    (USER_MENU_NOTIFICATIONS, USER_MENU_SUBSCRIPTIONS),
+    (USER_MENU_PROFILE, USER_MENU_LUXURY),
+    (USER_MENU_SUPPORT, USER_MENU_HELP),
+    (USER_MENU_HOME,),
 )
 
 
@@ -35,10 +35,7 @@ def build_user_main_keyboard() -> ReplyKeyboardMarkup:
     """Build the canonical persistent keyboard for private users."""
 
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=label) for label in row]
-            for row in USER_MENU_LAYOUT
-        ],
+        keyboard=[[KeyboardButton(text=label) for label in row] for row in USER_MENU_LAYOUT],
         resize_keyboard=True,
         is_persistent=True,
         input_field_placeholder="Выберите раздел меню",
@@ -52,11 +49,28 @@ def back_to_menu_keyboard() -> ReplyKeyboardMarkup:
 
 
 def currency_choice_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💎 Алмазы", callback_data="user_edit_currency|алмазы")],
-        [InlineKeyboardButton(text="🍵 Чашки", callback_data="user_edit_currency|чашки")],
-        [InlineKeyboardButton(text="🪙 Сокровища", callback_data="user_edit_currency|сокровища")],
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💎 Алмазы",
+                    callback_data="user_edit_currency|алмазы",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🍵 Чашки",
+                    callback_data="user_edit_currency|чашки",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🪙 Сокровища",
+                    callback_data="user_edit_currency|сокровища",
+                )
+            ],
+        ]
+    )
 
 
 def craft_uid_kb() -> InlineKeyboardMarkup:
