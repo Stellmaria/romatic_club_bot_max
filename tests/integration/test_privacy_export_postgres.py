@@ -101,15 +101,13 @@ async def test_denied_privacy_export_audit_survives_authorization_error(
         )
 
     async with postgres_pool.acquire() as connection:
-        audit = await connection.fetchrow(
-            """
+        audit = await connection.fetchrow("""
             SELECT action_type, details
             FROM public.audit_logs
             WHERE action_type = 'privacy.export.denied'
             ORDER BY id DESC
             LIMIT 1
-            """
-        )
+            """)
 
     assert audit is not None
     details = json.loads(audit["details"])
