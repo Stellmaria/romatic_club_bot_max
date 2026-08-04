@@ -1,0 +1,392 @@
+{
+  "schema_version": 1,
+  "owner": "Stellmaria",
+  "technical_owner": "romatic_club_bot_max maintainers",
+  "review_interval_days": 90,
+  "last_reviewed": "2026-08-04",
+  "policy_state": "engineering-baseline",
+  "jurisdiction_status": "legal-retention-periods-not-approved",
+  "backup_policy": {
+    "local_retention_days": 14,
+    "offsite_retention_days": 90,
+    "offsite_tracking_issue": "Stellmaria/Velvet#614",
+    "deletion_semantics": "deleted primary data may remain in encrypted backups until scheduled expiry"
+  },
+  "retention_classes": {
+    "temporary_7d": {
+      "days": 7,
+      "status": "approved",
+      "purpose": "ephemeral operator workflow state",
+      "destructive_enabled": false
+    },
+    "operational_30d": {
+      "days": 30,
+      "status": "proposed",
+      "purpose": "delivery diagnostics and recoverable operational state",
+      "destructive_enabled": false
+    },
+    "security_365d": {
+      "days": 365,
+      "status": "proposed",
+      "purpose": "security, abuse prevention and operator accountability",
+      "destructive_enabled": false
+    },
+    "business_hold": {
+      "days": null,
+      "status": "owner-legal-decision-required",
+      "purpose": "auction, exchange, moderation and dispute history",
+      "destructive_enabled": false
+    },
+    "account_lifetime": {
+      "days": null,
+      "status": "owner-legal-decision-required",
+      "purpose": "active account and service preferences",
+      "destructive_enabled": false
+    }
+  },
+  "datasets": [
+    {
+      "id": "identity_profiles",
+      "tables": [
+        "users",
+        "admins",
+        "trusted_usernames",
+        "admin_thanks_users",
+        "admin_thanks_clicks",
+        "guides_thanks"
+      ],
+      "data_fields": [
+        "user_id",
+        "username",
+        "full_name",
+        "chat_id",
+        "message_id",
+        "roles",
+        "service_flags"
+      ],
+      "purpose": "account routing, roles, access control and user-facing attribution",
+      "sensitivity": "high",
+      "access_roles": [
+        "application",
+        "owner-admin"
+      ],
+      "retention_class": "account_lifetime",
+      "backup_presence": true,
+      "deletion_action": "anonymize identity fields only after business-history review",
+      "exceptions": [
+        "owner/admin role",
+        "security investigation",
+        "referenced business history"
+      ]
+    },
+    {
+      "id": "uid_identity_and_verification",
+      "tables": [
+        "user_uids",
+        "uid_bans",
+        "uid_verification_requests",
+        "uid_verification_confirmations",
+        "uid_verification_events",
+        "uid_verification_request_reminders",
+        "uid_verification_confirmation_reminders",
+        "v_user_uid_status"
+      ],
+      "data_fields": [
+        "uid_hash",
+        "uid_enc",
+        "uid_last4",
+        "proof_file_ids",
+        "counterparty_user_id",
+        "counterparty_username",
+        "actor_id",
+        "actor_username",
+        "moderation_details"
+      ],
+      "purpose": "identity verification, duplicate-account detection and abuse prevention",
+      "sensitivity": "restricted",
+      "access_roles": [
+        "application",
+        "owner-admin",
+        "uid-moderator"
+      ],
+      "retention_class": "security_365d",
+      "backup_presence": true,
+      "deletion_action": "remove proof media after approved period; preserve minimal abuse-prevention digest when justified",
+      "exceptions": [
+        "active ban",
+        "open appeal",
+        "security investigation",
+        "unresolved verification"
+      ]
+    },
+    {
+      "id": "auction_and_bid_history",
+      "tables": [
+        "auctions",
+        "auction_owners",
+        "bids",
+        "autobids",
+        "autobid_actions",
+        "auction_manual_results",
+        "auction_posts_backfill",
+        "auction_posts_stats",
+        "auction_win_mailings",
+        "bid_duplicate_archive"
+      ],
+      "data_fields": [
+        "owner_id",
+        "bidder_id",
+        "winner_id",
+        "target_user_id",
+        "username",
+        "message_id",
+        "discussion_message_id",
+        "bid_payload",
+        "reason"
+      ],
+      "purpose": "auction execution, integrity, dispute resolution and publication recovery",
+      "sensitivity": "high",
+      "access_roles": [
+        "application",
+        "auction-moderator",
+        "owner-admin"
+      ],
+      "retention_class": "business_hold",
+      "backup_presence": true,
+      "deletion_action": "anonymize direct identity while preserving financial and integrity facts after approval",
+      "exceptions": [
+        "active auction",
+        "open dispute",
+        "fraud investigation",
+        "required audit history"
+      ]
+    },
+    {
+      "id": "exchange_history",
+      "tables": [
+        "exchange_batches",
+        "exchange_items",
+        "exchange_print_stats"
+      ],
+      "data_fields": [
+        "user_id",
+        "moderator_id",
+        "moderator_username",
+        "winner_id",
+        "winner_username",
+        "proof_photo_id",
+        "comment",
+        "moderator_comment",
+        "message_id"
+      ],
+      "purpose": "exchange moderation, publication, winner selection and dispute handling",
+      "sensitivity": "high",
+      "access_roles": [
+        "application",
+        "exchange-moderator",
+        "owner-admin"
+      ],
+      "retention_class": "business_hold",
+      "backup_presence": true,
+      "deletion_action": "anonymize identity and proof references after approval",
+      "exceptions": [
+        "pending moderation",
+        "open dispute",
+        "security investigation"
+      ]
+    },
+    {
+      "id": "market_and_media",
+      "tables": [
+        "market_listings",
+        "market_listing_items",
+        "auction_media_assets",
+        "cards"
+      ],
+      "data_fields": [
+        "seller identity through listing relation",
+        "file_id",
+        "file_unique_id",
+        "proof_file_id",
+        "message_id"
+      ],
+      "purpose": "market listings and Telegram media reuse",
+      "sensitivity": "moderate",
+      "access_roles": [
+        "application",
+        "market-moderator",
+        "owner-admin"
+      ],
+      "retention_class": "business_hold",
+      "backup_presence": true,
+      "deletion_action": "remove proof references and anonymize seller linkage after approved business retention",
+      "exceptions": [
+        "active listing",
+        "open dispute"
+      ]
+    },
+    {
+      "id": "preferences_and_delivery",
+      "tables": [
+        "settings",
+        "notifications",
+        "user_subscriptions",
+        "user_preset_subscriptions",
+        "card_day_notifications",
+        "unreachable_users"
+      ],
+      "data_fields": [
+        "user_id",
+        "notification preferences",
+        "subscription choices",
+        "delivery failure reason",
+        "last_seen"
+      ],
+      "purpose": "notification preferences and delivery suppression",
+      "sensitivity": "moderate",
+      "access_roles": [
+        "application",
+        "owner-admin"
+      ],
+      "retention_class": "account_lifetime",
+      "backup_presence": true,
+      "deletion_action": "delete with account unless needed for short delivery suppression window",
+      "exceptions": [
+        "active delivery retry"
+      ]
+    },
+    {
+      "id": "appeals_bans_and_warnings",
+      "tables": [
+        "user_appeals",
+        "user_bans",
+        "user_warnings",
+        "delete_requests"
+      ],
+      "data_fields": [
+        "user_id",
+        "username",
+        "description",
+        "participants",
+        "media_message_ids",
+        "moderator_id",
+        "moderator_username",
+        "reason",
+        "details"
+      ],
+      "purpose": "moderation, appeals, abuse prevention and accountability",
+      "sensitivity": "restricted",
+      "access_roles": [
+        "application",
+        "moderator",
+        "owner-admin"
+      ],
+      "retention_class": "security_365d",
+      "backup_presence": true,
+      "deletion_action": "anonymize resolved records after approved security retention",
+      "exceptions": [
+        "active ban",
+        "open appeal",
+        "ongoing investigation"
+      ]
+    },
+    {
+      "id": "audit_history",
+      "tables": [
+        "audit_logs"
+      ],
+      "data_fields": [
+        "user_id",
+        "action_type",
+        "auction_id",
+        "details",
+        "created_at"
+      ],
+      "purpose": "operator accountability, incident reconstruction and security audit",
+      "sensitivity": "restricted",
+      "access_roles": [
+        "owner-admin",
+        "incident-response"
+      ],
+      "retention_class": "security_365d",
+      "backup_presence": true,
+      "deletion_action": "set actor identity null or pseudonymous while preserving action facts after approval",
+      "exceptions": [
+        "open incident",
+        "security investigation",
+        "required business evidence"
+      ]
+    },
+    {
+      "id": "telegram_outbox",
+      "tables": [
+        "telegram_outbox"
+      ],
+      "data_fields": [
+        "chat_id",
+        "payload",
+        "telegram_message_id",
+        "last_error",
+        "reviewed_by",
+        "review_note"
+      ],
+      "purpose": "reliable Telegram delivery, replay protection and failure review",
+      "sensitivity": "high",
+      "access_roles": [
+        "application",
+        "incident-response",
+        "owner-admin"
+      ],
+      "retention_class": "operational_30d",
+      "backup_presence": true,
+      "deletion_action": "delete completed deliveries after approved period; retain unresolved failures",
+      "exceptions": [
+        "pending delivery",
+        "review required",
+        "open incident"
+      ]
+    },
+    {
+      "id": "schedule_operator_state",
+      "tables": [
+        "schedule_setup_sessions",
+        "schedule_setup_deck_scopes",
+        "schedule_preview_target",
+        "schedule_publication_reviews"
+      ],
+      "data_fields": [
+        "user_id",
+        "chat_id",
+        "message_id",
+        "reviewed_by",
+        "workflow state"
+      ],
+      "purpose": "temporary schedule-setup and publication-review workflow",
+      "sensitivity": "moderate",
+      "access_roles": [
+        "application",
+        "schedule-admin"
+      ],
+      "retention_class": "temporary_7d",
+      "backup_presence": true,
+      "deletion_action": "delete expired workflow state",
+      "exceptions": [
+        "active workflow"
+      ],
+      "cleanup_rules": [
+        {
+          "id": "expired_schedule_setup_sessions",
+          "planner_key": "schedule_setup_sessions",
+          "status": "approved",
+          "destructive_enabled": false
+        },
+        {
+          "id": "expired_schedule_setup_deck_scopes",
+          "planner_key": "schedule_setup_deck_scopes",
+          "status": "approved",
+          "destructive_enabled": false
+        }
+      ]
+    }
+  ]
+}
