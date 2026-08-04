@@ -83,10 +83,16 @@ def _is_blank(value: object) -> bool:
 
 
 def _is_positive_int(value: object) -> bool:
-    try:
-        return int(value) > 0
-    except (TypeError, ValueError):
+    if isinstance(value, bool):
         return False
+    if isinstance(value, int):
+        return value > 0
+    if isinstance(value, str):
+        try:
+            return int(value) > 0
+        except ValueError:
+            return False
+    return False
 
 
 def _safe_text(value: object, *, fallback: str = "—", limit: int = 80) -> str:
