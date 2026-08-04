@@ -226,9 +226,7 @@ class PrivacyExportRepository:
                 f"SELECT {selected} FROM public.{table} WHERE {subject_column} = $1",
                 int(subject_user_id),
             )
-            datasets.setdefault(source.dataset_id, {})[source.table] = [
-                dict(row) for row in rows
-            ]
+            datasets.setdefault(source.dataset_id, {})[source.table] = [dict(row) for row in rows]
         return datasets
 
     async def append_audit(
@@ -250,10 +248,7 @@ class PrivacyExportRepository:
     def acquire(self) -> Any:
         return self._pool.acquire()
 
-    async def fetch_audit_by_correlation_id(
-        self,
-        correlation_id: UUID,
-    ) -> dict[str, Any] | None:
+    async def fetch_audit_by_correlation_id(self, correlation_id: UUID) -> dict[str, Any] | None:
         async with self._pool.acquire() as connection:
             row = await connection.fetchrow(
                 """

@@ -42,9 +42,7 @@ async def test_privacy_export_is_read_only_except_append_only_audit(
     result = await service.export_self(actor_user_id=user_id, subject_user_id=user_id)
     payload = json.loads(result.payload)
 
-    assert payload["datasets"]["identity_profiles"]["users"][0]["username"] == (
-        "privacy_fixture"
-    )
+    assert payload["datasets"]["identity_profiles"]["users"][0]["username"] == "privacy_fixture"
     serialized = result.payload.decode("utf-8")
     for forbidden in ("uid_hash", "uid_enc", "proof_file_id", "proof_photo_id"):
         assert forbidden not in serialized

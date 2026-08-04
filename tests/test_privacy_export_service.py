@@ -59,8 +59,8 @@ class _Repository:
     async def collect(self, _connection: object, subject_user_id: int) -> dict[str, Any]:
         return {
             "identity_profiles": {
-                "users": [{"user_id": subject_user_id, "username": "tester"}]
-            }
+                "users": [{"user_id": subject_user_id, "username": "tester"}],
+            },
         }
 
     def acquire(self) -> _Acquire:
