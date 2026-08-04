@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """Recovery layer for legacy UID verification requests and revision flow."""
 
 from __future__ import annotations
@@ -140,7 +141,7 @@ async def approve_uid_with_legacy_recovery(
             expected_user_id=None,
             allowed_statuses={"pending"},
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception(
             "Failed to preflight UID verification approval",
             extra={"request_id": request_id},
@@ -223,7 +224,7 @@ async def start_uid_revision_recovery(
             expected_user_id=call.from_user.id,
             allowed_statuses={"revision"},
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception(
             "Failed to prepare UID verification revision",
             extra={"request_id": request_id, "user_id": call.from_user.id},
@@ -292,7 +293,7 @@ async def save_missing_revision_uid(
             user_id=message.from_user.id,
             uid=normalized,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception(
             "Failed to restore UID for revision request",
             extra={"request_id": request_id, "user_id": message.from_user.id},
