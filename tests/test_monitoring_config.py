@@ -14,7 +14,9 @@ def test_monitoring_contract_is_complete() -> None:
 
 def test_dashboard_separates_core_and_userbot_panels() -> None:
     dashboard = json.loads(
-        (ROOT / "monitoring/grafana/observability-dashboard.json").read_text(encoding="utf-8")
+        (ROOT / "monitoring/grafana/observability-dashboard.json").read_text(
+            encoding="utf-8"
+        )
     )
     titles = {panel["title"] for panel in dashboard["panels"]}
 
@@ -40,6 +42,8 @@ def test_every_alert_links_to_slo_and_runbook() -> None:
 
 
 def test_monitoring_diagnostics_are_excluded_from_runtime_context() -> None:
-    dockerignore = set((ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines())
+    dockerignore = set(
+        (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    )
 
     assert {"monitoring/", "docs/", "tests/", ".github/"} <= dockerignore
