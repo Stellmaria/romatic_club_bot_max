@@ -31,6 +31,17 @@ jobs:
           echo '57e1c8f3a173ecc6fc5ebb430d1eecfd4b9446f68cf04899c155d3778d85ad75  /tmp/schedule-patch.tar.gz' | sha256sum --check --strict
           tar -tzf /tmp/schedule-patch.tar.gz
           tar -xzf /tmp/schedule-patch.tar.gz
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("bot/domain/schedule_lots.py")
+          source = path.read_text(encoding="utf-8")
+          old = 'r"(?:кручени[яй]|spins?)\\D*(10|50|100)"'
+          new = 'r"(?:кручени[яй]|spins?)\\D*(100|50|10)"'
+          if old not in source:
+              raise SystemExit("spin quantity regex not found")
+          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          PY
       - name: Install locked development tools
         run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Format and validate changed files
