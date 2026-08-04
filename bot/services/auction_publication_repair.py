@@ -66,7 +66,12 @@ def parse_issue99_plan(
             raise PublicationRepairError(f"auction {auction_id} appears more than once")
         seen.add(auction_id)
         action = str(item.get("action") or "").strip()
-        if action not in {"confirm", "normalize_published", "requeue"}:
+        if action not in {
+            "confirm",
+            "normalize_published",
+            "replace_published",
+            "requeue",
+        }:
             raise PublicationRepairError(f"unsupported action for {auction_id}: {action!r}")
         channel_message_id = _positive_optional(
             item.get("channel_message_id"),
@@ -76,10 +81,28 @@ def parse_issue99_plan(
             item.get("discussion_message_id"),
             field="discussion_message_id",
         )
+        expected_previous_channel_message_id = _positive_optional(
+            item.get("expected_previous_channel_message_id"),
+            field="expected_previous_channel_message_id",
+        )
         post_verified_absent = item.get("post_verified_absent") is True
-        if action in {"confirm", "normalize_published"} and channel_message_id is None:
+        if action in {"confirm", "normalize_published", "replace_published"} and (
+            channel_message_id is None
+        ):
             raise PublicationRepairError(
                 f"{action} for {auction_id} requires a verified channel_message_id"
+            )
+        if (
+            action == "replace_published"
+            and expected_previous_channel_message_id is None
+        ):
+            raise PublicationRepairError(
+                f"replace_published for {auction_id} requires "
+                "expected_previous_channel_message_id"
+            )
+        if action != "replace_published" and expected_previous_channel_message_id is not None:
+            raise PublicationRepairError(
+                "expected_previous_channel_message_id is only valid for replace_published"
             )
         if action == "requeue" and not post_verified_absent:
             raise PublicationRepairError(
@@ -92,6 +115,9 @@ def parse_issue99_plan(
                 channel_message_id=channel_message_id,
                 discussion_message_id=discussion_message_id,
                 post_verified_absent=post_verified_absent,
+                expected_previous_channel_message_id=(
+                    expected_previous_channel_message_id
+                ),
             )
         )
     if require_complete:
