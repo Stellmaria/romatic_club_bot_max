@@ -19,16 +19,18 @@ from bot.handlers.admin.uid_admin_presentation import (
     rev_flags_to_lines,
     sort_rev_flags,
 )
+from bot.services import uid_verification as uid_verification_service
 from bot.services.admin_thanks import admin_tag
-from bot.services.uid_verification import (
-    get_uid_verification_request,
-    set_uid_verification_request_revision,
-)
 from bot.telegram.callback_parser import split_callback_data
 from bot.telegram.states import UIDVerificationRevisionFSM
 
 logger = logging.getLogger(__name__)
 router = Router(name=__name__)
+
+
+def _callback_message(call: types.CallbackQuery) -> types.Message | None:
+    message = call.message
+    return message if isinstance(message, types.Message) else None
 
 
 @router.callback_query(F.data.startswith("uidv|rev|"))
@@ -40,9 +42,15 @@ async def uidv_revision_start(call: types.CallbackQuery, state: FSMContext) -> N
         return
 
     req_id = int(parts[2] or 0)
-    req = await get_uid_verification_request(req_id)
+    service = await uid_verification_service.UIDVerificationService.create()
+    req = await service.get_request(req_id)
     if not req:
         await call.answer("Заявка не найдена.", show_alert=True)
+        return
+
+    message = _callback_message(call)
+    if message is None:
+        await call.answer("Сообщение заявки недоступно.", show_alert=True)
         return
 
     await state.set_state(UIDVerificationRevisionFSM.choosing_flags)
@@ -53,9 +61,9 @@ async def uidv_revision_start(call: types.CallbackQuery, state: FSMContext) -> N
         f"Отметь, что нужно исправить, добавь причину, затем отправь пользователю."
     )
     try:
-        await call.message.edit_text(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
+        await message.edit_text(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
     except TelegramBadRequest:
-        await call.message.answer(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
+        await message.answer(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
     await call.answer()
 
 
@@ -69,6 +77,11 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
     # старый/кривой: uidv|rev_toggle|<id>|X|<flag> (len>=5)
     if len(parts) < 4:
         await call.answer("Некорректная кнопка.", show_alert=True)
+        return
+
+    message = _callback_message(call)
+    if message is None:
+        await call.answer("Сообщение заявки недоступно.", show_alert=True)
         return
 
     req_id = int(parts[2] or 0)
@@ -99,7 +112,7 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
     await call.answer()
 
     with suppress(TelegramBadRequest):
-        await call.message.edit_reply_markup(
+        await message.edit_reply_markup(
             reply_markup=kb_uidv_revision(req_id, chosen_list, reason)
         )
 
@@ -112,13 +125,18 @@ async def uidv_revision_reason(call: types.CallbackQuery, state: FSMContext) -> 
         await call.answer("Некорректная кнопка.", show_alert=True)
         return
 
+    message = _callback_message(call)
+    if message is None:
+        await call.answer("Сообщение заявки недоступно.", show_alert=True)
+        return
+
     req_id = int(parts[2] or 0)
     await state.set_state(UIDVerificationRevisionFSM.waiting_reason)
     await state.update_data(uidv_rev_req_id=req_id)
 
     await call.answer()
 
-    await call.message.answer(
+    await message.answer(
         "✏️ Напиши причину/комментарий, что именно не так и что нужно исправить.\n"
         "Можно коротко, но по делу.",
     )
@@ -171,7 +189,8 @@ async def uidv_revision_send(
         await call.answer("Нужна причина (кнопка «Причина»).", show_alert=True)
         return
 
-    req = await get_uid_verification_request(req_id)
+    service = await uid_verification_service.UIDVerificationService.create()
+    req = await service.get_request(req_id)
     if not req:
         await call.answer("Заявка не найдена.", show_alert=True)
         return
@@ -180,7 +199,7 @@ async def uidv_revision_send(
     admin_id = call.from_user.id
     admin_username = call.from_user.username or call.from_user.full_name
 
-    ok = await set_uid_verification_request_revision(
+    ok = await uid_verification_service.set_uid_verification_request_revision(  # type: ignore[attr-defined]
         req_id,
         moderator_id=admin_id,
         moderator_username=admin_username,
