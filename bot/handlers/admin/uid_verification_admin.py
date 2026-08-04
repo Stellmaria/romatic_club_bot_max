@@ -21,7 +21,6 @@ from bot.handlers.admin.logs_admin import send_admin_log
 from bot.services.uid_verification import (
     approve_uid_verification_request,
     reject_uid_verification_request,
-    set_uid_verification_request_revision,
 )
 from bot.telegram.states import ModActionFSM, UIDVerificationRevisionFSM
 
