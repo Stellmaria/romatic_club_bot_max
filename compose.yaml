@@ -19,6 +19,32 @@ services:
     networks:
       romatic-database: {}
 
+  restore-drill-postgres:
+    profiles: ["operations"]
+    image: ${POSTGRES_IMAGE:-romatic-postgres:17-alpine-hardened}
+    environment:
+      POSTGRES_DB: restore_drill
+      POSTGRES_USER: restore_drill
+      POSTGRES_PASSWORD: restore_drill_ephemeral_only
+    tmpfs:
+      - /var/lib/postgresql/data:size=${RESTORE_DRILL_TMPFS_SIZE:-2g},mode=0700
+    shm_size: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restore_drill -d restore_drill"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: "no"
+    mem_limit: ${RESTORE_DRILL_MEMORY_LIMIT:-1g}
+    cpus: ${RESTORE_DRILL_CPU_LIMIT:-1.0}
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      romatic-database:
+        aliases:
+          - restore-drill-postgres
+
   supervisor-proxy:
     image: ${SUPERVISOR_PROXY_IMAGE:-romatic-server-supervisor-proxy:local}
     build:
@@ -93,6 +119,39 @@ services:
     stop_grace_period: 10s
     restart: "no"
 
+  migration-runner:
+    profiles: ["operations"]
+    image: ${BOT_IMAGE:-romaticclub-bot}
+    build:
+      context: .
+      args:
+        REQUIREMENTS_LOCK: requirements/bot.lock
+    user: "${ROMATIC_APP_UID:-10001}:${ROMATIC_APP_GID:-10001}"
+    env_file:
+      - ${BOT_ENV_FILE:-.env.bot}
+    environment:
+      DB_AUTO_MIGRATE: "false"
+      RUNTIME_DIR: /tmp/runtime
+      ROMATIC_ALLOW_CONTRACT_MIGRATION: ${ROMATIC_ALLOW_CONTRACT_MIGRATION:-false}
+    command: ["python", "-m", "db.migrator", "apply", "--json"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    restart: "no"
+    mem_limit: ${MIGRATION_RUNNER_MEMORY_LIMIT:-512m}
+    cpus: ${MIGRATION_RUNNER_CPU_LIMIT:-1.0}
+    pids_limit: 128
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      romatic-database: {}
+
   bot:
     image: ${BOT_IMAGE:-romaticclub-bot}
     build:
@@ -105,6 +164,7 @@ services:
     env_file:
       - ${BOT_ENV_FILE:-.env.bot}
     environment:
+      DB_AUTO_MIGRATE: "false"
       RUNTIME_DIR: /app/var
       SUPERVISOR_TOKEN: ""
       SUPERVISOR_TOKEN_FILE: /run/secrets/supervisor_token
@@ -157,6 +217,7 @@ services:
     env_file:
       - ${USERBOT_ENV_FILE:-.env.userbot}
     environment:
+      DB_AUTO_MIGRATE: "false"
       RUNTIME_DIR: /app/var
       USERBOT_SESSION: /run/romatic-userbot-session/userbot
       SUPERVISOR_ENABLED: "false"

@@ -1,22 +1,59 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import hashlib
+import json
 import logging
+import os
 import re
+import sys
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import asyncpg
 
 logger = logging.getLogger("auction_bot.migrations")
 
+
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 MIGRATION_NAME_RE = re.compile(r"^(?P<version>\d{3,})_[a-z0-9_]+\.sql$")
+MIGRATION_POLICY_RE = re.compile(
+    r"^--\s*(?P<key>compatibility|rollback|note)\s*:\s*(?P<value>.+?)\s*$",
+    re.IGNORECASE,
+)
 MIGRATION_LOCK_ID = 7_423_102_026_071_5
 MIGRATION_TABLE = "schema_migrations"
+LEGACY_POLICY_MAX_VERSION = 19
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+class MigrationCompatibility(StrEnum):
+    LEGACY = "legacy"
+    EXPAND = "expand"
+    CONTRACT = "contract"
+
+
+class RollbackStrategy(StrEnum):
+    CODE_ONLY_SAFE = "code-only-safe"
+    FORWARD_FIX = "forward-fix"
+    RESTORE_REQUIRED = "restore-required"
+
+
+@dataclass(frozen=True, slots=True)
+class MigrationPolicy:
+    compatibility: MigrationCompatibility
+    rollback: RollbackStrategy
+    note: str
+
+    @property
+    def code_rollback_safe(self) -> bool:
+        return self.rollback is RollbackStrategy.CODE_ONLY_SAFE
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +64,29 @@ class Migration:
     sql: str
     checksum: str
     compatible_checksums: frozenset[str]
+    policy: MigrationPolicy
+
+
+@dataclass(frozen=True, slots=True)
+class MigrationPlanItem:
+    filename: str
+    version: int
+    checksum: str
+    state: str
+    compatibility: str
+    rollback: str
+    note: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "filename": self.filename,
+            "version": self.version,
+            "checksum": self.checksum,
+            "state": self.state,
+            "compatibility": self.compatibility,
+            "rollback": self.rollback,
+            "note": self.note,
+        }
 
 
 def _migration_checksums(raw: bytes) -> tuple[str, frozenset[str]]:
@@ -43,6 +103,73 @@ def _migration_checksums(raw: bytes) -> tuple[str, frozenset[str]]:
     )
 
 
+def _legacy_policy(filename: str) -> MigrationPolicy:
+    return MigrationPolicy(
+        compatibility=MigrationCompatibility.LEGACY,
+        rollback=RollbackStrategy.RESTORE_REQUIRED,
+        note=(
+            "Immutable legacy production migration. Code rollback is not assumed; "
+            f"restore the verified pre-deploy backup if {filename} must be reversed."
+        ),
+    )
+
+
+def _parse_migration_policy(*, filename: str, version: int, sql: str) -> MigrationPolicy:
+    metadata: dict[str, str] = {}
+    for line in sql.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = MIGRATION_POLICY_RE.fullmatch(stripped)
+        if match:
+            metadata[match.group("key").lower()] = match.group("value").strip()
+            continue
+        if stripped.startswith("--"):
+            continue
+        break
+
+    if not metadata and version <= LEGACY_POLICY_MAX_VERSION:
+        return _legacy_policy(filename)
+
+    missing = sorted({"compatibility", "rollback", "note"} - metadata.keys())
+    if missing:
+        raise RuntimeError(
+            f"Migration {filename} has no required policy metadata: {', '.join(missing)}. "
+            "Add leading SQL comments '-- compatibility: expand|contract', "
+            "'-- rollback: code-only-safe|forward-fix|restore-required' and '-- note: ...'."
+        )
+
+    try:
+        compatibility = MigrationCompatibility(metadata["compatibility"].casefold())
+    except ValueError as error:
+        raise RuntimeError(
+            f"Migration {filename} has unsupported compatibility policy: "
+            f"{metadata['compatibility']!r}"
+        ) from error
+    if compatibility is MigrationCompatibility.LEGACY:
+        raise RuntimeError(
+            f"Migration {filename} cannot declare compatibility=legacy; "
+            "new migrations must be expand or contract."
+        )
+
+    try:
+        rollback = RollbackStrategy(metadata["rollback"].casefold())
+    except ValueError as error:
+        raise RuntimeError(
+            f"Migration {filename} has unsupported rollback policy: " f"{metadata['rollback']!r}"
+        ) from error
+
+    note = metadata["note"].strip()
+    if len(note) < 12:
+        raise RuntimeError(f"Migration {filename} policy note is too short")
+
+    return MigrationPolicy(
+        compatibility=compatibility,
+        rollback=rollback,
+        note=note,
+    )
+
+
 def _load_migrations(directory: Path = MIGRATIONS_DIR) -> list[Migration]:
     if not directory.is_dir():
         raise RuntimeError(f"Каталог миграций не найден: {directory}")
@@ -54,8 +181,7 @@ def _load_migrations(directory: Path = MIGRATIONS_DIR) -> list[Migration]:
         match = MIGRATION_NAME_RE.fullmatch(path.name)
         if not match:
             raise RuntimeError(
-                f"Неверное имя миграции {path.name!r}. "
-                "Ожидается формат 001_description.sql"
+                f"Неверное имя миграции {path.name!r}. " "Ожидается формат 001_description.sql"
             )
 
         version = int(match.group("version"))
@@ -77,11 +203,16 @@ def _load_migrations(directory: Path = MIGRATIONS_DIR) -> list[Migration]:
                 sql=sql,
                 checksum=checksum,
                 compatible_checksums=compatible_checksums,
+                policy=_parse_migration_policy(
+                    filename=path.name,
+                    version=version,
+                    sql=sql,
+                ),
             )
         )
 
     if not migrations:
-        raise RuntimeError(f"В каталоге {directory} нет SQL-миграций")
+        raise RuntimeError(f"No SQL migrations found in {directory}")
 
     return migrations
 
@@ -127,7 +258,7 @@ def _is_current_migration_table(columns: dict[str, str]) -> bool:
 
 
 async def _next_legacy_table_name(conn: asyncpg.Connection) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     base = f"schema_migrations_legacy_{stamp}"
     candidate = base
     suffix = 1
@@ -148,23 +279,11 @@ async def _archive_legacy_migration_table(conn: asyncpg.Connection) -> str:
     legacy_name = await _next_legacy_table_name(conn)
     quoted_old = await _quote_identifier(conn, MIGRATION_TABLE)
     quoted_new = await _quote_identifier(conn, legacy_name)
-    await conn.execute(
-        f"ALTER TABLE public.{quoted_old} RENAME TO {quoted_new}"
-    )
+    await conn.execute(f"ALTER TABLE public.{quoted_old} RENAME TO {quoted_new}")
     return legacy_name
 
 
 async def _ensure_migration_table(conn: asyncpg.Connection) -> None:
-    """
-    Создаёт таблицу нового формата.
-
-    В старых версиях проекта уже могла существовать public.schema_migrations
-    с колонками вроде version/applied_at, но без filename/checksum. PostgreSQL
-    не изменяет такую таблицу при CREATE TABLE IF NOT EXISTS, поэтому прежний
-    мигратор падал на SELECT filename. Несовместимая таблица сохраняется под
-    именем schema_migrations_legacy_*, а новая создаётся рядом. Данные проекта
-    при этом не затрагиваются.
-    """
     await conn.execute("CREATE SCHEMA IF NOT EXISTS public")
 
     if await _table_exists(conn, MIGRATION_TABLE):
@@ -172,14 +291,13 @@ async def _ensure_migration_table(conn: asyncpg.Connection) -> None:
         if not _is_current_migration_table(columns):
             legacy_name = await _archive_legacy_migration_table(conn)
             logger.warning(
-                "Обнаружена старая таблица public.%s с несовместимой структурой. "
-                "Она сохранена как public.%s; создан новый журнал миграций.",
+                "Found incompatible legacy table public.%s. "
+                "It was archived as public.%s before creating the migration journal.",
                 MIGRATION_TABLE,
                 legacy_name,
             )
 
-    await conn.execute(
-        """
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS public.schema_migrations (
             filename          text PRIMARY KEY,
             version           integer NOT NULL UNIQUE,
@@ -188,27 +306,113 @@ async def _ensure_migration_table(conn: asyncpg.Connection) -> None:
             execution_ms      integer NOT NULL,
             postgres_version  text NOT NULL
         )
-        """
-    )
+        """)
 
 
 async def _applied_migrations(conn: asyncpg.Connection) -> dict[str, asyncpg.Record]:
-    rows = await conn.fetch(
-        """
+    rows = await conn.fetch("""
         SELECT filename, version, checksum, applied_at
         FROM public.schema_migrations
         ORDER BY version
-        """
-    )
+        """)
     return {str(row["filename"]): row for row in rows}
+
+
+def _validate_applied_history(
+    migrations: list[Migration],
+    applied: dict[str, asyncpg.Record],
+) -> None:
+    by_version = {migration.version: migration for migration in migrations}
+    for filename, row in applied.items():
+        version = int(row["version"])
+        migration = next((item for item in migrations if item.filename == filename), None)
+        if migration is None:
+            raise RuntimeError(
+                f"Applied migration is absent from target source: {filename} (version {version})"
+            )
+        if migration.version != version:
+            raise RuntimeError(
+                f"Applied migration version mismatch for {filename}: "
+                f"database={version}, source={migration.version}"
+            )
+        if str(row["checksum"]) not in migration.compatible_checksums:
+            raise RuntimeError(
+                "Уже применённая миграция была изменена: "
+                f"{filename}. Создай новую миграцию вместо редактирования старой."
+            )
+        if by_version.get(version) is not migration:
+            raise RuntimeError(f"Migration version collision detected: {version}")
+
+
+def _plan_items(
+    migrations: list[Migration],
+    applied: dict[str, asyncpg.Record],
+) -> list[MigrationPlanItem]:
+    return [
+        MigrationPlanItem(
+            filename=migration.filename,
+            version=migration.version,
+            checksum=migration.checksum,
+            state="applied" if migration.filename in applied else "pending",
+            compatibility=migration.policy.compatibility.value,
+            rollback=migration.policy.rollback.value,
+            note=migration.policy.note,
+        )
+        for migration in migrations
+    ]
+
+
+async def migration_plan(
+    pool: asyncpg.Pool,
+    *,
+    directory: Path = MIGRATIONS_DIR,
+) -> dict[str, Any]:
+    migrations = _load_migrations(directory)
+    async with pool.acquire() as conn:
+        if not await _table_exists(conn, MIGRATION_TABLE):
+            applied: dict[str, asyncpg.Record] = {}
+        else:
+            columns = await _migration_table_columns(conn)
+            if not _is_current_migration_table(columns):
+                raise RuntimeError(
+                    "public.schema_migrations has an incompatible layout; "
+                    "run the controlled migration runner instead of planning from app startup"
+                )
+            applied = await _applied_migrations(conn)
+
+    _validate_applied_history(migrations, applied)
+    items = _plan_items(migrations, applied)
+    pending = [item for item in items if item.state == "pending"]
+    return {
+        "current_version": max(
+            (int(row["version"]) for row in applied.values()),
+            default=0,
+        ),
+        "target_version": max(item.version for item in items),
+        "pending_count": len(pending),
+        "pending": [item.as_dict() for item in pending],
+        "migrations": [item.as_dict() for item in items],
+        "code_rollback_safe": all(
+            item.rollback == RollbackStrategy.CODE_ONLY_SAFE.value for item in pending
+        ),
+        "requires_contract_approval": any(
+            item.compatibility == MigrationCompatibility.CONTRACT.value for item in pending
+        ),
+        "rollback_strategies": sorted({item.rollback for item in pending}),
+    }
+
+
+def _allow_contract_from_env() -> bool:
+    return os.environ.get("ROMATIC_ALLOW_CONTRACT_MIGRATION", "").strip().casefold() in _TRUE_VALUES
 
 
 async def apply_migrations(
     pool: asyncpg.Pool,
     *,
     directory: Path = MIGRATIONS_DIR,
+    allow_contract: bool = False,
 ) -> list[str]:
-    """Применяет отсутствующие миграции и возвращает их имена."""
+    """Apply missing migrations through the single controlled runner."""
     migrations = _load_migrations(directory)
     applied_now: list[str] = []
 
@@ -217,6 +421,7 @@ async def apply_migrations(
         try:
             await _ensure_migration_table(conn)
             applied = await _applied_migrations(conn)
+            _validate_applied_history(migrations, applied)
             max_applied_version = max(
                 (int(row["version"]) for row in applied.values()),
                 default=0,
@@ -225,33 +430,32 @@ async def apply_migrations(
             for migration in migrations:
                 previous = applied.get(migration.filename)
                 if previous is not None:
-                    previous_checksum = str(previous["checksum"])
-                    if previous_checksum not in migration.compatible_checksums:
-                        raise RuntimeError(
-                            "Уже применённая миграция была изменена: "
-                            f"{migration.filename}. Создай новую миграцию вместо "
-                            "редактирования старой."
-                        )
                     continue
 
                 if migration.version < max_applied_version:
                     raise RuntimeError(
-                        "Обнаружена новая миграция с номером ниже уже применённых: "
-                        f"{migration.filename}. Добавляй миграции только в конец истории."
+                        "Found a pending migration below the applied version boundary: "
+                        f"{migration.filename}. Append migrations to the end of history."
                     )
 
                 conflicting = next(
-                    (
-                        row
-                        for row in applied.values()
-                        if int(row["version"]) == migration.version
-                    ),
+                    (row for row in applied.values() if int(row["version"]) == migration.version),
                     None,
                 )
                 if conflicting is not None:
                     raise RuntimeError(
                         f"Номер {migration.version} уже занят миграцией "
                         f"{conflicting['filename']}"
+                    )
+
+                if (
+                    migration.policy.compatibility is MigrationCompatibility.CONTRACT
+                    and not allow_contract
+                ):
+                    raise RuntimeError(
+                        f"Contract migration requires explicit approval: {migration.filename}. "
+                        "Set ROMATIC_ALLOW_CONTRACT_MIGRATION=true only during the documented "
+                        "contract phase after old code is no longer in service."
                     )
 
                 started = time.perf_counter()
@@ -305,7 +509,10 @@ async def apply_migrations(
     return applied_now
 
 
-async def migrate_database_url(database_url: str) -> list[str]:
+async def _with_database_runtime[RuntimeResult](
+    database_url: str,
+    callback: Callable[[asyncpg.Pool], Awaitable[RuntimeResult]],
+) -> RuntimeResult:
     if not database_url:
         raise RuntimeError("DATABASE_URL не задан")
 
@@ -322,22 +529,90 @@ async def migrate_database_url(database_url: str) -> list[str]:
     )
     pool = await runtime.start()
     try:
-        return await apply_migrations(pool)
+        return await callback(pool)
     finally:
         await runtime.close()
 
 
-async def _main() -> None:
+async def migrate_database_url(
+    database_url: str,
+    *,
+    allow_contract: bool = False,
+) -> list[str]:
+    async def run(pool: asyncpg.Pool) -> list[str]:
+        return await apply_migrations(pool, allow_contract=allow_contract)
+
+    return await _with_database_runtime(database_url, run)
+
+
+async def plan_database_url(database_url: str) -> dict[str, Any]:
+    return await _with_database_runtime(database_url, migration_plan)
+
+
+async def _execute_command(command: str) -> dict[str, Any]:
     from bot.core.environment import load_project_environment
     from bot.core.settings import DatabaseSettings
 
     load_project_environment()
     settings = DatabaseSettings.from_env()
+
+    if command == "plan":
+        return await plan_database_url(settings.url)
+
+    before = await plan_database_url(settings.url)
+    if command == "verify":
+        if before["pending_count"]:
+            raise RuntimeError(
+                f"Database schema is behind target by {before['pending_count']} migration(s)"
+            )
+        return before
+
+    applied = await migrate_database_url(
+        settings.url,
+        allow_contract=_allow_contract_from_env(),
+    )
+    after = await plan_database_url(settings.url)
+    applied_policies = [item for item in before["pending"] if item["filename"] in set(applied)]
+    return {
+        "applied": applied,
+        "applied_count": len(applied),
+        "applied_policies": applied_policies,
+        "code_rollback_safe": all(
+            item["rollback"] == RollbackStrategy.CODE_ONLY_SAFE.value for item in applied_policies
+        ),
+        "requires_forward_fix": any(
+            item["rollback"] != RollbackStrategy.CODE_ONLY_SAFE.value for item in applied_policies
+        ),
+        "current_version": after["current_version"],
+        "target_version": after["target_version"],
+        "pending_count": after["pending_count"],
+    }
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Controlled PostgreSQL migration runner")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("plan", "apply", "verify"),
+        default="apply",
+    )
+    parser.add_argument("--json", action="store_true", dest="as_json")
+    return parser
+
+
+async def _main() -> None:
+    arguments = _parser().parse_args()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stderr if arguments.as_json else sys.stdout,
     )
-    await migrate_database_url(settings.url)
+    result = await _execute_command(arguments.command)
+    if arguments.as_json:
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    else:
+        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

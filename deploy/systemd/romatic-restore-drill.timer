@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Romatic Club restore drill
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=romatic-restore-drill.service
+
+[Install]
+WantedBy=timers.target

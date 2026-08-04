@@ -19,7 +19,7 @@ def service_block(compose: str, name: str, next_name: str | None) -> str:
 
 def test_only_bot_and_control_adapter_can_reach_proxy() -> None:
     compose = source("compose.yaml")
-    proxy = service_block(compose, "supervisor-proxy", "bot")
+    proxy = service_block(compose, "supervisor-proxy", "runtime-permissions")
     bot = service_block(compose, "bot", "userbot")
     userbot = service_block(compose, "userbot", None).split("\nvolumes:", 1)[0]
 

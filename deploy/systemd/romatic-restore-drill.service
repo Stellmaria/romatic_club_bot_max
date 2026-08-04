@@ -1,0 +1,21 @@
+[Unit]
+Description=Romatic Club disposable PostgreSQL restore drill
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+User=%SERVICE_USER%
+Group=%SERVICE_GROUP%
+WorkingDirectory=%APP_DIR%
+Environment=ROMATIC_APP_DIR=%APP_DIR%
+Environment=ROMATIC_ENV_FILE=.env
+Environment=ROMATIC_COMPOSE_FILE=compose.yaml
+ExecStart=/usr/bin/env bash %APP_DIR%/deploy/server/restore-drill.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%DATA_DIR% /tmp
+LockPersonality=true
+RestrictSUIDSGID=true
