@@ -19,10 +19,7 @@ from bot.repositories.uid_verification_recovery import (
     ensure_request_uid,
     replace_revision_uid,
 )
-from bot.services.uid_verification import (
-    UIDVerificationService,
-    get_uid_verification_request,
-)
+from bot.services import uid_verification as uid_verification_service
 from bot.telegram.callback_parser import split_callback_data
 from bot.telegram.states import UIDVerificationFixFSM
 from bot.uid_crypto import norm_uid
@@ -82,7 +79,8 @@ def _revision_keyboard(
 
 
 async def _revision_flags(request_id: int) -> list[str]:
-    flags = await (await UIDVerificationService.create()).revision_flags(request_id)
+    service = await uid_verification_service.UIDVerificationService.create()
+    flags = await service.revision_flags(request_id)
     banned = {"uid_proof", "reg_date"}
     return [value for raw in flags if (value := str(raw).strip()) and value not in banned]
 
@@ -186,7 +184,8 @@ async def start_uid_revision_recovery(
         await call.answer("Некорректный номер заявки.", show_alert=True)
         return
 
-    request = await get_uid_verification_request(request_id=request_id)
+    service = await uid_verification_service.UIDVerificationService.create()
+    request = await service.get_request(request_id)
     if not request:
         await call.answer("Заявка не найдена.", show_alert=True)
         return
@@ -237,7 +236,7 @@ async def start_uid_revision_recovery(
 
     if uid_state == "needs_uid":
         await state.set_state(UIDRevisionRecoveryFSM.waiting_uid)
-        if call.message:
+        if isinstance(call.message, types.Message):
             await call.message.answer(
                 "🆔 В старой заявке UID не сохранился после переноса данных.\n\n"
                 "Пришли UID текстом: ровно 24 шестнадцатеричных символа. "
@@ -254,7 +253,7 @@ async def start_uid_revision_recovery(
         return
 
     await state.set_state(UIDVerificationFixFSM.choosing_item)
-    if call.message:
+    if isinstance(call.message, types.Message):
         await _show_revision_menu(
             call.message,
             request_id=request_id,
@@ -272,6 +271,12 @@ async def save_missing_revision_uid(
     message: types.Message,
     state: FSMContext,
 ) -> None:
+    user = message.from_user
+    if user is None:
+        await state.clear()
+        await message.answer("Не удалось определить пользователя. Открой доработку заново.")
+        return
+
     normalized = _valid_uid(message.text)
     if normalized is None:
         await message.answer("UID должен содержать ровно 24 символа: цифры 0–9 и буквы a–f.")
@@ -290,13 +295,13 @@ async def save_missing_revision_uid(
     try:
         result = await replace_revision_uid(
             request_id,
-            user_id=message.from_user.id,
+            user_id=user.id,
             uid=normalized,
         )
     except Exception:
         logger.exception(
             "Failed to restore UID for revision request",
-            extra={"request_id": request_id, "user_id": message.from_user.id},
+            extra={"request_id": request_id, "user_id": user.id},
         )
         await message.answer("Не удалось сохранить UID. Повтори попытку позже.")
         return
