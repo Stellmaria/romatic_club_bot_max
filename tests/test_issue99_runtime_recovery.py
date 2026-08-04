@@ -123,8 +123,9 @@ async def test_discovers_all_issue99_actions_from_exact_telegram_metadata() -> N
     by_id = {action.auction_id: action for action in discovery.actions}
     assert by_id[9210].channel_message_id == 12010
     assert by_id[9210].discussion_message_id == 1148772
-    assert by_id[3797].action == "normalize_published"
+    assert by_id[3797].action == "replace_published"
     assert by_id[3797].channel_message_id == 5948
+    assert by_id[3797].expected_previous_channel_message_id == 5927
     assert by_id[9243].channel_message_id == 12043
 
 

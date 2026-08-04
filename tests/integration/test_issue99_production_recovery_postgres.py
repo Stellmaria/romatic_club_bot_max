@@ -5,7 +5,10 @@ from datetime import UTC, datetime, timedelta
 import asyncpg
 import pytest
 
-from bot.domain.auctions.publication_repair import PublicationRepairAction
+from bot.domain.auctions.publication_repair import (
+    PublicationRepairAction,
+    PublicationRepairError,
+)
 from bot.repositories.auction_publication_repair import (
     AuctionPublicationRepairRepository,
 )
@@ -19,7 +22,12 @@ _TARGET_IDS = (3797, 7523, 9210, 9217, 9221, 9243)
 
 def _actions() -> tuple[PublicationRepairAction, ...]:
     return (
-        PublicationRepairAction(3797, "normalize_published", 5927),
+        PublicationRepairAction(
+            3797,
+            "replace_published",
+            5948,
+            expected_previous_channel_message_id=5927,
+        ),
         PublicationRepairAction(7523, "normalize_published", 10139),
         PublicationRepairAction(9210, "confirm", 12010, 1148772),
         PublicationRepairAction(9217, "confirm", 12017, 1149339),
@@ -135,6 +143,17 @@ async def test_issue99_recovery_is_atomic_idempotent_and_finalizable(
     repository = AuctionPublicationRepairRepository(postgres_pool)
     damaged = await _publication_rows(postgres_pool)
 
+    wrong_expected = list(_actions())
+    wrong_expected[0] = PublicationRepairAction(
+        3797,
+        "replace_published",
+        5948,
+        expected_previous_channel_message_id=9999,
+    )
+    with pytest.raises(PublicationRepairError, match="expected message_id 9999"):
+        await repository.repair(tuple(wrong_expected), dry_run=False)
+    assert await _publication_rows(postgres_pool) == damaged
+
     dry_run = await repository.repair(_actions(), dry_run=True)
 
     assert dry_run.dry_run is True
@@ -145,6 +164,7 @@ async def test_issue99_recovery_is_atomic_idempotent_and_finalizable(
 
     assert applied.constraints_validated is True
     by_id = {int(row["auction_id"]): row for row in first_repaired}
+    assert by_id[3797]["message_id"] == 5948
     assert by_id[9210]["status"] == "finished"
     assert by_id[9210]["message_id"] == 12010
     assert by_id[9210]["discussion_message_id"] == 1148772

@@ -41,8 +41,9 @@ def _complete_plan() -> dict[str, object]:
             },
             {
                 "auction_id": 3797,
-                "action": "normalize_published",
-                "channel_message_id": 5927,
+                "action": "replace_published",
+                "channel_message_id": 5948,
+                "expected_previous_channel_message_id": 5927,
             },
             {
                 "auction_id": 7523,
@@ -60,6 +61,10 @@ def test_complete_reviewed_plan_is_accepted(tmp_path: Path) -> None:
     actions = load_plan(path)
 
     assert {action.auction_id for action in actions} == KNOWN_AUCTION_IDS
+    replacement = next(action for action in actions if action.auction_id == 3797)
+    assert replacement.action == "replace_published"
+    assert replacement.channel_message_id == 5948
+    assert replacement.expected_previous_channel_message_id == 5927
 
 
 def test_plan_never_guesses_missing_channel_id() -> None:
@@ -79,6 +84,41 @@ def test_requeue_requires_explicit_absence_confirmation() -> None:
     repairs[3] = {"auction_id": 9243, "action": "requeue"}
 
     with pytest.raises(RepairPlanError, match="post_verified_absent"):
+        parse_plan(plan)
+
+
+def test_replace_published_requires_expected_previous_id() -> None:
+    plan = _complete_plan()
+    repairs = plan["repairs"]
+    assert isinstance(repairs, list)
+    repairs[4] = {
+        "auction_id": 3797,
+        "action": "replace_published",
+        "channel_message_id": 5948,
+    }
+
+    with pytest.raises(
+        RepairPlanError,
+        match="expected_previous_channel_message_id",
+    ):
+        parse_plan(plan)
+
+
+def test_expected_previous_id_is_rejected_for_other_actions() -> None:
+    plan = _complete_plan()
+    repairs = plan["repairs"]
+    assert isinstance(repairs, list)
+    repairs[5] = {
+        "auction_id": 7523,
+        "action": "normalize_published",
+        "channel_message_id": 10139,
+        "expected_previous_channel_message_id": 5927,
+    }
+
+    with pytest.raises(
+        RepairPlanError,
+        match="only valid for replace_published",
+    ):
         parse_plan(plan)
 
 
