@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -26,14 +25,20 @@ def test_only_bot_and_control_adapter_can_reach_proxy() -> None:
 
     assert "romatic-supervisor-control:" in proxy
     assert "hermes-supervisor-control:" in proxy
+    assert "romatic-application" not in proxy
+    assert "romatic-database" not in proxy
     assert "default: {}" not in proxy
 
-    assert "default: {}" in bot
+    assert "romatic-application: {}" in bot
+    assert "romatic-database: {}" in bot
     assert "romatic-supervisor-control: {}" in bot
+    assert "default: {}" not in bot
     assert "supervisor_token" in bot
 
-    assert "default: {}" in userbot
+    assert "romatic-application: {}" in userbot
+    assert "romatic-database: {}" in userbot
     assert "romatic-supervisor-control" not in userbot
+    assert "default: {}" not in userbot
     assert 'SUPERVISOR_ENABLED: "false"' in userbot
     assert 'SUPERVISOR_TOKEN: ""' in userbot
     assert 'SUPERVISOR_TOKEN_FILE: ""' in userbot
@@ -52,7 +57,7 @@ def test_supervisor_token_is_file_backed_and_not_shared_through_env() -> None:
     assert "SUPERVISOR_TOKEN_FILE_HOST=" in env_example
     assert "SUPERVISOR_TOKEN=change_me" not in env_example
     assert 'path.read_text(encoding="utf-8")' in settings
-    assert 'os.getenv' not in client
+    assert "os.getenv" not in client
     assert "EnvironmentFile=%DATA_DIR%/runtime/supervisor/supervisor.env" in unit
     assert "EnvironmentFile=%APP_DIR%/.env" not in unit
 
