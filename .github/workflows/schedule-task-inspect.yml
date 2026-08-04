@@ -1,4 +1,4 @@
-name: Schedule Task Apply
+name: Schedule Task Cleanup
 
 on:
   pull_request:
@@ -8,78 +8,19 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  cleanup:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.head_ref }}
-          fetch-depth: 0
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
-        with:
-          version: "0.11.16"
-          enable-cache: true
-          cache-dependency-glob: requirements/*.lock
-      - name: Reassemble verified source patch
+          persist-credentials: true
+      - name: Remove transport chunks
         run: |
-          cat .tmp/schedule-patch.0* | base64 -d > /tmp/schedule-patch.tar.gz
-          echo '57e1c8f3a173ecc6fc5ebb430d1eecfd4b9446f68cf04899c155d3778d85ad75  /tmp/schedule-patch.tar.gz' | sha256sum --check --strict
-          tar -tzf /tmp/schedule-patch.tar.gz
-          tar -xzf /tmp/schedule-patch.tar.gz
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("bot/domain/schedule_lots.py")
-          source = path.read_text(encoding="utf-8")
-          old = 'r"(?:кручени[яй]|spins?)\\D*(10|50|100)"'
-          new = 'r"(?:кручени[яй]|spins?)\\D*(100|50|10)"'
-          if old not in source:
-              raise SystemExit("spin quantity regex not found")
-          path.write_text(source.replace(old, new, 1), encoding="utf-8")
-          PY
-      - name: Install locked development tools
-        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Format and validate changed files
-        run: |
-          files=(
-            bot/domain/schedule_lots.py
-            bot/domain/auctions/enums.py
-            bot/services/schedule_setup.py
-            db/schedule_setup.py
-            userbot/schedule_announcements.py
-            userbot/schedule_publication.py
-            tests/test_premium_schedule_announcements.py
-            tests/test_schedule_setup_master.py
-            tests/test_schedule_special_lots.py
-          )
-          python -m black "${files[@]}"
-          python -m ruff check --fix "${files[@]}"
-          python -m ruff format "${files[@]}"
-          python -m ruff check "${files[@]}"
-          python -m black --check "${files[@]}"
-          python -m pytest -q \
-            tests/test_premium_schedule_announcements.py \
-            tests/test_schedule_setup_master.py \
-            tests/test_schedule_special_lots.py \
-            tests/test_schedule_preview_query.py
-      - name: Commit product changes
-        run: |
+          git rm -- .tmp/schedule-patch.0*
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -- \
-            bot/domain/schedule_lots.py \
-            bot/domain/auctions/enums.py \
-            bot/services/schedule_setup.py \
-            db/schedule_setup.py \
-            userbot/schedule_announcements.py \
-            userbot/schedule_publication.py \
-            tests/test_premium_schedule_announcements.py \
-            tests/test_schedule_setup_master.py \
-            tests/test_schedule_special_lots.py
-          git diff --cached --quiet || git commit -m 'fix: cover schedule currencies and special lot assets'
+          git commit -m 'chore: remove schedule patch transport files'
           git push origin HEAD:${{ github.head_ref }}
