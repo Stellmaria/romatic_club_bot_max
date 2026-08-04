@@ -102,7 +102,6 @@ known-first-party = ["bot", "database", "db", "userbot"]
 [tool.black]
 target-version = ["py313"]
 line-length = 100
-diff = true
 extend-exclude = "(/migrations/|/var/|/private/)"
 
 [tool.mypy]
