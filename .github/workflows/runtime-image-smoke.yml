@@ -35,3 +35,7 @@ jobs:
         run: |
           docker compose run --rm --no-deps bot \
             python -c "from bot.bootstrap.routers import get_router_registry; registry = get_router_registry(); assert registry.inventory(); print('Bot router import smoke OK')"
+      - name: Validate packaged privacy inventory
+        run: |
+          docker compose run --rm --no-deps bot \
+            python -m scripts.privacy_cleanup validate
