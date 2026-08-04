@@ -19,7 +19,7 @@ from bot.handlers.admin.uid_admin_presentation import (
     rev_flags_to_lines,
     sort_rev_flags,
 )
-from bot.services import uid_verification as uid_verification_service
+from bot.services import uid_verification as uidv_service
 from bot.services.admin_thanks import admin_tag
 from bot.telegram.callback_parser import split_callback_data
 from bot.telegram.states import UIDVerificationRevisionFSM
@@ -42,7 +42,7 @@ async def uidv_revision_start(call: types.CallbackQuery, state: FSMContext) -> N
         return
 
     req_id = int(parts[2] or 0)
-    service = await uid_verification_service.UIDVerificationService.create()
+    service = await uidv_service.UIDVerificationService.create()
     req = await service.get_request(req_id)
     if not req:
         await call.answer("Заявка не найдена.", show_alert=True)
@@ -189,7 +189,7 @@ async def uidv_revision_send(
         await call.answer("Нужна причина (кнопка «Причина»).", show_alert=True)
         return
 
-    service = await uid_verification_service.UIDVerificationService.create()
+    service = await uidv_service.UIDVerificationService.create()
     req = await service.get_request(req_id)
     if not req:
         await call.answer("Заявка не найдена.", show_alert=True)
@@ -199,7 +199,10 @@ async def uidv_revision_send(
     admin_id = call.from_user.id
     admin_username = call.from_user.username or call.from_user.full_name
 
-    ok = await uid_verification_service.set_uid_verification_request_revision(  # type: ignore[attr-defined]
+    set_revision = (
+        uidv_service.set_uid_verification_request_revision  # type: ignore[attr-defined]
+    )
+    ok = await set_revision(
         req_id,
         moderator_id=admin_id,
         moderator_username=admin_username,
