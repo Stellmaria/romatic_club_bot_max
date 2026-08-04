@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import logging
 
 from aiogram import Bot, F, Router, types
 from aiogram.fsm.context import FSMContext
@@ -24,6 +25,7 @@ from bot.telegram.states import UIDVerificationRevisionFSM
 from bot.telegram.callback_parser import split_callback_data
 
 
+logger = logging.getLogger(__name__)
 router = Router(name=__name__)
 
 
@@ -52,6 +54,7 @@ async def uidv_revision_start(call: types.CallbackQuery, state: FSMContext) -> N
         await call.message.edit_text(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
     except Exception:
         await call.message.answer(txt, reply_markup=kb_uidv_revision(req_id, [], ""))
+    await call.answer()
 
 
 @router.callback_query(F.data.startswith("uidv|rev_toggle|"))
@@ -95,7 +98,6 @@ async def uidv_revision_toggle(call: types.CallbackQuery, state: FSMContext) -> 
     try:
         await call.message.edit_reply_markup(reply_markup=kb_uidv_revision(req_id, chosen_list, reason))
     except Exception:
-        # если вдруг Telegram не дал редактировать markup, не падаем
         pass
 
 
@@ -130,6 +132,10 @@ async def uidv_revision_reason_msg(message: types.Message, state: FSMContext) ->
     req_id = int(data.get("uidv_rev_req_id") or 0)
     chosen = sort_rev_flags(data.get("uidv_rev_flags") or [])
 
+    if not reason:
+        await message.answer("Причина не может быть пустой.")
+        return
+
     await state.set_state(UIDVerificationRevisionFSM.choosing_flags)
     await state.update_data(uidv_rev_reason=reason)
 
@@ -147,6 +153,10 @@ async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: 
 
     req_id = int(parts[2] or 0)
     data = await state.get_data()
+    if int(data.get("uidv_rev_req_id") or 0) != req_id:
+        await call.answer("Сессия устарела. Открой доработку заново.", show_alert=True)
+        return
+
     chosen = sort_rev_flags(data.get("uidv_rev_flags") or [])
     reason = (data.get("uidv_rev_reason") or "").strip()
 
@@ -163,7 +173,6 @@ async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: 
         return
 
     admin_u = call.from_user
-
     admin_id = call.from_user.id
     admin_username = call.from_user.username or call.from_user.full_name
 
@@ -172,7 +181,7 @@ async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: 
         moderator_id=admin_id,
         moderator_username=admin_username,
         reason=reason,
-        flags=chosen,  # НЕ выкидывай это, иначе ты сам себе сотрёшь "что исправлять"
+        flags=chosen,
     )
 
     if not ok:
@@ -189,25 +198,45 @@ async def uidv_revision_send(call: types.CallbackQuery, state: FSMContext, bot: 
     kb.adjust(1)
 
     text_user = (
-        f"🔧 Заявка на верификацию требует доработки\n\n"
+        "🔧 Заявка на верификацию требует доработки\n\n"
         f"Заявка: #{req_id}\n"
         f"Модератор: {moderator}\n\n"
-        f"EX_MODE_DECK_SPLITНужно исправить:\n{lines}\n\n"
+        f"Нужно исправить:\n{lines}\n\n"
         f"Причина:\n{html.escape(reason)}\n\n"
-        f"Нажми «🔧 Исправить заявку» и досылай только то, что отмечено."
+        "Нажми «🔧 Исправить заявку» и досылай только то, что отмечено."
     )
 
+    delivered = True
     try:
-        await bot.send_message(user_id, text_user, reply_markup=kb.as_markup(), protect_content=False)
+        await bot.send_message(
+            user_id,
+            text_user,
+            reply_markup=kb.as_markup(),
+            protect_content=False,
+        )
     except Exception:
-        pass
-
-    try:
-        await call.answer("Отправлено ✅")
-    except Exception:
-        pass
+        delivered = False
+        logger.exception(
+            "Failed to notify user about UID verification revision",
+            extra={"request_id": req_id, "user_id": user_id},
+        )
 
     await state.clear()
 
+    if delivered:
+        await call.answer("Отправлено ✅")
+    else:
+        await call.answer(
+            "Заявка переведена на доработку, но сообщение пользователю не доставлено.",
+            show_alert=True,
+        )
 
-__all__ = ["router","uidv_revision_start","uidv_revision_toggle","uidv_revision_reason","uidv_revision_reason_msg","uidv_revision_send"]
+
+__all__ = [
+    "router",
+    "uidv_revision_start",
+    "uidv_revision_toggle",
+    "uidv_revision_reason",
+    "uidv_revision_reason_msg",
+    "uidv_revision_send",
+]
