@@ -1,6 +1,9 @@
 name: Issue 99 workspace export
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - fix/issue-99-deferred-auction-publication
