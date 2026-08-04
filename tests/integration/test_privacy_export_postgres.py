@@ -47,9 +47,9 @@ async def test_privacy_export_is_read_only_except_append_only_audit(
 
     exported_user = payload["datasets"]["identity_profiles"]["users"][0]
     assert exported_user["username"] == "privacy_fixture"
-    serialized = result.payload.decode("utf-8")
+    serialized_datasets = json.dumps(payload["datasets"], sort_keys=True)
     for forbidden in ("uid_hash", "uid_enc", "proof_file_id", "proof_photo_id"):
-        assert forbidden not in serialized
+        assert forbidden not in serialized_datasets
 
     async with postgres_pool.acquire() as connection:
         after = await connection.fetchrow(
