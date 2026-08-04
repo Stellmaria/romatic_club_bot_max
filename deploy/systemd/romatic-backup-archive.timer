@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Romatic Club encrypted backup archive
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=romatic-backup-archive.service
+
+[Install]
+WantedBy=timers.target
