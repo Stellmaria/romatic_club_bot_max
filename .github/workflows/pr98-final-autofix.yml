@@ -41,7 +41,7 @@ jobs:
               'def _bot_config() -> SimpleNamespace:\n    return SimpleNamespace(': 'def _bot_config() -> SimpleNamespace:\n    sample_bot_token = ":".join(("123456789", "A" * 35))\n    return SimpleNamespace(',
               '            bot_token="123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",': '            bot_token=sample_bot_token,',
               '        runtime_dir=Path("/tmp/auction-bot-test"),': '        runtime_dir=Path("auction-bot-test"),',
-              ') -> dict[str, Any]:\n    import bot.bootstrap as bootstrap': ') -> dict[str, Any]:  # noqa: C901\n    import bot.bootstrap as bootstrap',
+              'def _install_run_bot_fakes(\n': 'def _install_run_bot_fakes(  # noqa: C901\n',
           }
           for old, new in replacements.items():
               if old not in text:
