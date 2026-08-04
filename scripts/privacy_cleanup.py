@@ -82,9 +82,7 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
         if raw_policy.get("status") not in _ALLOWED_RETENTION_STATUS:
             raise InventoryError(f"retention class {class_name!r} has invalid status")
         days = raw_policy.get("days")
-        if days is not None and (
-            not isinstance(days, int) or isinstance(days, bool) or days <= 0
-        ):
+        if days is not None and (not isinstance(days, int) or isinstance(days, bool) or days <= 0):
             raise InventoryError(f"retention class {class_name!r} days must be positive")
         if raw_policy.get("destructive_enabled") is not False:
             raise InventoryError(
@@ -116,8 +114,10 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
         seen_dataset_ids.add(dataset_id)
 
         tables = raw_dataset["tables"]
-        if not isinstance(tables, list) or not tables or not all(
-            isinstance(table, str) and table for table in tables
+        if (
+            not isinstance(tables, list)
+            or not tables
+            or not all(isinstance(table, str) and table for table in tables)
         ):
             raise InventoryError(f"dataset {dataset_id!r} tables must be non-empty strings")
         overlap = seen_tables.intersection(tables)
@@ -130,9 +130,7 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
             if not isinstance(values, list) or not all(
                 isinstance(value, str) and value for value in values
             ):
-                raise InventoryError(
-                    f"dataset {dataset_id!r} {field_name} must contain strings"
-                )
+                raise InventoryError(f"dataset {dataset_id!r} {field_name} must contain strings")
         for field_name in ("purpose", "deletion_action"):
             value = raw_dataset[field_name]
             if not isinstance(value, str) or not value:
@@ -266,9 +264,7 @@ async def _run_plan(args: argparse.Namespace) -> int:
     if not args.offline:
         database_url = os.environ.get("DATABASE_URL", "").strip()
         if not database_url:
-            raise InventoryError(
-                "DATABASE_URL is required unless --offline is explicitly selected"
-            )
+            raise InventoryError("DATABASE_URL is required unless --offline is explicitly selected")
         connection, counter = await _database_counter(database_url)
 
     try:

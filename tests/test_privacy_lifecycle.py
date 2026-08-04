@@ -23,9 +23,7 @@ def test_inventory_is_machine_validated_and_covers_known_personal_data_tables() 
     inventory = load_inventory(INVENTORY_PATH)
     validate_inventory(inventory)
 
-    tables = {
-        table for dataset in inventory["datasets"] for table in dataset["tables"]
-    }
+    tables = {table for dataset in inventory["datasets"] for table in dataset["tables"]}
     expected = {
         "users",
         "admins",
@@ -56,14 +54,9 @@ def test_inventory_keeps_all_mutation_paths_disabled() -> None:
     inventory = load_inventory(INVENTORY_PATH)
 
     assert all(
-        policy["destructive_enabled"] is False
-        for policy in inventory["retention_classes"].values()
+        policy["destructive_enabled"] is False for policy in inventory["retention_classes"].values()
     )
-    rules = [
-        rule
-        for dataset in inventory["datasets"]
-        for rule in dataset.get("cleanup_rules", [])
-    ]
+    rules = [rule for dataset in inventory["datasets"] for rule in dataset.get("cleanup_rules", [])]
     assert rules
     assert all(rule["destructive_enabled"] is False for rule in rules)
 
@@ -113,8 +106,7 @@ async def test_cleanup_plan_queries_only_registered_aggregate_counters() -> None
     assert plan["metrics"]["privacy_cleanup_blocked_rules_total"] == 2
     assert {item["eligible_rows"] for item in plan["items"]} == {2, 3}
     assert all(
-        item["blocked_reason"] == "destructive-mode-not-implemented"
-        for item in plan["items"]
+        item["blocked_reason"] == "destructive-mode-not-implemented" for item in plan["items"]
     )
 
 
