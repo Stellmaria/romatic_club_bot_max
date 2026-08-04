@@ -10,7 +10,7 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -22,3 +22,14 @@ jobs:
           find bot userbot db tests -type f | sort | grep -Ei 'schedule|auction|announce|card|deck' || true
           echo '=== RELEVANT TOKENS ==='
           grep -RInE 'accepted_currencies|чашки_алмазы|друзья|подпис|крутк|золот|любая|friends|subscription|spin|gold|auction_kind|schedule_setup|whole_deck|custom_offer_terms' bot userbot db tests || true
+          echo '=== AUCTION SERVICE COLUMNS ==='
+          grep -RInE 'service|spins_qty|subscription_months|subscription_plan|progress_slots' db/migrations db bot/repositories bot/services bot/handlers/auction/submission.py || true
+      - name: Pack source snapshot
+        run: tar --exclude='__pycache__' --exclude='*.pyc' -czf schedule-source.tar.gz bot userbot db tests pyproject.toml requirements
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: schedule-source
+          path: schedule-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
