@@ -94,6 +94,7 @@ deployment_log="$data_dir/runtime/supervisor/deploy-${deployment_stamp}-${previo
 migration_plan_path="$data_dir/runtime/migrations/plan-${deployment_stamp}-${previous_sha:0:12}.json"
 migration_result_path="$data_dir/runtime/migrations/result-${deployment_stamp}-${previous_sha:0:12}.json"
 session_snapshot_created=0
+session_file_exists=0
 session_mutated=0
 code_switched=0
 runtime_replaced=0
@@ -161,9 +162,10 @@ wait_service() {
   return 1
 }
 
-snapshot_userbot_session() {
-  local exists_status snapshot_tmp
+probe_userbot_session() {
+  local probe_status
 
+  session_file_exists=0
   if "${compose[@]}" run --rm -T --no-deps \
     --user "$app_uid:$app_gid" userbot python - <<'PY'
 from pathlib import Path
@@ -175,19 +177,22 @@ raise SystemExit(
 )
 PY
   then
-    :
-  else
-    exists_status="$?"
-    if [[ "$exists_status" == "44" ]]; then
-      echo "Userbot session file is absent; compatibility probe skipped."
-      return 0
-    fi
-    return "$exists_status"
+    session_file_exists=1
+    return 0
   fi
 
-  snapshot_tmp="${session_snapshot_path}.tmp"
-  rm -f "$snapshot_tmp"
-  if ! "${compose[@]}" run --rm -T --no-deps \
+  probe_status="$?"
+  if [[ "$probe_status" == "44" ]]; then
+    echo "Userbot session file is absent; compatibility probe skipped."
+    return 0
+  fi
+  return "$probe_status"
+}
+
+write_userbot_session_snapshot() {
+  local snapshot_tmp="$1"
+
+  "${compose[@]}" run --rm -T --no-deps \
     --user "$app_uid:$app_gid" \
     -e ROMATIC_EXPECTED_APP_UID="$app_uid" \
     -e ROMATIC_EXPECTED_APP_GID="$app_gid" \
@@ -227,10 +232,10 @@ finally:
 sys.stdout.buffer.write(target_path.read_bytes())
 target_path.unlink(missing_ok=True)
 PY
-  then
-    rm -f "$snapshot_tmp"
-    return 1
-  fi
+}
+
+verify_userbot_session_snapshot() {
+  local snapshot_tmp="$1"
 
   python3 - "$snapshot_tmp" <<'PY'
 import sqlite3
@@ -248,13 +253,32 @@ try:
 finally:
     connection.close()
 PY
+}
+
+snapshot_userbot_session() {
+  local snapshot_tmp
+
+  probe_userbot_session
+  if [[ "$session_file_exists" != "1" ]]; then
+    return 0
+  fi
+
+  snapshot_tmp="${session_snapshot_path}.tmp"
+  rm -f "$snapshot_tmp"
+  if ! write_userbot_session_snapshot "$snapshot_tmp"; then
+    rm -f "$snapshot_tmp"
+    return 1
+  fi
+  if ! verify_userbot_session_snapshot "$snapshot_tmp"; then
+    rm -f "$snapshot_tmp"
+    return 1
+  fi
 
   chmod 0600 "$snapshot_tmp"
   mv -f "$snapshot_tmp" "$session_snapshot_path"
   session_snapshot_created=1
   echo "Verified userbot session snapshot: $session_snapshot_path"
 }
-
 restore_userbot_session() {
   if [[ "$session_snapshot_created" != "1" ]]; then
     return 0
