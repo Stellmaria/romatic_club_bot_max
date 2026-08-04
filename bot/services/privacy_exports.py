@@ -3,12 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+from bot.application_ports import Clock
 from bot.repositories.privacy_exports import PrivacyExportRepository
 from bot.uid_crypto import identity_digest
 
@@ -72,9 +73,11 @@ class PrivacyExportService:
         self,
         repository: PrivacyExportRepository,
         *,
+        clock: Clock,
         inventory_path: Path = DEFAULT_INVENTORY_PATH,
     ) -> None:
         self._repository = repository
+        self._clock = clock
         self._inventory_path = inventory_path
 
     def _policy_sha256(self) -> str:
@@ -140,7 +143,7 @@ class PrivacyExportService:
                     for dataset_id, tables in datasets.items()
                 }
                 exported_rows = sum(dataset_counts.values())
-                generated_at = datetime.now(UTC)
+                generated_at = self._clock.now()
                 document = {
                     "schema_version": 1,
                     "export_type": "authenticated-self-service",

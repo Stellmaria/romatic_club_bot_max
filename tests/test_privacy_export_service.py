@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,11 @@ from bot.services.privacy_exports import (
     PrivacyExportService,
 )
 from bot.uid_crypto import configure_uid_crypto, reset_uid_crypto_for_testing
+
+
+class _Clock:
+    def now(self) -> datetime:
+        return datetime(2026, 8, 5, tzinfo=UTC)
 
 
 class _Transaction:
@@ -100,7 +106,11 @@ async def test_self_export_contains_allowlisted_data_and_pseudonymous_audit(
     inventory: Path,
 ) -> None:
     repository = _Repository()
-    service = PrivacyExportService(repository, inventory_path=inventory)  # type: ignore[arg-type]
+    service = PrivacyExportService(
+        repository,  # type: ignore[arg-type]
+        clock=_Clock(),
+        inventory_path=inventory,
+    )
 
     result = await service.export_self(actor_user_id=42, subject_user_id=42)
 
@@ -117,7 +127,11 @@ async def test_self_export_contains_allowlisted_data_and_pseudonymous_audit(
 @pytest.mark.asyncio
 async def test_cross_subject_export_is_denied_after_audit_commit(inventory: Path) -> None:
     repository = _Repository()
-    service = PrivacyExportService(repository, inventory_path=inventory)  # type: ignore[arg-type]
+    service = PrivacyExportService(
+        repository,  # type: ignore[arg-type]
+        clock=_Clock(),
+        inventory_path=inventory,
+    )
 
     with pytest.raises(PrivacyExportAuthorizationError):
         await service.export_self(actor_user_id=42, subject_user_id=43)

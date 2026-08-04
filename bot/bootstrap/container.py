@@ -54,6 +54,7 @@ class ApplicationContainer:
     ) -> ApplicationContainer:
         """Build concrete adapters once from explicit lifecycle resources."""
 
+        effective_clock = clock or SystemClock()
         auction_repository = AuctionWorkflowRepository(pool)
         exchange_repository = ExchangeRepository(pool)
         privacy_export_repository = PrivacyExportRepository(pool)
@@ -67,8 +68,11 @@ class ApplicationContainer:
             auction_lifecycle=AuctionLifecycleService(auction_repository),
             auction_publication=AuctionPublicationService(auction_repository),
             exchange=ExchangeService(exchange_repository),
-            privacy_export=PrivacyExportService(privacy_export_repository),
-            clock=clock or SystemClock(),
+            privacy_export=PrivacyExportService(
+                privacy_export_repository,
+                clock=effective_clock,
+            ),
+            clock=effective_clock,
             file_storage=file_storage or LocalFileStorage(storage_root),
         )
 

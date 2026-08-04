@@ -5,6 +5,7 @@ import json
 import asyncpg
 import pytest
 
+from bot.core.time import SystemClock
 from bot.repositories.privacy_exports import PrivacyExportRepository
 from bot.services.privacy_exports import (
     PrivacyExportAuthorizationError,
@@ -38,11 +39,13 @@ async def test_privacy_export_is_read_only_except_append_only_audit(
         )
 
     repository = PrivacyExportRepository(postgres_pool)
-    service = PrivacyExportService(repository)
+    service = PrivacyExportService(repository, clock=SystemClock())
     result = await service.export_self(actor_user_id=user_id, subject_user_id=user_id)
     payload = json.loads(result.payload)
 
-    assert payload["datasets"]["identity_profiles"]["users"][0]["username"] == "privacy_fixture"
+    assert payload["datasets"]["identity_profiles"]["users"][0]["username"] == (
+        "privacy_fixture"
+    )
     serialized = result.payload.decode("utf-8")
     for forbidden in ("uid_hash", "uid_enc", "proof_file_id", "proof_photo_id"):
         assert forbidden not in serialized
@@ -87,7 +90,10 @@ async def test_denied_privacy_export_audit_survives_authorization_error(
 ) -> None:
     actor_user_id = 910000002
     subject_user_id = 910000003
-    service = PrivacyExportService(PrivacyExportRepository(postgres_pool))
+    service = PrivacyExportService(
+        PrivacyExportRepository(postgres_pool),
+        clock=SystemClock(),
+    )
 
     with pytest.raises(PrivacyExportAuthorizationError):
         await service.export_self(
