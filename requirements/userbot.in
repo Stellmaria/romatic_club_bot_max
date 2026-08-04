@@ -1,6 +1,7 @@
 # Direct runtime dependencies for the Telethon userbot process.
 # Shared bot.core/db modules are application code, not an excuse to ship aiogram here.
 asyncpg>=0.31,<1
+cffi>=2.0.0,<3
 cryptg>=0.5.2,<1
 cryptography>=48.0.1,<49
 python-dateutil>=2.9.0.post0,<3
