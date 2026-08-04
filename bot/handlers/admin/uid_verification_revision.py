@@ -26,6 +26,9 @@ from bot.telegram.states import UIDVerificationRevisionFSM
 
 logger = logging.getLogger(__name__)
 router = Router(name=__name__)
+set_uid_verification_request_revision = (
+    uidv_service.set_uid_verification_request_revision  # type: ignore[attr-defined]
+)
 
 
 def _callback_message(call: types.CallbackQuery) -> types.Message | None:
@@ -197,8 +200,7 @@ async def uidv_revision_send(
     admin_id = call.from_user.id
     admin_username = call.from_user.username or call.from_user.full_name
 
-    set_revision = uidv_service.set_uid_verification_request_revision  # type: ignore[attr-defined]
-    ok = await set_revision(
+    ok = await set_uid_verification_request_revision(
         req_id,
         moderator_id=admin_id,
         moderator_username=admin_username,
@@ -256,6 +258,7 @@ async def uidv_revision_send(
 
 __all__ = [
     "router",
+    "set_uid_verification_request_revision",
     "uidv_revision_reason",
     "uidv_revision_reason_msg",
     "uidv_revision_send",
