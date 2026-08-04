@@ -19,7 +19,12 @@ _TARGET_IDS = (3797, 7523, 9210, 9217, 9221, 9243)
 
 def _actions() -> tuple[PublicationRepairAction, ...]:
     return (
-        PublicationRepairAction(3797, "normalize_published", 5927),
+        PublicationRepairAction(
+            3797,
+            "replace_published",
+            5948,
+            expected_previous_channel_message_id=5927,
+        ),
         PublicationRepairAction(7523, "normalize_published", 10139),
         PublicationRepairAction(9210, "confirm", 12010, 1148772),
         PublicationRepairAction(9217, "confirm", 12017, 1149339),
@@ -145,6 +150,7 @@ async def test_issue99_recovery_is_atomic_idempotent_and_finalizable(
 
     assert applied.constraints_validated is True
     by_id = {int(row["auction_id"]): row for row in first_repaired}
+    assert by_id[3797]["message_id"] == 5948
     assert by_id[9210]["status"] == "finished"
     assert by_id[9210]["message_id"] == 12010
     assert by_id[9210]["discussion_message_id"] == 1148772
