@@ -190,7 +190,10 @@ owner_or_secret_required = owner_required
 
 
 async def safe_edit_message(
-    call: CallbackQuery, new_text: str, reply_markup=None, silent: bool = False
+    call: CallbackQuery,
+    new_text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    silent: bool = False,
 ) -> None:
     m = as_message(call)
     if m is None:
