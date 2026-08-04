@@ -223,6 +223,42 @@ asyncio.run(main())
 print("Romatic server smoke OK")
 PY
 
+"${compose[@]}" exec -T bot python - <<'PY'
+import json
+from urllib.request import urlopen
+
+BASE_URL = "http://127.0.0.1:8081"
+
+with urlopen(f"{BASE_URL}/healthz", timeout=5) as response:
+    assert response.status == 200
+    assert json.load(response) == {"live": True}
+
+with urlopen(f"{BASE_URL}/readyz", timeout=5) as response:
+    readiness = json.load(response)
+    assert response.status == 200
+    assert readiness["ready"] is True
+    assert readiness["database"] is True
+
+with urlopen(f"{BASE_URL}/metrics", timeout=5) as response:
+    metrics = response.read().decode("utf-8")
+
+for metric in ("process_uptime_seconds", "application_ready 1", "database_ready 1"):
+    assert metric in metrics, f"missing deployment SLI: {metric}"
+
+synthetic_alert_samples = {
+    "BotCoreLatencyP95High": (2.1, 2.0),
+    "UserbotLatencyP95High": (5.1, 5.0),
+    "BotCoreErrorRateHigh": (0.051, 0.05),
+    "UserbotErrorRateHigh": (0.051, 0.05),
+    "BotSchedulerLagHigh": (31.0, 30.0),
+    "UserbotQueueDepthHigh": (101.0, 100.0),
+}
+for alert, (sample, threshold) in synthetic_alert_samples.items():
+    assert sample > threshold, f"synthetic alert did not cross threshold: {alert}"
+
+print("Observability deployment smoke OK")
+PY
+
 deployed_sha="$(git rev-parse HEAD)"
 if [[ "$deployed_sha" != "$target_sha" ]]; then
   echo "Deployed SHA mismatch: expected $target_sha, got $deployed_sha" >&2
