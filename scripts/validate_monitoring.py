@@ -54,15 +54,11 @@ def _load_json(path: Path) -> dict[str, Any]:
 def validate(root: Path = ROOT) -> list[str]:
     dashboard = _load_json(root / DASHBOARD.relative_to(ROOT))
     alerts = _load_json(root / ALERTS.relative_to(ROOT))
-    runbook = (root / RUNBOOK.relative_to(ROOT)).read_text(
-        encoding="utf-8"
-    ).casefold()
+    runbook = (root / RUNBOOK.relative_to(ROOT)).read_text(encoding="utf-8").casefold()
     slo = (root / SLO.relative_to(ROOT)).read_text(encoding="utf-8").casefold()
     dockerignore = {
         line.strip()
-        for line in (root / DOCKERIGNORE.relative_to(ROOT))
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in (root / DOCKERIGNORE.relative_to(ROOT)).read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     }
 
@@ -93,12 +89,8 @@ def validate(root: Path = ROOT) -> list[str]:
     if missing_alerts:
         errors.append("missing alert rules: " + ", ".join(sorted(missing_alerts)))
 
-    all_queries = dashboard_queries + "\n" + "\n".join(
-        str(rule.get("expr", "")) for rule in rules
-    )
-    missing_metrics = {
-        metric for metric in REQUIRED_METRICS if metric not in all_queries
-    }
+    all_queries = dashboard_queries + "\n" + "\n".join(str(rule.get("expr", "")) for rule in rules)
+    missing_metrics = {metric for metric in REQUIRED_METRICS if metric not in all_queries}
     if missing_metrics:
         errors.append("missing monitored metrics: " + ", ".join(sorted(missing_metrics)))
 
@@ -119,17 +111,12 @@ def validate(root: Path = ROOT) -> list[str]:
         if name.casefold() not in runbook:
             errors.append(f"{name}: runbook section is missing")
 
-    if (
-        "latency" not in slo
-        or "error rate" not in slo
-        or "queue depth" not in slo
-    ):
+    if "latency" not in slo or "error rate" not in slo or "queue depth" not in slo:
         errors.append("docs/slo.md does not define all mandatory SLI classes")
     missing_excludes = REQUIRED_IMAGE_EXCLUDES - dockerignore
     if missing_excludes:
         errors.append(
-            "runtime image context includes diagnostics: "
-            + ", ".join(sorted(missing_excludes))
+            "runtime image context includes diagnostics: " + ", ".join(sorted(missing_excludes))
         )
     return errors
 
