@@ -82,7 +82,9 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
         if raw_policy.get("status") not in _ALLOWED_RETENTION_STATUS:
             raise InventoryError(f"retention class {class_name!r} has invalid status")
         days = raw_policy.get("days")
-        if days is not None and (not isinstance(days, int) or isinstance(days, bool) or days <= 0):
+        if days is not None and (
+            not isinstance(days, int) or isinstance(days, bool) or days <= 0
+        ):
             raise InventoryError(f"retention class {class_name!r} days must be positive")
         if raw_policy.get("destructive_enabled") is not False:
             raise InventoryError(
