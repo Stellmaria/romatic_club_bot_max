@@ -85,7 +85,7 @@ CONFIG_SCHEMA: Final[tuple[ConfigField, ...]] = (
     ConfigField("LUXURY_CHAT_ID", ("bot", "userbot"), "telegram", default="0"),
     ConfigField("LUXURY_CHAT_ID_LVL2", ("bot", "userbot"), "telegram", default="0"),
     ConfigField("DATABASE_URL", ("bot", "userbot"), "database", required=True, secret=True),
-    ConfigField("DB_AUTO_MIGRATE", ("bot", "userbot"), "database", default="true"),
+    ConfigField("DB_AUTO_MIGRATE", ("bot", "userbot"), "database", default="false"),
     ConfigField("DATABASE_POOL_MIN_SIZE", ("bot", "userbot"), "database", default="1"),
     ConfigField("DATABASE_POOL_MAX_SIZE", ("bot", "userbot"), "database", default="5"),
     ConfigField("UID_HASH_KEY", ("bot", "userbot"), "identity", required=True, secret=True),
