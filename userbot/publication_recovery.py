@@ -210,9 +210,7 @@ async def discover_issue99_repair_actions(
                 settings,
                 auction_id=auction_id,
                 channel_message_id=channel_message_id,
-                expected_previous_channel_message_id=(
-                    expected_previous_channel_message_id
-                ),
+                expected_previous_channel_message_id=(expected_previous_channel_message_id),
             ),
         )
 

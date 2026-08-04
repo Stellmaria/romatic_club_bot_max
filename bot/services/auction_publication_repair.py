@@ -92,10 +92,7 @@ def parse_issue99_plan(
             raise PublicationRepairError(
                 f"{action} for {auction_id} requires a verified channel_message_id"
             )
-        if (
-            action == "replace_published"
-            and expected_previous_channel_message_id is None
-        ):
+        if action == "replace_published" and expected_previous_channel_message_id is None:
             raise PublicationRepairError(
                 f"replace_published for {auction_id} requires "
                 "expected_previous_channel_message_id"
@@ -115,9 +112,7 @@ def parse_issue99_plan(
                 channel_message_id=channel_message_id,
                 discussion_message_id=discussion_message_id,
                 post_verified_absent=post_verified_absent,
-                expected_previous_channel_message_id=(
-                    expected_previous_channel_message_id
-                ),
+                expected_previous_channel_message_id=(expected_previous_channel_message_id),
             )
         )
     if require_complete:
