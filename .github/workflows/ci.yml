@@ -21,8 +21,12 @@ jobs:
         with:
           version: '0.11.16'
       - name: Split Telethon snapshot responsibilities
+        env:
+          SNAPSHOT_FUNCTIONS_B64: cHJvYmVfdXNlcmJvdF9zZXNzaW9uKCkgewogIGxvY2FsIHByb2JlX3N0YXR1cwoKICBzZXNzaW9uX2ZpbGVfZXhpc3RzPTAKICBpZiAiJHtjb21wb3NlW0BdfSIgcnVuIC0tcm0gLVQgLS1uby1kZXBzIFwKICAgIC0tdXNlciAiJGFwcF91aWQ6JGFwcF9naWQiIHVzZXJib3QgcHl0aG9uIC0gPDwnUFknCmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKcmFpc2UgU3lzdGVtRXhpdCgKICAgIDAKICAgIGlmIFBhdGgoIi9ydW4vcm9tYXRpYy11c2VyYm90LXNlc3Npb24vdXNlcmJvdC5zZXNzaW9uIikuaXNfZmlsZSgpCiAgICBlbHNlIDQ0CikKUFkKICB0aGVuCiAgICBzZXNzaW9uX2ZpbGVfZXhpc3RzPTEKICAgIHJldHVybiAwCiAgZmkKCiAgcHJvYmVfc3RhdHVzPSIkPyIKICBpZiBbWyAiJHByb2JlX3N0YXR1cyIgPT0gIjQ0IiBdXTsgdGhlbgogICAgZWNobyAiVXNlcmJvdCBzZXNzaW9uIGZpbGUgaXMgYWJzZW50OyBjb21wYXRpYmlsaXR5IHByb2JlIHNraXBwZWQuIgogICAgcmV0dXJuIDAKICBmaQogIHJldHVybiAiJHByb2JlX3N0YXR1cyIKfQoKd3JpdGVfdXNlcmJvdF9zZXNzaW9uX3NuYXBzaG90KCkgewogIGxvY2FsIHNuYXBzaG90X3RtcD0iJDEiCgogICIke2NvbXBvc2VbQF19IiBydW4gLS1ybSAtVCAtLW5vLWRlcHMgXAogICAgLS11c2VyICIkYXBwX3VpZDokYXBwX2dpZCIgXAogICAgLWUgUk9NQVRJQ19FWFBFQ1RFRF9BUFBfVUlEPSIkYXBwX3VpZCIgXAogICAgLWUgUk9NQVRJQ19FWFBFQ1RFRF9BUFBfR0lEPSIkYXBwX2dpZCIgXAogICAgdXNlcmJvdCBweXRob24gLSA8PCdQWScgPiIkc25hcHNob3RfdG1wIgppbXBvcnQgb3MKaW1wb3J0IHNxbGl0ZTMKaW1wb3J0IHN0YXQKaW1wb3J0IHN5cwpmcm9tIHBhdGhsaWIgaW1wb3J0IFBhdGgKCnNvdXJjZV9wYXRoID0gUGF0aCgiL3J1bi9yb21hdGljLXVzZXJib3Qtc2Vzc2lvbi91c2VyYm90LnNlc3Npb24iKQp0YXJnZXRfcGF0aCA9IFBhdGgoIi90bXAvdXNlcmJvdC1zZXNzaW9uLXNuYXBzaG90LnNlc3Npb24iKQpleHBlY3RlZF91aWQgPSBpbnQob3MuZW52aXJvblsiUk9NQVRJQ19FWFBFQ1RFRF9BUFBfVUlEIl0pCmV4cGVjdGVkX2dpZCA9IGludChvcy5lbnZpcm9uWyJST01BVElDX0VYUEVDVEVEX0FQUF9HSUQiXSkKc291cmNlX3N0YXQgPSBzb3VyY2VfcGF0aC5zdGF0KCkKc291cmNlX21vZGUgPSBzdGF0LlNfSU1PREUoc291cmNlX3N0YXQuc3RfbW9kZSkKaWYgc291cmNlX3N0YXQuc3RfdWlkICE9IGV4cGVjdGVkX3VpZCBvciBzb3VyY2Vfc3RhdC5zdF9naWQgIT0gZXhwZWN0ZWRfZ2lkOgogICAgcmFpc2UgUnVudGltZUVycm9yKAogICAgICAgIGYiVW5leHBlY3RlZCBUZWxldGhvbiBzZXNzaW9uIG93bmVyOiB7c291cmNlX3N0YXQuc3RfdWlkfTp7c291cmNlX3N0YXQuc3RfZ2lkfTsgIgogICAgICAgIGYiZXhwZWN0ZWQge2V4cGVjdGVkX3VpZH06e2V4cGVjdGVkX2dpZH0iCiAgICApCmlmIHNvdXJjZV9tb2RlICYgMG8wNzc6CiAgICByYWlzZSBSdW50aW1lRXJyb3IoZiJUZWxldGhvbiBzZXNzaW9uIHBlcm1pc3Npb25zIGFyZSB0b28gYnJvYWQ6IHtzb3VyY2VfbW9kZTowNG99IikKCnRhcmdldF9wYXRoLnVubGluayhtaXNzaW5nX29rPVRydWUpCnNvdXJjZSA9IHNxbGl0ZTMuY29ubmVjdChmImZpbGU6e3NvdXJjZV9wYXRofT9tb2RlPXJvIiwgdXJpPVRydWUpCnRhcmdldCA9IHNxbGl0ZTMuY29ubmVjdCh0YXJnZXRfcGF0aCkKdHJ5OgogICAgc291cmNlLmJhY2t1cCh0YXJnZXQpCiAgICByZXN1bHQgPSB0YXJnZXQuZXhlY3V0ZSgiUFJBR01BIHF1aWNrX2NoZWNrIikuZmV0Y2hvbmUoKQogICAgaWYgcmVzdWx0ICE9ICgib2siLCk6CiAgICAgICAgcmFpc2UgUnVudGltZUVycm9yKGYiVGVsZXRob24gc2Vzc2lvbiBxdWlja19jaGVjayBmYWlsZWQ6IHtyZXN1bHQhcn0iKQpmaW5hbGx5OgogICAgdGFyZ2V0LmNsb3NlKCkKICAgIHNvdXJjZS5jbG9zZSgpCgpzeXMuc3Rkb3V0LmJ1ZmZlci53cml0ZSh0YXJnZXRfcGF0aC5yZWFkX2J5dGVzKCkpCnRhcmdldF9wYXRoLnVubGluayhtaXNzaW5nX29rPVRydWUpClBZCn0KCnZlcmlmeV91c2VyYm90X3Nlc3Npb25fc25hcHNob3QoKSB7CiAgbG9jYWwgc25hcHNob3RfdG1wPSIkMSIKCiAgcHl0aG9uMyAtICIkc25hcHNob3RfdG1wIiA8PCdQWScKaW1wb3J0IHNxbGl0ZTMKaW1wb3J0IHN5cwpmcm9tIHBhdGhsaWIgaW1wb3J0IFBhdGgKCnNuYXBzaG90X3BhdGggPSBQYXRoKHN5cy5hcmd2WzFdKQppZiBub3Qgc25hcHNob3RfcGF0aC5pc19maWxlKCkgb3Igc25hcHNob3RfcGF0aC5zdGF0KCkuc3Rfc2l6ZSA9PSAwOgogICAgcmFpc2UgUnVudGltZUVycm9yKCJUZWxldGhvbiBzZXNzaW9uIHNuYXBzaG90IGlzIGVtcHR5IikKY29ubmVjdGlvbiA9IHNxbGl0ZTMuY29ubmVjdChmImZpbGU6e3NuYXBzaG90X3BhdGh9P21vZGU9cm8iLCB1cmk9VHJ1ZSkKdHJ5OgogICAgcmVzdWx0ID0gY29ubmVjdGlvbi5leGVjdXRlKCJQUkFHTUEgcXVpY2tfY2hlY2siKS5mZXRjaG9uZSgpCiAgICBpZiByZXN1bHQgIT0gKCJvayIsKToKICAgICAgICByYWlzZSBSdW50aW1lRXJyb3IoZiJIb3N0IHNlc3Npb24gc25hcHNob3QgcXVpY2tfY2hlY2sgZmFpbGVkOiB7cmVzdWx0IXJ9IikKZmluYWxseToKICAgIGNvbm5lY3Rpb24uY2xvc2UoKQpQWQp9CgpzbmFwc2hvdF91c2VyYm90X3Nlc3Npb24oKSB7CiAgbG9jYWwgc25hcHNob3RfdG1wCgogIHByb2JlX3VzZXJib3Rfc2Vzc2lvbgogIGlmIFtbICIkc2Vzc2lvbl9maWxlX2V4aXN0cyIgIT0gIjEiIF1dOyB0aGVuCiAgICByZXR1cm4gMAogIGZpCgogIHNuYXBzaG90X3RtcD0iJHtzZXNzaW9uX3NuYXBzaG90X3BhdGh9LnRtcCIKICBybSAtZiAiJHNuYXBzaG90X3RtcCIKICBpZiAhIHdyaXRlX3VzZXJib3Rfc2Vzc2lvbl9zbmFwc2hvdCAiJHNuYXBzaG90X3RtcCI7IHRoZW4KICAgIHJtIC1mICIkc25hcHNob3RfdG1wIgogICAgcmV0dXJuIDEKICBmaQogIGlmICEgdmVyaWZ5X3VzZXJib3Rfc2Vzc2lvbl9zbmFwc2hvdCAiJHNuYXBzaG90X3RtcCI7IHRoZW4KICAgIHJtIC1mICIkc25hcHNob3RfdG1wIgogICAgcmV0dXJuIDEKICBmaQoKICBjaG1vZCAwNjAwICIkc25hcHNob3RfdG1wIgogIG12IC1mICIkc25hcHNob3RfdG1wIiAiJHNlc3Npb25fc25hcHNob3RfcGF0aCIKICBzZXNzaW9uX3NuYXBzaG90X2NyZWF0ZWQ9MQogIGVjaG8gIlZlcmlmaWVkIHVzZXJib3Qgc2Vzc2lvbiBzbmFwc2hvdDogJHNlc3Npb25fc25hcHNob3RfcGF0aCIKfQo=
         run: |
           python - <<'PY'
+          import base64
+          import os
           from pathlib import Path
 
           path = Path('deploy/server/deploy.sh')
@@ -31,127 +35,9 @@ jobs:
           if text.count(marker) != 1:
               raise SystemExit('unexpected session snapshot state marker')
           text = text.replace(marker, marker + 'session_file_exists=0\n', 1)
-
           start = text.index('snapshot_userbot_session() {\n')
           end = text.index('\nrestore_userbot_session() {', start)
-          replacement = r'''probe_userbot_session() {
-  local probe_status
-
-  session_file_exists=0
-  if "${compose[@]}" run --rm -T --no-deps \
-    --user "$app_uid:$app_gid" userbot python - <<'PY'
-from pathlib import Path
-
-raise SystemExit(
-    0
-    if Path("/run/romatic-userbot-session/userbot.session").is_file()
-    else 44
-)
-PY
-  then
-    session_file_exists=1
-    return 0
-  fi
-
-  probe_status="$?"
-  if [[ "$probe_status" == "44" ]]; then
-    echo "Userbot session file is absent; compatibility probe skipped."
-    return 0
-  fi
-  return "$probe_status"
-}
-
-write_userbot_session_snapshot() {
-  local snapshot_tmp="$1"
-
-  "${compose[@]}" run --rm -T --no-deps \
-    --user "$app_uid:$app_gid" \
-    -e ROMATIC_EXPECTED_APP_UID="$app_uid" \
-    -e ROMATIC_EXPECTED_APP_GID="$app_gid" \
-    userbot python - <<'PY' >"$snapshot_tmp"
-import os
-import sqlite3
-import stat
-import sys
-from pathlib import Path
-
-source_path = Path("/run/romatic-userbot-session/userbot.session")
-target_path = Path("/tmp/userbot-session-snapshot.session")
-expected_uid = int(os.environ["ROMATIC_EXPECTED_APP_UID"])
-expected_gid = int(os.environ["ROMATIC_EXPECTED_APP_GID"])
-source_stat = source_path.stat()
-source_mode = stat.S_IMODE(source_stat.st_mode)
-if source_stat.st_uid != expected_uid or source_stat.st_gid != expected_gid:
-    raise RuntimeError(
-        f"Unexpected Telethon session owner: {source_stat.st_uid}:{source_stat.st_gid}; "
-        f"expected {expected_uid}:{expected_gid}"
-    )
-if source_mode & 0o077:
-    raise RuntimeError(f"Telethon session permissions are too broad: {source_mode:04o}")
-
-target_path.unlink(missing_ok=True)
-source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
-target = sqlite3.connect(target_path)
-try:
-    source.backup(target)
-    result = target.execute("PRAGMA quick_check").fetchone()
-    if result != ("ok",):
-        raise RuntimeError(f"Telethon session quick_check failed: {result!r}")
-finally:
-    target.close()
-    source.close()
-
-sys.stdout.buffer.write(target_path.read_bytes())
-target_path.unlink(missing_ok=True)
-PY
-}
-
-verify_userbot_session_snapshot() {
-  local snapshot_tmp="$1"
-
-  python3 - "$snapshot_tmp" <<'PY'
-import sqlite3
-import sys
-from pathlib import Path
-
-snapshot_path = Path(sys.argv[1])
-if not snapshot_path.is_file() or snapshot_path.stat().st_size == 0:
-    raise RuntimeError("Telethon session snapshot is empty")
-connection = sqlite3.connect(f"file:{snapshot_path}?mode=ro", uri=True)
-try:
-    result = connection.execute("PRAGMA quick_check").fetchone()
-    if result != ("ok",):
-        raise RuntimeError(f"Host session snapshot quick_check failed: {result!r}")
-finally:
-    connection.close()
-PY
-}
-
-snapshot_userbot_session() {
-  local snapshot_tmp
-
-  probe_userbot_session
-  if [[ "$session_file_exists" != "1" ]]; then
-    return 0
-  fi
-
-  snapshot_tmp="${session_snapshot_path}.tmp"
-  rm -f "$snapshot_tmp"
-  if ! write_userbot_session_snapshot "$snapshot_tmp"; then
-    rm -f "$snapshot_tmp"
-    return 1
-  fi
-  if ! verify_userbot_session_snapshot "$snapshot_tmp"; then
-    rm -f "$snapshot_tmp"
-    return 1
-  fi
-
-  chmod 0600 "$snapshot_tmp"
-  mv -f "$snapshot_tmp" "$session_snapshot_path"
-  session_snapshot_created=1
-  echo "Verified userbot session snapshot: $session_snapshot_path"
-}
-'''
+          replacement = base64.b64decode(os.environ['SNAPSHOT_FUNCTIONS_B64']).decode()
           text = text[:start] + replacement + text[end + 1:]
           path.write_text(text, encoding='utf-8')
           PY
