@@ -22,8 +22,15 @@ from db.legacy import is_admin, is_luxury_user
 router = Router(name="user-access-control")
 
 
+def _message_user_id(message: Message) -> int:
+    user = message.from_user
+    if user is None:
+        raise ValueError("Telegram message has no sender")
+    return int(user.id)
+
+
 async def _has_schedule_access(user_id: int) -> bool:
-    return await is_admin(user_id) or await is_luxury_user(user_id)
+    return bool(await is_admin(user_id)) or bool(await is_luxury_user(user_id))
 
 
 async def _show_today(message: Message, state: FSMContext) -> None:
@@ -32,7 +39,7 @@ async def _show_today(message: Message, state: FSMContext) -> None:
 
 
 async def _deny_schedule_message(message: Message) -> None:
-    if await is_luxury_user(message.from_user.id):
+    if await is_luxury_user(_message_user_id(message)):
         text = "Расписание для Лакшери-пользователей открывается через раздел " "«👑 Лакшери»."
     else:
         text = "Расписание доступно только администраторам и Лакшери-пользователям."
@@ -55,14 +62,14 @@ async def public_today(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("day"), F.chat.type == "private")
 async def guard_legacy_schedule_commands(message: Message) -> None:
-    if await _has_schedule_access(message.from_user.id):
+    if await _has_schedule_access(_message_user_id(message)):
         raise SkipHandler
     await _deny_schedule_message(message)
 
 
 @router.message(F.text == USER_MENU_SCHEDULE, F.chat.type == "private")
 async def guard_stale_schedule_button(message: Message) -> None:
-    if await is_admin(message.from_user.id):
+    if await is_admin(_message_user_id(message)):
         raise SkipHandler
     await _deny_schedule_message(message)
 
