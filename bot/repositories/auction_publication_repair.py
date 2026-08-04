@@ -244,7 +244,12 @@ class AuctionPublicationRepairRepository:
                         f"replace_published for {action.auction_id} requires a positive "
                         "expected previous channel ID"
                     )
-                if int(existing_message_id) not in {
+                if existing_message_id is None:
+                    raise PublicationRepairError(
+                        f"auction {action.auction_id} has no published message to replace"
+                    )
+                current_message_id = int(existing_message_id)
+                if current_message_id not in {
                     int(expected_previous),
                     channel_message_id,
                 }:
