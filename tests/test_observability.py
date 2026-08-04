@@ -242,7 +242,7 @@ def test_recoverable_worker_failure_does_not_hide_critical_readiness() -> None:
     )
 
     snapshot = probe.snapshot()
-    rendered = probe._metrics.render_prometheus()  # noqa: SLF001
+    rendered = probe._metrics.render_prometheus()
 
     assert snapshot.ready is True
     assert "database_pool_free 2" in rendered
@@ -272,7 +272,7 @@ async def test_health_probe_serves_all_routes_and_closes_cleanly() -> None:
     await probe.start()
     with pytest.raises(RuntimeError, match="already started"):
         await probe.start()
-    server = probe._server  # noqa: SLF001
+    server = probe._server
     assert server is not None and server.sockets
     port = int(server.sockets[0].getsockname()[1])
 

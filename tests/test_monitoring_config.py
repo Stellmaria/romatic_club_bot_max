@@ -18,7 +18,7 @@ def test_dashboard_separates_core_and_userbot_panels() -> None:
     )
     titles = {panel["title"] for panel in dashboard["panels"]}
 
-    assert REQUIRED_PANELS <= titles
+    assert titles >= REQUIRED_PANELS
     assert any(title.startswith("Core ") for title in titles)
     assert any(title.startswith("Userbot ") for title in titles)
 

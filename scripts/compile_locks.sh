@@ -16,6 +16,19 @@ for group in bot userbot tools dev; do
     --output-file "$generated_lock" \
     "requirements/$group.in"
 
+  python - "$generated_lock" "requirements/$group.lock" <<'PYTHON'
+from pathlib import Path
+import sys
+
+lock_path = Path(sys.argv[1])
+canonical_output = sys.argv[2]
+content = lock_path.read_text(encoding="utf-8")
+lock_path.write_text(
+    content.replace(str(lock_path), canonical_output, 1),
+    encoding="utf-8",
+)
+PYTHON
+
   if [[ "$output_dir/$group.lock" != "$generated_lock" ]]; then
     cp "$generated_lock" "$output_dir/$group.lock"
   fi

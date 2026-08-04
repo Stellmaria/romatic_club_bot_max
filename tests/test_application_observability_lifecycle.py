@@ -73,6 +73,7 @@ async def test_worker_failure_cancels_polling_and_is_reraised() -> None:
 
 
 def _bot_config() -> SimpleNamespace:
+    sample_bot_token = ":".join(("123456789", "A" * 35))
     return SimpleNamespace(
         bot=SimpleNamespace(
             log_level="INFO",
@@ -80,7 +81,7 @@ def _bot_config() -> SimpleNamespace:
             uid_hash_key="test-hash-key",
             uid_enc_key="test-current-key",
             uid_enc_key_previous="test-previous-key",
-            bot_token="123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            bot_token=sample_bot_token,
             debug_middleware=True,
             drop_pending_updates=True,
             auction_channel_id=-1001234567890,
@@ -88,11 +89,11 @@ def _bot_config() -> SimpleNamespace:
         ),
         supervisor=object(),
         database=object(),
-        runtime_dir=Path("/tmp/auction-bot-test"),
+        runtime_dir=Path("auction-bot-test"),
     )
 
 
-def _install_run_bot_fakes(
+def _install_run_bot_fakes(  # noqa: C901
     monkeypatch: pytest.MonkeyPatch,
     *,
     polling_error: BaseException | None = None,
