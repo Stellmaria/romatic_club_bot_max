@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import (
@@ -37,7 +39,6 @@ _INCOMPLETE_CARD_FIELDS: tuple[tuple[str, str], ...] = (
     ("image_id", "изображение"),
     ("rarity", "редкость"),
     ("obtain_type", "тип награды"),
-    ("obtain_amount", "размер награды"),
     ("story", "история"),
     ("quote", "цитата"),
 )
@@ -81,8 +82,33 @@ def _is_blank(value: object) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
 
-def _missing_card_fields(card: dict[str, object]) -> list[str]:
-    return [label for field, label in _INCOMPLETE_CARD_FIELDS if _is_blank(card.get(field))]
+def _is_positive_int(value: object) -> bool:
+    try:
+        return int(value) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _safe_text(value: object, *, fallback: str = "—", limit: int = 80) -> str:
+    text = " ".join(str(value or fallback).split())
+    if len(text) > limit:
+        text = text[: limit - 1].rstrip() + "…"
+    return html.escape(text)
+
+
+def _card_issues(card: dict[str, object]) -> list[str]:
+    issues = [
+        label for field, label in _INCOMPLETE_CARD_FIELDS if _is_blank(card.get(field))
+    ]
+    if not _is_positive_int(card.get("card_emoji_id")):
+        issues.append("мини-эмодзи")
+    elif not bool(card.get("emoji_verified")):
+        issues.append("мини-эмодзи не проверен")
+
+    economy_ok, economy_reason = validate_card_economy(card)
+    if not economy_ok:
+        issues.append(f"экономика: {economy_reason}")
+    return issues
 
 
 def _split_messages(header: str, lines: list[str], *, limit: int = 3800) -> list[str]:
@@ -136,7 +162,7 @@ async def _restart_deck(message: Message, user_id: int, deck_id: int) -> None:
     await set_schedule_deck_scope(user_id, deck_id)
     await message.answer(
         "🔄 <b>Повторная проверка выбранной колоды</b>\n\n"
-        f"Колода №{deck_id}: <b>{deck.get('deck_name') or '—'}</b>\n"
+        f"Колода №{deck_id}: <b>{_safe_text(deck.get('deck_name'))}</b>\n"
         "После последней карты мастер остановится и не перейдёт к другим колодам.",
         parse_mode="HTML",
     )
@@ -165,29 +191,32 @@ async def show_incomplete_schedule_cards(message: Message) -> None:
     incomplete_cards = 0
     for deck in await get_all_decks_for_setup():
         deck_id = int(deck["deck_id"])
-        deck_name = " ".join(str(deck.get("deck_name") or "Без названия").split())
+        deck_name = _safe_text(deck.get("deck_name"), fallback="Без названия")
         for card in await get_cards_for_setup(deck_id):
             total_cards += 1
-            missing = _missing_card_fields(card)
-            if not missing:
+            issues = _card_issues(card)
+            if not issues:
                 continue
             incomplete_cards += 1
             card_id = int(card["card_id"])
             number = card.get("num")
-            hero = " ".join(str(card.get("hero_name") or "—").split())
-            card_name = " ".join(str(card.get("card_name") or "—").split())
+            hero = _safe_text(card.get("hero_name"))
+            card_name = _safe_text(card.get("card_name"))
             number_text = f"№{number}" if number is not None else f"ID {card_id}"
+            issue_text = html.escape(", ".join(issues))
             lines.append(
                 f"• колода {deck_id} «{deck_name}», {number_text}, card_id={card_id}: "
-                f"{hero} — {card_name}; нет: {', '.join(missing)}"
+                f"{hero} — {card_name}; проблемы: {issue_text}"
             )
 
     if not lines:
-        await message.answer(f"✅ Все {total_cards} карт заполнены по обязательным полям.")
+        await message.answer(
+            f"✅ Все {total_cards} карт заполнены, экономика и мини-эмодзи корректны."
+        )
         return
 
     header = (
-        "🧩 <b>Карты с незаполненными полями</b>\n"
+        "🧩 <b>Карты с незаполненными или некорректными данными</b>\n"
         f"Найдено: <b>{incomplete_cards}</b> из <b>{total_cards}</b>."
     )
     for chunk in _split_messages(header, lines):
