@@ -1,13 +1,16 @@
+# ruff: noqa: RUF001
 """Pure workflow helpers for the Premium schedule setup master."""
 
 from __future__ import annotations
 
 import html
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from aiogram.types import Message
 
+from bot.domain.schedule_lots import SPECIAL_SCHEDULE_ASSETS
 from db.schedule_setup import (
     get_all_decks_for_setup,
     get_cards_for_setup,
@@ -31,6 +34,7 @@ COMMON_ASSETS: tuple[AssetSpec, ...] = (
     AssetSpec("currency:diamonds", "награды «Алмазы»", "💎"),
     AssetSpec("currency:tea", "награды «Чай»", "☕"),
     AssetSpec("whole_deck", "лота «Вся колода»", "🃏"),
+    *(AssetSpec(spec.key, spec.label, spec.fallback) for spec in SPECIAL_SCHEDULE_ASSETS),
 )
 ASSET_BY_KEY = {asset.key: asset for asset in COMMON_ASSETS}
 
@@ -144,10 +148,11 @@ def format_card_review(card: Mapping[str, Any]) -> str:
     status = "✅" if economy_ok else "❌"
     story = _short_field(card.get("story"))
     quote = _short_field(card.get("quote"))
+    deck_name = html.escape(str(card.get("deck_name") or "—"))
     return (
         f"{emoji_preview} <b>Проверка карточки</b>\n\n"
         f"<b>ID:</b> <code>{int(card['card_id'])}</code>\n"
-        f"<b>Колода:</b> №{int(card['deck_id'])} · {html.escape(str(card.get('deck_name') or '—'))}\n"
+        f"<b>Колода:</b> №{int(card['deck_id'])} · {deck_name}\n"
         f"<b>Номер в колоде:</b> {card.get('num') or '—'}\n"
         f"<b>Карта:</b> {html.escape(str(card.get('card_name') or '—'))}\n"
         f"<b>Герой:</b> {html.escape(str(card.get('hero_name') or '—'))}\n"

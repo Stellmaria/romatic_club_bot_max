@@ -1,17 +1,20 @@
+# ruff: noqa: RUF001
 """Approved schedule rendering, publication timing and channel pin rotation."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, time, timedelta
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from telethon import TelegramClient
 
 from bot.core.settings import UserbotSettings
 from bot.core.time import MOSCOW, to_moscow
 from bot.domain.auctions.enums import AuctionKind, Currency, normalize_currency_choices
+from bot.domain.schedule_lots import schedule_lot_display_name, special_schedule_asset
 from db.schedule_publication import (
     get_last_auction_close_for_day,
     get_previous_published_schedule_message,
@@ -56,16 +59,12 @@ def _auction_currency_label(lot: Mapping[str, Any]) -> str:
             fallback=lot.get("currency"),
         )
     )
-    try:
-        kind = AuctionKind.from_raw(lot.get("auction_kind"))
-    except ValueError:
-        kind = AuctionKind.STANDARD
-
-    if kind is AuctionKind.FREE and {
-        Currency.CUPS,
-        Currency.DIAMONDS,
-    }.issubset(choices):
+    if {Currency.CUPS, Currency.DIAMONDS}.issubset(choices):
         return "за чай и алмазы"
+    if {Currency.CUPS, Currency.TREASURES}.issubset(choices):
+        return "за чай и сокровища"
+    if {Currency.DIAMONDS, Currency.TREASURES}.issubset(choices):
+        return "за алмазы и сокровища"
     if Currency.TREASURES in choices:
         return "за сокровища"
     if Currency.CUPS in choices:
@@ -98,13 +97,14 @@ def render_schedule_announcement(
     for index, lot in enumerate(sorted_lots):
         start_time = lot.get("start_time")
         start_label = (
-            to_moscow(start_time).strftime("%H:%M")
-            if isinstance(start_time, datetime)
-            else "--:--"
+            to_moscow(start_time).strftime("%H:%M") if isinstance(start_time, datetime) else "--:--"
         )
         whole_deck = bool(lot.get("whole_deck"))
+        special_asset = special_schedule_asset(lot)
 
-        if whole_deck:
+        if special_asset:
+            builder.emoji(special_asset.fallback, special_asset.key)
+        elif whole_deck:
             builder.emoji("🃏", "whole_deck")
         else:
             card_emoji_id = lot.get("card_emoji_id")
@@ -118,14 +118,14 @@ def render_schedule_announcement(
         builder.text(f" {start_label} ")
 
         rarity = base._normalize_rarity(lot.get("rarity"))
-        if rarity and not whole_deck:
+        if rarity and not whole_deck and not special_asset:
             builder.emoji("🔹", f"rarity:{rarity}")
             builder.text(" ")
 
-        builder.text(base._display_name(lot))
+        builder.text(schedule_lot_display_name(lot))
 
         deck_emoji_id = lot.get("deck_emoji_id")
-        if deck_emoji_id:
+        if deck_emoji_id and not special_asset:
             builder.text(" ")
             builder.emoji_id("🗂", deck_emoji_id)
 
@@ -308,7 +308,7 @@ async def publish_schedule_announcement(
     return message_id
 
 
-async def schedule_announcement_watchdog(
+async def schedule_announcement_watchdog(  # noqa: C901
     telegram_client: TelegramClient,
     *,
     config: UserbotSettings,
