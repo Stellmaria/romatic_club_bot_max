@@ -5,7 +5,10 @@ from datetime import UTC, datetime, timedelta
 import asyncpg
 import pytest
 
-from bot.domain.auctions.publication_repair import PublicationRepairAction
+from bot.domain.auctions.publication_repair import (
+    PublicationRepairAction,
+    PublicationRepairError,
+)
 from bot.repositories.auction_publication_repair import (
     AuctionPublicationRepairRepository,
 )
@@ -139,6 +142,17 @@ async def test_issue99_recovery_is_atomic_idempotent_and_finalizable(
     await _seed_damaged_rows(postgres_pool)
     repository = AuctionPublicationRepairRepository(postgres_pool)
     damaged = await _publication_rows(postgres_pool)
+
+    wrong_expected = list(_actions())
+    wrong_expected[0] = PublicationRepairAction(
+        3797,
+        "replace_published",
+        5948,
+        expected_previous_channel_message_id=9999,
+    )
+    with pytest.raises(PublicationRepairError, match="expected message_id 9999"):
+        await repository.repair(tuple(wrong_expected), dry_run=False)
+    assert await _publication_rows(postgres_pool) == damaged
 
     dry_run = await repository.repair(_actions(), dry_run=True)
 
