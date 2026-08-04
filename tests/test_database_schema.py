@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import re
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE = ROOT / "database"
@@ -16,7 +16,7 @@ def test_runtime_migrations_are_importable_for_wheel_deployments() -> None:
     from db.migrator import MIGRATIONS_DIR, _load_migrations
 
     package_dir = Path(db.__file__).resolve().parent
-    assert MIGRATIONS_DIR == package_dir / "migrations"
+    assert package_dir / "migrations" == MIGRATIONS_DIR
     names = {migration.filename for migration in _load_migrations()}
     assert {
         "001_extensions_and_types.sql",
