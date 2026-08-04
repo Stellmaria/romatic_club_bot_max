@@ -74,9 +74,7 @@ def _valid_payload() -> dict[str, object]:
                 "SUPERVISOR_TOKEN": "",
                 "SUPERVISOR_TOKEN_FILE": "/run/secrets/supervisor_token",
             },
-            "depends_on": {
-                "runtime-permissions": {"condition": "service_completed_successfully"}
-            },
+            "depends_on": {"runtime-permissions": {"condition": "service_completed_successfully"}},
         }
     )
 
@@ -97,9 +95,7 @@ def _valid_payload() -> dict[str, object]:
                 "SUPERVISOR_TOKEN_FILE": "",
                 "SUPERVISOR_BASE_URL": "",
             },
-            "depends_on": {
-                "runtime-permissions": {"condition": "service_completed_successfully"}
-            },
+            "depends_on": {"runtime-permissions": {"condition": "service_completed_successfully"}},
         }
     )
 
