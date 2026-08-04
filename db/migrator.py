@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Awaitable, Callable
 import asyncio
 import hashlib
 import json
@@ -13,11 +14,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import asyncpg
 
 logger = logging.getLogger("auction_bot.migrations")
+
+RuntimeResult = TypeVar("RuntimeResult")
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 MIGRATION_NAME_RE = re.compile(r"^(?P<version>\d{3,})_[a-z0-9_]+\.sql$")
@@ -507,7 +510,10 @@ async def apply_migrations(
     return applied_now
 
 
-async def _with_database_runtime(database_url: str, callback: Any) -> Any:
+async def _with_database_runtime(
+    database_url: str,
+    callback: Callable[[asyncpg.Pool], Awaitable[RuntimeResult]],
+) -> RuntimeResult:
     if not database_url:
         raise RuntimeError("DATABASE_URL не задан")
 
