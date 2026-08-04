@@ -1,6 +1,9 @@
+# ruff: noqa: UP042
 from __future__ import annotations
 
 from enum import Enum
+
+from bot.domain.auctions.exceptions import UnsupportedCurrency
 
 
 class AuctionStatus(str, Enum):
@@ -20,7 +23,7 @@ class AuctionStatus(str, Enum):
     CANCELLED = "cancelled"
 
     @classmethod
-    def from_raw(cls, value: object) -> "AuctionStatus | None":
+    def from_raw(cls, value: object) -> AuctionStatus | None:
         normalized = str(value or "").strip().lower()
         aliases = {
             "awaiting_moderation": cls.MODERATION,
@@ -47,7 +50,7 @@ class AuctionKind(str, Enum):
     EXCHANGE = "exchange"
 
     @classmethod
-    def from_raw(cls, value: object) -> "AuctionKind":
+    def from_raw(cls, value: object) -> AuctionKind:
         if isinstance(value, cls):
             return value
         normalized = str(value or cls.STANDARD.value).strip().lower()
@@ -102,7 +105,7 @@ class ExchangeStatus(str, Enum):
     DELETED = "deleted"
 
     @classmethod
-    def from_raw(cls, value: object) -> "ExchangeStatus | None":
+    def from_raw(cls, value: object) -> ExchangeStatus | None:
         normalized = str(value or "").strip().lower()
         try:
             return cls(normalized)
@@ -116,7 +119,7 @@ class Currency(str, Enum):
     TREASURES = "сокровища"
 
     @classmethod
-    def from_raw(cls, value: object) -> "Currency":
+    def from_raw(cls, value: object) -> Currency:
         if isinstance(value, cls):
             return value
         normalized = str(value or "").strip().lower()
@@ -146,8 +149,6 @@ class Currency(str, Enum):
         try:
             return aliases[normalized]
         except KeyError as exc:
-            from bot.domain.auctions.exceptions import UnsupportedCurrency
-
             raise UnsupportedCurrency(normalized or "—") from exc
 
     @property
@@ -206,7 +207,7 @@ def normalize_currency_choices(
         for item in raw_items(raw):
             try:
                 currency = Currency.from_raw(item)
-            except Exception:
+            except UnsupportedCurrency:
                 continue
             if currency not in result:
                 result.append(currency)

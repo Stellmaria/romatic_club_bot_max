@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Mapping
+from typing import Any
 
 from bot.domain.schedule_lots import SPECIAL_SCHEDULE_ASSETS
 from db.core import execute, fetch, fetchrow

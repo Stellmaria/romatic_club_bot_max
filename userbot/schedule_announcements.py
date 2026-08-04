@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """Daily auction schedule previews and publication by the Premium userbot."""
 
 from __future__ import annotations
@@ -6,10 +7,11 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from telethon import Button, TelegramClient
 from telethon.tl.types import MessageEntityCustomEmoji
@@ -148,10 +150,13 @@ def announcement_target_date(
 def _value_emoji_id(value: object) -> int | None:
     if isinstance(value, Mapping):
         value = value.get("custom_emoji_id")
-    try:
-        parsed = int(value) if value is not None else 0
-    except (TypeError, ValueError):
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
         parsed = 0
+    else:
+        try:
+            parsed = int(value)
+        except ValueError:
+            parsed = 0
     return parsed or None
 
 
@@ -275,10 +280,13 @@ def _append_reward(
     amount: object,
     reward_type: object,
 ) -> None:
-    try:
-        parsed_amount = int(amount or 0)
-    except (TypeError, ValueError):
+    if isinstance(amount, bool) or not isinstance(amount, (str, int)):
         parsed_amount = 0
+    else:
+        try:
+            parsed_amount = int(amount)
+        except ValueError:
+            parsed_amount = 0
     if not parsed_amount:
         return
     normalized = _normalize_reward_type(reward_type)
@@ -384,7 +392,7 @@ def missing_required_emoji_keys(emoji_ids: Mapping[str, object]) -> tuple[str, .
     return tuple(sorted(_REQUIRED_EMOJI_KEYS - normalized))
 
 
-def schedule_configuration_issues(
+def schedule_configuration_issues(  # noqa: C901
     lots: Sequence[Mapping[str, Any]],
     assets: Mapping[str, object],
 ) -> tuple[str, ...]:

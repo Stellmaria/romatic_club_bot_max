@@ -1,10 +1,12 @@
+# ruff: noqa: RUF001
 """Canonical presentation rules for non-catalogue schedule lots."""
 
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,17 +83,17 @@ def special_schedule_asset_key(lot: Mapping[str, Any]) -> str | None:  # noqa: C
     if service == "deck_constructor" or title.startswith("колода-конструктор"):
         return "service:deck_constructor"
 
-    if title.startswith("любая бронз") or title.startswith("любое бронз"):
+    if title.startswith(("любая бронз", "любое бронз")):
         return "lot:any_bronze"
-    if title.startswith("любая серебр") or title.startswith("любое серебр"):
+    if title.startswith(("любая серебр", "любое серебр")):
         return "lot:any_silver"
-    if title.startswith("любая золот") or title.startswith("любое золот"):
+    if title.startswith(("любая золот", "любое золот")):
         return "lot:any_gold"
-    if title.startswith("любая алмаз") or title.startswith("любое алмаз"):
+    if title.startswith(("любая алмаз", "любое алмаз")):
         return "lot:any_diamond"
-    if title.startswith("любая карта") or title.startswith("любой карт"):
+    if title.startswith(("любая карта", "любой карт")):
         return "lot:any_card"
-    if title.startswith("любая колода") or title.startswith("любой колод"):
+    if title.startswith(("любая колода", "любой колод")):
         return "lot:any_deck"
 
     compact_title = title.replace(" ", "")
@@ -123,8 +125,8 @@ def schedule_lot_display_name(lot: Mapping[str, Any]) -> str:
 
 
 __all__ = [
-    "SPECIAL_SCHEDULE_ASSET_BY_KEY",
     "SPECIAL_SCHEDULE_ASSETS",
+    "SPECIAL_SCHEDULE_ASSET_BY_KEY",
     "ScheduleAssetSpec",
     "schedule_lot_display_name",
     "special_schedule_asset",

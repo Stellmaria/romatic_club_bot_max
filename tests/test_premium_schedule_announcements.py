@@ -1,6 +1,7 @@
+# ruff: noqa: RUF001
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -58,7 +59,7 @@ def test_render_schedule_announcement_applies_public_currency_and_kind_policy() 
                 "auction_id": 4,
                 "hero_name": "Реверс",
                 "card_name": "Реверс",
-                "start_time": datetime(2026, 8, 1, 11, 30, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 1, 11, 30, tzinfo=UTC),
                 "obtain_amount": 40,
                 "obtain_type": "diamonds",
                 "currency": "чашки",
@@ -69,7 +70,7 @@ def test_render_schedule_announcement_applies_public_currency_and_kind_policy() 
                 "auction_id": 2,
                 "hero_name": "Чай",
                 "card_name": "Чай",
-                "start_time": datetime(2026, 8, 1, 9, 30, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 1, 9, 30, tzinfo=UTC),
                 "obtain_amount": 2,
                 "obtain_type": "tea",
                 "currency": "чай",
@@ -79,7 +80,7 @@ def test_render_schedule_announcement_applies_public_currency_and_kind_policy() 
                 "auction_id": 1,
                 "hero_name": "Алмазы",
                 "card_name": "Алмазы",
-                "start_time": datetime(2026, 8, 1, 8, 30, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 1, 8, 30, tzinfo=UTC),
                 "obtain_amount": 20,
                 "obtain_type": "diamonds",
                 "currency": "алмазы",
@@ -89,7 +90,7 @@ def test_render_schedule_announcement_applies_public_currency_and_kind_policy() 
                 "auction_id": 3,
                 "hero_name": "Свободный",
                 "card_name": "Свободный",
-                "start_time": datetime(2026, 8, 1, 10, 30, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 1, 10, 30, tzinfo=UTC),
                 "obtain_amount": 20,
                 "obtain_type": "diamonds",
                 "currency": "алмазы",
@@ -127,28 +128,28 @@ def test_render_schedule_announcement_uses_special_lot_assets() -> None:
                 "auction_id": 11,
                 "hero_name": "Лот от игрока",
                 "card_name": "Любая золотая",
-                "start_time": datetime(2026, 8, 4, 8, 0, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 4, 8, 0, tzinfo=UTC),
                 "start_price": 800,
                 "currency": "алмазы",
             },
             {
                 "auction_id": 12,
                 "card_name": "Друзья+",
-                "start_time": datetime(2026, 8, 4, 9, 0, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 4, 9, 0, tzinfo=UTC),
                 "start_price": 10,
                 "currency": "чашки",
             },
             {
                 "auction_id": 13,
                 "card_name": "Премиум пропуск (6 месяцев)",
-                "start_time": datetime(2026, 8, 4, 10, 0, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 4, 10, 0, tzinfo=UTC),
                 "start_price": 1480,
                 "currency": "алмазы",
             },
             {
                 "auction_id": 14,
                 "card_name": "Кручения (50 шт.)",
-                "start_time": datetime(2026, 8, 4, 11, 0, tzinfo=timezone.utc),
+                "start_time": datetime(2026, 8, 4, 11, 0, tzinfo=UTC),
                 "start_price": 14,
                 "currency": "чашки",
             },
@@ -179,11 +180,11 @@ def test_render_schedule_announcement_uses_special_lot_assets() -> None:
 
 
 def test_announcement_target_date_only_after_configured_time() -> None:
-    before = datetime(2026, 7, 31, 22, 59, tzinfo=timezone.utc)
+    before = datetime(2026, 7, 31, 22, 59, tzinfo=UTC)
     # 22:59 UTC is already 01:59 in Moscow on the next calendar day.
     assert announcement_target_date(before, hour=23, minute=0) is None
 
-    at_time_moscow = datetime(2026, 7, 31, 20, 0, tzinfo=timezone.utc)
+    at_time_moscow = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
     assert announcement_target_date(at_time_moscow, hour=23, minute=0) == date(2026, 8, 1)
 
 

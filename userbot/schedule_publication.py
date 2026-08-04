@@ -1,11 +1,13 @@
+# ruff: noqa: RUF001
 """Approved schedule rendering, publication timing and channel pin rotation."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, time, timedelta
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from telethon import TelegramClient
 
@@ -306,7 +308,7 @@ async def publish_schedule_announcement(
     return message_id
 
 
-async def schedule_announcement_watchdog(
+async def schedule_announcement_watchdog(  # noqa: C901
     telegram_client: TelegramClient,
     *,
     config: UserbotSettings,
