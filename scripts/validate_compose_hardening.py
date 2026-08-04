@@ -222,12 +222,7 @@ def _dependency_condition(service: Mapping[str, object], dependency: str, *, nam
     return str(contract.get("condition") or "")
 
 
-def _validate_runtime_permissions(
-    payload: Mapping[str, object],
-    bot: Mapping[str, object],
-    userbot: Mapping[str, object],
-) -> None:
-    service = _service(payload, "runtime-permissions")
+def _validate_runtime_permission_isolation(service: Mapping[str, object]) -> None:
     if str(service.get("user") or "") != "0:0":
         _fail("services.runtime-permissions.user must be the explicit bootstrap root")
     if service.get("read_only") is not True:
@@ -244,6 +239,8 @@ def _validate_runtime_permissions(
     if _tmpfs_targets(service, name="runtime-permissions") != {"/tmp"}:  # noqa: S108
         _fail("services.runtime-permissions tmpfs must contain only /tmp")
 
+
+def _validate_runtime_permission_capabilities(service: Mapping[str, object]) -> None:
     cap_drop = {
         str(value).upper()
         for value in _sequence(
@@ -263,6 +260,18 @@ def _validate_runtime_permissions(
     if cap_add != {"CHOWN", "DAC_OVERRIDE", "FOWNER"}:
         _fail("services.runtime-permissions capability allowlist is incorrect")
 
+    security_opt = {
+        str(value)
+        for value in _sequence(
+            service.get("security_opt", []),
+            field="services.runtime-permissions.security_opt",
+        )
+    }
+    if not any(value.startswith("no-new-privileges") for value in security_opt):
+        _fail("services.runtime-permissions must enable no-new-privileges")
+
+
+def _validate_runtime_permission_command(service: Mapping[str, object]) -> None:
     command = " ".join(
         str(part)
         for part in _sequence(
@@ -279,16 +288,12 @@ def _validate_runtime_permissions(
     if not service.get("stop_grace_period"):
         _fail("services.runtime-permissions.stop_grace_period must be explicit")
 
-    security_opt = {
-        str(value)
-        for value in _sequence(
-            service.get("security_opt", []),
-            field="services.runtime-permissions.security_opt",
-        )
-    }
-    if not any(value.startswith("no-new-privileges") for value in security_opt):
-        _fail("services.runtime-permissions must enable no-new-privileges")
 
+def _validate_runtime_permission_startup(
+    service: Mapping[str, object],
+    bot: Mapping[str, object],
+    userbot: Mapping[str, object],
+) -> None:
     bot_image = str(bot.get("image") or "")
     if not bot_image or str(service.get("image") or "") != bot_image:
         _fail("services.runtime-permissions must reuse the built bot image")
@@ -300,6 +305,18 @@ def _validate_runtime_permissions(
         "service_completed_successfully"
     ):
         _fail("services.userbot must wait for runtime-permissions completion")
+
+
+def _validate_runtime_permissions(
+    payload: Mapping[str, object],
+    bot: Mapping[str, object],
+    userbot: Mapping[str, object],
+) -> None:
+    service = _service(payload, "runtime-permissions")
+    _validate_runtime_permission_isolation(service)
+    _validate_runtime_permission_capabilities(service)
+    _validate_runtime_permission_command(service)
+    _validate_runtime_permission_startup(service, bot, userbot)
 
 
 def validate_compose_hardening(payload: Mapping[str, object]) -> None:
