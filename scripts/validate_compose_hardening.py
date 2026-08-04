@@ -121,7 +121,7 @@ def _assert_common_runtime(service: Mapping[str, object], *, name: str) -> None:
     if not any(value.startswith("no-new-privileges") for value in security_opt):
         _fail(f"services.{name}.security_opt must enable no-new-privileges")
 
-    if _tmpfs_targets(service, name=name) != {"/tmp"}:
+    if _tmpfs_targets(service, name=name) != {"/tmp"}:  # noqa: S108
         _fail(f"services.{name}.tmpfs must contain only /tmp")
 
     for field in ("mem_limit", "cpus", "pids_limit"):
