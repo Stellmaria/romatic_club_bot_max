@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 from pathlib import Path
 
 from bot.bootstrap.routers import get_router_registry
