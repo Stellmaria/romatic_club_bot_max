@@ -32,7 +32,9 @@ jobs:
           tar -tzf /tmp/schedule-patch.tar.gz
           tar -xzf /tmp/schedule-patch.tar.gz
       - name: Install locked development tools
-        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+        run: |
+          uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+          uv pip install --system --require-hashes --no-deps -r requirements/tools.lock
       - name: Format and validate changed files
         run: |
           files=(
