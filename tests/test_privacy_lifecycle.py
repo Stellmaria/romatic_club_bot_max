@@ -24,9 +24,7 @@ def test_inventory_is_machine_validated_and_covers_known_personal_data_tables() 
     validate_inventory(inventory)
 
     tables = {
-        table
-        for dataset in inventory["datasets"]
-        for table in dataset["tables"]
+        table for dataset in inventory["datasets"] for table in dataset["tables"]
     }
     expected = {
         "users",
