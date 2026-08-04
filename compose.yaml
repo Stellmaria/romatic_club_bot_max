@@ -60,7 +60,41 @@ services:
         aliases:
           - romatic-supervisor
 
+  runtime-permissions:
+    image: ${BOT_IMAGE:-romaticclub-bot}
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ceu"]
+    command:
+      - |
+        mkdir -p /runtime/bot /runtime/userbot
+        chown -R "$${ROMATIC_APP_UID}:$${ROMATIC_APP_GID}" /runtime/bot /runtime/userbot
+        chmod 0700 /runtime/bot /runtime/userbot
+    environment:
+      ROMATIC_APP_UID: ${ROMATIC_APP_UID:-10001}
+      ROMATIC_APP_GID: ${ROMATIC_APP_GID:-10001}
+    volumes:
+      - ${ROMATIC_DATA_DIR:-./server-data}/runtime/bot:/runtime/bot
+      - ${ROMATIC_DATA_DIR:-./server-data}/runtime/userbot:/runtime/userbot
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 10s
+    restart: "no"
+
   bot:
+    image: ${BOT_IMAGE:-romaticclub-bot}
     build:
       context: .
       args:
@@ -101,6 +135,8 @@ services:
       - no-new-privileges:true
     stop_grace_period: ${BOT_STOP_GRACE_PERIOD:-45s}
     depends_on:
+      runtime-permissions:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       supervisor-proxy:
@@ -159,6 +195,8 @@ services:
       - no-new-privileges:true
     stop_grace_period: ${USERBOT_STOP_GRACE_PERIOD:-45s}
     depends_on:
+      runtime-permissions:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     networks:
