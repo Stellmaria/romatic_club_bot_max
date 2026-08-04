@@ -154,6 +154,86 @@ class AuctionPublicationRepairRepository:
         )
         return {field: row.get(field) for field in fields}
 
+    @staticmethod
+    def _published_action_ids(
+        action: PublicationRepairAction,
+    ) -> tuple[int, int | None]:
+        if action.action not in {
+            "confirm",
+            "normalize_published",
+            "replace_published",
+        }:
+            raise PublicationRepairError(
+                f"unsupported repair action for {action.auction_id}: {action.action!r}"
+            )
+        if action.channel_message_id is None or int(action.channel_message_id) <= 0:
+            raise PublicationRepairError(
+                f"{action.action} for {action.auction_id} requires a positive channel ID"
+            )
+        discussion_message_id = (
+            int(action.discussion_message_id) if action.discussion_message_id is not None else None
+        )
+        if discussion_message_id is not None and discussion_message_id <= 0:
+            raise PublicationRepairError("discussion_message_id must be positive")
+        return int(action.channel_message_id), discussion_message_id
+
+    @staticmethod
+    def _validate_existing_publication(
+        action: PublicationRepairAction,
+        *,
+        status: str,
+        existing_message_id: Any,
+        existing_discussion_id: Any,
+        channel_message_id: int,
+        discussion_message_id: int | None,
+    ) -> None:
+        if status not in _CONFIRMABLE_STATES:
+            raise PublicationRepairError(
+                f"auction {action.auction_id} cannot be confirmed from {status!r}"
+            )
+        if action.action in {"normalize_published", "replace_published"} and (
+            existing_message_id is None or int(existing_message_id) <= 0
+        ):
+            raise PublicationRepairError(
+                f"auction {action.auction_id} has no published message to normalize"
+            )
+        if action.action == "replace_published":
+            expected_previous = action.expected_previous_channel_message_id
+            if expected_previous is None or int(expected_previous) <= 0:
+                raise PublicationRepairError(
+                    f"replace_published for {action.auction_id} requires a positive "
+                    "expected previous channel ID"
+                )
+            if existing_message_id is None:
+                raise PublicationRepairError(
+                    f"auction {action.auction_id} has no published message to replace"
+                )
+            current_message_id = int(existing_message_id)
+            if current_message_id not in {
+                int(expected_previous),
+                channel_message_id,
+            }:
+                raise PublicationRepairError(
+                    f"auction {action.auction_id} expected message_id "
+                    f"{expected_previous}, found {existing_message_id}"
+                )
+        elif (
+            existing_message_id is not None
+            and int(existing_message_id) > 0
+            and int(existing_message_id) != channel_message_id
+        ):
+            raise PublicationRepairError(
+                f"auction {action.auction_id} has conflicting message_id " f"{existing_message_id}"
+            )
+        if (
+            existing_discussion_id is not None
+            and discussion_message_id is not None
+            and int(existing_discussion_id) != discussion_message_id
+        ):
+            raise PublicationRepairError(
+                f"auction {action.auction_id} has conflicting discussion_message_id"
+            )
+
     async def _apply_action(
         self,
         connection: asyncpg.Connection,
@@ -207,74 +287,15 @@ class AuctionPublicationRepairRepository:
                 int(action.auction_id),
             )
         else:
-            if action.action not in {
-                "confirm",
-                "normalize_published",
-                "replace_published",
-            }:
-                raise PublicationRepairError(
-                    f"unsupported repair action for {action.auction_id}: {action.action!r}"
-                )
-            if action.channel_message_id is None or int(action.channel_message_id) <= 0:
-                raise PublicationRepairError(
-                    f"{action.action} for {action.auction_id} requires a positive channel ID"
-                )
-            channel_message_id = int(action.channel_message_id)
-            discussion_message_id = (
-                int(action.discussion_message_id)
-                if action.discussion_message_id is not None
-                else None
+            channel_message_id, discussion_message_id = self._published_action_ids(action)
+            self._validate_existing_publication(
+                action,
+                status=status,
+                existing_message_id=existing_message_id,
+                existing_discussion_id=existing_discussion_id,
+                channel_message_id=channel_message_id,
+                discussion_message_id=discussion_message_id,
             )
-            if discussion_message_id is not None and discussion_message_id <= 0:
-                raise PublicationRepairError("discussion_message_id must be positive")
-            if status not in _CONFIRMABLE_STATES:
-                raise PublicationRepairError(
-                    f"auction {action.auction_id} cannot be confirmed from {status!r}"
-                )
-            if action.action in {"normalize_published", "replace_published"} and (
-                existing_message_id is None or int(existing_message_id) <= 0
-            ):
-                raise PublicationRepairError(
-                    f"auction {action.auction_id} has no published message to normalize"
-                )
-            if action.action == "replace_published":
-                expected_previous = action.expected_previous_channel_message_id
-                if expected_previous is None or int(expected_previous) <= 0:
-                    raise PublicationRepairError(
-                        f"replace_published for {action.auction_id} requires a positive "
-                        "expected previous channel ID"
-                    )
-                if existing_message_id is None:
-                    raise PublicationRepairError(
-                        f"auction {action.auction_id} has no published message to replace"
-                    )
-                current_message_id = int(existing_message_id)
-                if current_message_id not in {
-                    int(expected_previous),
-                    channel_message_id,
-                }:
-                    raise PublicationRepairError(
-                        f"auction {action.auction_id} expected message_id "
-                        f"{expected_previous}, found {existing_message_id}"
-                    )
-            elif (
-                existing_message_id is not None
-                and int(existing_message_id) > 0
-                and int(existing_message_id) != channel_message_id
-            ):
-                raise PublicationRepairError(
-                    f"auction {action.auction_id} has conflicting message_id "
-                    f"{existing_message_id}"
-                )
-            if (
-                existing_discussion_id is not None
-                and discussion_message_id is not None
-                and int(existing_discussion_id) != discussion_message_id
-            ):
-                raise PublicationRepairError(
-                    f"auction {action.auction_id} has conflicting discussion_message_id"
-                )
-
             await connection.execute(
                 """
                 UPDATE public.auctions
