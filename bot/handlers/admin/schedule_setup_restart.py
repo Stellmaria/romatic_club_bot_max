@@ -1,10 +1,18 @@
+# ruff: noqa: RUF001
 """Restart, deck selection and audit commands for extended schedule setup."""
 
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.schedule_setup_ui import show_next
@@ -25,14 +33,36 @@ from db.schedule_setup_extensions import (
 
 router = Router(name=__name__)
 
+_INCOMPLETE_CARD_FIELDS: tuple[tuple[str, str], ...] = (
+    ("card_name", "название карты"),
+    ("hero_name", "имя героя"),
+    ("image_id", "изображение"),
+    ("rarity", "редкость"),
+    ("obtain_type", "тип награды"),
+    ("story", "история"),
+    ("quote", "цитата"),
+)
+
+
+def _message_user_id(message: Message) -> int:
+    user = message.from_user
+    if user is None:
+        raise ValueError("Telegram message has no sender")
+    return int(user.id)
+
 
 def _deck_picker_keyboard(decks: list[dict[str, object]]) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="🔄 Проверить все колоды", callback_data="schsetup:restart:all")]
+        [
+            InlineKeyboardButton(
+                text="🔄 Проверить все колоды",
+                callback_data="schsetup:restart:all",
+            )
+        ]
     ]
     deck_buttons: list[InlineKeyboardButton] = []
     for deck in decks:
-        deck_id = int(deck["deck_id"])
+        deck_id = int(str(deck["deck_id"]))
         name = " ".join(str(deck.get("deck_name") or "Без названия").split())
         if len(name) > 28:
             name = name[:27].rstrip() + "…"
@@ -46,6 +76,58 @@ def _deck_picker_keyboard(decks: list[dict[str, object]]) -> InlineKeyboardMarku
         rows.append(deck_buttons[index : index + 2])
     rows.append([InlineKeyboardButton(text="✖️ Закрыть", callback_data="schsetup:stop")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _is_blank(value: object) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _is_positive_int(value: object) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value > 0
+    if isinstance(value, str):
+        try:
+            return int(value) > 0
+        except ValueError:
+            return False
+    return False
+
+
+def _safe_text(value: object, *, fallback: str = "—", limit: int = 80) -> str:
+    text = " ".join(str(value or fallback).split())
+    if len(text) > limit:
+        text = text[: limit - 1].rstrip() + "…"
+    return html.escape(text)
+
+
+def _card_issues(card: dict[str, object]) -> list[str]:
+    issues = [label for field, label in _INCOMPLETE_CARD_FIELDS if _is_blank(card.get(field))]
+    if not _is_positive_int(card.get("card_emoji_id")):
+        issues.append("мини-эмодзи")
+    elif not bool(card.get("emoji_verified")):
+        issues.append("мини-эмодзи не проверен")
+
+    economy_ok, economy_reason = validate_card_economy(card)
+    if not economy_ok:
+        issues.append(f"экономика: {economy_reason}")
+    return issues
+
+
+def _split_messages(header: str, lines: list[str], *, limit: int = 3800) -> list[str]:
+    chunks: list[str] = []
+    current = header
+    for line in lines:
+        candidate = f"{current}\n{line}"
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+        chunks.append(current)
+        current = line
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 async def _show_deck_picker(message: Message) -> None:
@@ -84,7 +166,7 @@ async def _restart_deck(message: Message, user_id: int, deck_id: int) -> None:
     await set_schedule_deck_scope(user_id, deck_id)
     await message.answer(
         "🔄 <b>Повторная проверка выбранной колоды</b>\n\n"
-        f"Колода №{deck_id}: <b>{deck.get('deck_name') or '—'}</b>\n"
+        f"Колода №{deck_id}: <b>{_safe_text(deck.get('deck_name'))}</b>\n"
         "После последней карты мастер остановится и не перейдёт к другим колодам.",
         parse_mode="HTML",
     )
@@ -94,7 +176,7 @@ async def _restart_deck(message: Message, user_id: int, deck_id: int) -> None:
 @router.message(Command("schedule_setup"), F.chat.type == "private")
 @admin_only
 async def start_full_schedule_setup(message: Message) -> None:
-    user_id = int(message.from_user.id)
+    user_id = _message_user_id(message)
     await clear_schedule_deck_scope(user_id)
     await show_next(message, user_id)
 
@@ -105,40 +187,83 @@ async def restart_schedule_setup(message: Message) -> None:
     await _show_deck_picker(message)
 
 
+@router.message(Command("schedule_setup_incomplete"), F.chat.type == "private")
+@admin_only
+async def show_incomplete_schedule_cards(message: Message) -> None:
+    lines: list[str] = []
+    total_cards = 0
+    incomplete_cards = 0
+    for deck in await get_all_decks_for_setup():
+        deck_id = int(deck["deck_id"])
+        deck_name = _safe_text(deck.get("deck_name"), fallback="Без названия")
+        for card in await get_cards_for_setup(deck_id):
+            total_cards += 1
+            issues = _card_issues(card)
+            if not issues:
+                continue
+            incomplete_cards += 1
+            card_id = int(card["card_id"])
+            number = card.get("num")
+            hero = _safe_text(card.get("hero_name"))
+            card_name = _safe_text(card.get("card_name"))
+            number_text = f"№{number}" if number is not None else f"ID {card_id}"
+            issue_text = html.escape(", ".join(issues))
+            lines.append(
+                f"• колода {deck_id} «{deck_name}», {number_text}, card_id={card_id}: "
+                f"{hero} — {card_name}; проблемы: {issue_text}"
+            )
+
+    if not lines:
+        await message.answer(
+            f"✅ Все {total_cards} карт заполнены, экономика и мини-эмодзи корректны."
+        )
+        return
+
+    header = (
+        "🧩 <b>Карты с незаполненными или некорректными данными</b>\n"
+        f"Найдено: <b>{incomplete_cards}</b> из <b>{total_cards}</b>."
+    )
+    for chunk in _split_messages(header, lines):
+        await message.answer(chunk, parse_mode="HTML")
+
+
 @router.callback_query(F.data == "schsetup:restart")
 @admin_only
 async def restart_schedule_setup_callback(call: CallbackQuery) -> None:
-    await call.answer()
-    if not call.message:
+    callback_message = call.message
+    if not isinstance(callback_message, Message):
+        await call.answer("Сообщение недоступно", show_alert=True)
         return
-    await _show_deck_picker(call.message)
+    await call.answer()
+    await _show_deck_picker(callback_message)
 
 
 @router.callback_query(F.data.startswith("schsetup:restart:"))
 @admin_only
 async def restart_selected_scope(call: CallbackQuery) -> None:
-    if not call.message:
+    callback_message = call.message
+    if not isinstance(callback_message, Message):
         await call.answer("Сообщение недоступно", show_alert=True)
         return
-    token = rsplit_callback_data(call.data, ":", 1)[1]
+    scope_value = rsplit_callback_data(call.data, ":", 1)[1]
     user_id = int(call.from_user.id)
-    if token == "all":
+    if scope_value == "all":
         await call.answer("Начинаю проверку всех колод")
-        await _restart_all(call.message, user_id)
+        await _restart_all(callback_message, user_id)
         return
     try:
-        deck_id = int(token)
+        deck_id = int(scope_value)
     except ValueError:
         await call.answer("Некорректная колода", show_alert=True)
         return
     await call.answer(f"Начинаю колоду №{deck_id}")
-    await _restart_deck(call.message, user_id, deck_id)
+    await _restart_deck(callback_message, user_id, deck_id)
 
 
 @router.message(Command("schedule_setup_cancel"), F.chat.type == "private")
 @admin_only
 async def cancel_extended_schedule_setup(message: Message) -> None:
-    user_id = int(message.from_user.id)
+    user_id = _message_user_id(message)
     await clear_schedule_deck_scope(user_id)
     await clear_setup_session(user_id)
     await message.answer("Мастер остановлен. Всё уже сохранённое осталось в базе.")
@@ -174,11 +299,15 @@ async def extended_schedule_audit(message: Message) -> None:
         tail += f"\n…и ещё {len(errors) - 50}."
     await message.answer(
         "🔎 <b>Аудит шаблона расписания</b>\n\n"
-        f"Общие эмодзи: {audit['common_configured']}/{audit['common_total']} (временных: {temp['assets']})\n"
-        f"Колоды: {audit['decks_configured']}/{audit['decks_total']} (временных: {temp['decks']})\n"
-        f"Карты: {audit['cards_verified']}/{audit['cards_total']} (временных: {temp['cards']})\n"
+        f"Общие эмодзи: {audit['common_configured']}/{audit['common_total']} "
+        f"(временных: {temp['assets']})\n"
+        f"Колоды: {audit['decks_configured']}/{audit['decks_total']} "
+        f"(временных: {temp['decks']})\n"
+        f"Карты: {audit['cards_verified']}/{audit['cards_total']} "
+        f"(временных: {temp['cards']})\n"
         f"Ошибки экономики: {len(errors)}\n\n{tail}\n\n"
-        "Выбор колоды: /schedule_setup_restart · временные: /schedule_temp",
+        "Выбор колоды: /schedule_setup_restart · незаполненные: "
+        "/schedule_setup_incomplete · временные: /schedule_temp",
         parse_mode="HTML",
     )
 
