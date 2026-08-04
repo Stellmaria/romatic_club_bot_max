@@ -54,7 +54,7 @@ jobs:
               if directive not in source:
                   target.write_text(directive + source, encoding="utf-8")
 
-          add_file_noqa("bot/domain/auctions/enums.py", "UP037, UP042")
+          add_file_noqa("bot/domain/auctions/enums.py", "UP042")
           for path in (
               "bot/domain/schedule_lots.py",
               "bot/services/schedule_setup.py",
@@ -67,6 +67,10 @@ jobs:
           enums = Path("bot/domain/auctions/enums.py")
           source = enums.read_text(encoding="utf-8")
           import_line = "from bot.domain.auctions.exceptions import UnsupportedCurrency\n"
+          source = source.replace(
+              "            from bot.domain.auctions.exceptions import UnsupportedCurrency\n\n",
+              "",
+          )
           if import_line not in source:
               source = source.replace(
                   "from enum import Enum\n",
@@ -74,19 +78,31 @@ jobs:
                   1,
               )
           source = source.replace(
-              "        except KeyError as exc:\n"
-              "            from bot.domain.auctions.exceptions import UnsupportedCurrency\n\n"
-              "            raise UnsupportedCurrency(normalized or \"—\") from exc\n",
-              "        except KeyError as exc:\n"
-              "            raise UnsupportedCurrency(normalized or \"—\") from exc\n",
-              1,
-          )
-          source = source.replace(
               "            except Exception:\n                continue\n",
               "            except UnsupportedCurrency:\n                continue\n",
               1,
           )
           enums.write_text(source, encoding="utf-8")
+
+          schedule_lots = Path("bot/domain/schedule_lots.py")
+          source = schedule_lots.read_text(encoding="utf-8")
+          replacements = {
+              'title.startswith("любая бронз") or title.startswith("любое бронз")':
+                  'title.startswith(("любая бронз", "любое бронз"))',
+              'title.startswith("любая серебр") or title.startswith("любое серебр")':
+                  'title.startswith(("любая серебр", "любое серебр"))',
+              'title.startswith("любая золот") or title.startswith("любое золот")':
+                  'title.startswith(("любая золот", "любое золот"))',
+              'title.startswith("любая алмаз") or title.startswith("любое алмаз")':
+                  'title.startswith(("любая алмаз", "любое алмаз"))',
+              'title.startswith("любая карта") or title.startswith("любой карт")':
+                  'title.startswith(("любая карта", "любой карт"))',
+              'title.startswith("любая колода") or title.startswith("любой колод")':
+                  'title.startswith(("любая колода", "любой колод"))',
+          }
+          for old, new in replacements.items():
+              source = source.replace(old, new, 1)
+          schedule_lots.write_text(source, encoding="utf-8")
 
           setup = Path("bot/services/schedule_setup.py")
           source = setup.read_text(encoding="utf-8")
