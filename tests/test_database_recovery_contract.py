@@ -73,7 +73,7 @@ def test_deploy_orders_restore_and_migrations_before_runtime_replacement() -> No
 
     assert backup < restore < plan < apply < replace
     assert "migration-runner" in deploy
-    assert "DB_AUTO_MIGRATE" in deploy
+    assert "config.database.auto_migrate is False" in deploy
     assert "forward-fix-or-restore" in deploy
     assert "Automatic code rollback is blocked" in deploy
     assert "Database was not automatically restored" in deploy
