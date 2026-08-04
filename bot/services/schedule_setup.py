@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from aiogram.types import Message
 
+from bot.domain.schedule_lots import SPECIAL_SCHEDULE_ASSETS
 from db.schedule_setup import (
     get_all_decks_for_setup,
     get_cards_for_setup,
@@ -31,6 +32,7 @@ COMMON_ASSETS: tuple[AssetSpec, ...] = (
     AssetSpec("currency:diamonds", "награды «Алмазы»", "💎"),
     AssetSpec("currency:tea", "награды «Чай»", "☕"),
     AssetSpec("whole_deck", "лота «Вся колода»", "🃏"),
+    *(AssetSpec(spec.key, spec.label, spec.fallback) for spec in SPECIAL_SCHEDULE_ASSETS),
 )
 ASSET_BY_KEY = {asset.key: asset for asset in COMMON_ASSETS}
 

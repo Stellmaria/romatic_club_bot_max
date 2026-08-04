@@ -16,6 +16,7 @@ from telethon.tl.types import MessageEntityCustomEmoji
 
 from bot.core.settings import UserbotSettings
 from bot.core.time import MOSCOW, to_moscow
+from bot.domain.schedule_lots import schedule_lot_display_name, special_schedule_asset
 from db.schedule_setup import (
     get_emoji_assets,
     get_preview_target,
@@ -314,13 +315,14 @@ def render_schedule_announcement(
     for index, lot in enumerate(sorted_lots):
         start_time = lot.get("start_time")
         start_label = (
-            to_moscow(start_time).strftime("%H:%M")
-            if isinstance(start_time, datetime)
-            else "--:--"
+            to_moscow(start_time).strftime("%H:%M") if isinstance(start_time, datetime) else "--:--"
         )
         whole_deck = bool(lot.get("whole_deck"))
+        special_asset = special_schedule_asset(lot)
 
-        if whole_deck:
+        if special_asset:
+            builder.emoji(special_asset.fallback, special_asset.key)
+        elif whole_deck:
             builder.emoji("🃏", "whole_deck")
         else:
             card_emoji_id = lot.get("card_emoji_id")
@@ -334,14 +336,14 @@ def render_schedule_announcement(
         builder.text(f" {start_label} ")
 
         rarity = _normalize_rarity(lot.get("rarity"))
-        if rarity and not whole_deck:
+        if rarity and not whole_deck and not special_asset:
             builder.emoji("🔹", f"rarity:{rarity}")
             builder.text(" ")
 
-        builder.text(_display_name(lot))
+        builder.text(schedule_lot_display_name(lot))
 
         deck_emoji_id = lot.get("deck_emoji_id")
-        if deck_emoji_id:
+        if deck_emoji_id and not special_asset:
             builder.text(" ")
             builder.emoji_id("🗂", deck_emoji_id)
 
@@ -362,8 +364,10 @@ def render_schedule_announcement(
             _append_reward(builder, amount=reward_amount, reward_type=reward_type)
 
         comment = _public_comment(lot)
-        start_label_text = comment if comment.casefold().startswith("за ") else _start_currency_label(
-            lot.get("currency")
+        start_label_text = (
+            comment
+            if comment.casefold().startswith("за ")
+            else _start_currency_label(lot.get("currency"))
         )
         if start_label_text:
             builder.text(f" ({start_label_text})")
@@ -375,9 +379,7 @@ def render_schedule_announcement(
 
 def missing_required_emoji_keys(emoji_ids: Mapping[str, object]) -> tuple[str, ...]:
     normalized = {
-        normalize_emoji_key(key)
-        for key, value in emoji_ids.items()
-        if _value_emoji_id(value)
+        normalize_emoji_key(key) for key, value in emoji_ids.items() if _value_emoji_id(value)
     }
     return tuple(sorted(_REQUIRED_EMOJI_KEYS - normalized))
 
@@ -390,8 +392,20 @@ def schedule_configuration_issues(
     for lot in lots:
         auction_id = int(lot.get("auction_id") or 0)
         whole_deck = bool(lot.get("whole_deck"))
-        deck_id = lot.get("resolved_deck_id") or lot.get("deck_id")
+        special_asset = special_schedule_asset(lot)
+        if special_asset:
+            if not _asset_id(assets, special_asset.key):
+                issues.append(f"не настроен эмодзи для {special_asset.label}")
+            reward_type = _normalize_reward_type(lot.get("obtain_type") or lot.get("currency"))
+            if reward_type and not _asset_id(
+                assets,
+                f"currency:{reward_type}",
+                "diamond" if reward_type == "diamonds" else "tea",
+            ):
+                issues.append(f"не настроен эмодзи награды {reward_type}")
+            continue
 
+        deck_id = lot.get("resolved_deck_id") or lot.get("deck_id")
         if not deck_id:
             issues.append(f"лот {auction_id}: не определена колода")
         elif not lot.get("deck_emoji_id"):
@@ -422,9 +436,7 @@ def schedule_configuration_issues(
         elif not reward_type:
             issues.append(f"карта {lot.get('card_id')}: неизвестный тип награды")
         elif actual != expected:
-            issues.append(
-                f"карта {lot.get('card_id')}: награда {actual}, ожидалось {expected}"
-            )
+            issues.append(f"карта {lot.get('card_id')}: награда {actual}, ожидалось {expected}")
         elif not _asset_id(assets, f"rarity:{rarity}"):
             issues.append(f"не настроен эмодзи редкости {rarity}")
 

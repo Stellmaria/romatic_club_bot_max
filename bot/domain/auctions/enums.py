@@ -186,34 +186,35 @@ def normalize_currency_choices(
     scalar ``currency`` column. This helper deliberately accepts both enum
     values and persisted strings so every layer uses one compatibility rule.
     """
-    raw_values: list[object] = []
-    if values is None:
-        raw_values = []
-    elif isinstance(values, str):
-        text = values.strip()
-        if text:
-            for separator in ("+", ",", ";", "|"):
+
+    def raw_items(raw: object) -> list[object]:
+        if raw is None:
+            return []
+        if isinstance(raw, str):
+            text = raw.strip()
+            if not text:
+                return []
+            for separator in ("+", ",", ";", "|", "_", "/", "\\"):
                 text = text.replace(separator, " ")
-            raw_values = [part for part in text.split() if part]
-    elif isinstance(values, (list, tuple, set, frozenset)):
-        raw_values = list(values)
-    else:
-        raw_values = [values]
+            return [part for part in text.split() if part]
+        if isinstance(raw, (list, tuple, set, frozenset)):
+            return list(raw)
+        return [raw]
 
-    result: list[Currency] = []
-    for raw in raw_values:
-        try:
-            currency = Currency.from_raw(raw)
-        except Exception:
-            continue
-        if currency not in result:
-            result.append(currency)
+    def parsed(raw: object) -> list[Currency]:
+        result: list[Currency] = []
+        for item in raw_items(raw):
+            try:
+                currency = Currency.from_raw(item)
+            except Exception:
+                continue
+            if currency not in result:
+                result.append(currency)
+        return result
 
-    if not result and fallback is not None:
-        try:
-            result.append(Currency.from_raw(fallback))
-        except Exception:
-            pass
+    result = parsed(values)
+    if not result:
+        result = parsed(fallback)
     return tuple(result)
 
 

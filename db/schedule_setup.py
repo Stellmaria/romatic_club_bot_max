@@ -5,17 +5,16 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Mapping
 
+from bot.domain.schedule_lots import SPECIAL_SCHEDULE_ASSETS
 from db.core import execute, fetch, fetchrow
 
 
 async def get_emoji_assets() -> dict[str, dict[str, Any]]:
-    rows = await fetch(
-        """
+    rows = await fetch("""
         SELECT asset_key, custom_emoji_id, fallback, updated_by, updated_at
         FROM public.schedule_emoji_assets
         ORDER BY asset_key
-        """
-    )
+        """)
     return {str(row["asset_key"]): dict(row) for row in rows}
 
 
@@ -168,15 +167,13 @@ async def clear_setup_session(user_id: int) -> None:
 
 
 async def get_all_decks_for_setup() -> list[dict[str, Any]]:
-    rows = await fetch(
-        """
+    rows = await fetch("""
         SELECT d.id AS deck_id, d.name AS deck_name, d.deck_type,
                e.custom_emoji_id AS deck_emoji_id
         FROM public.decks d
         LEFT JOIN public.schedule_deck_emojis e ON e.deck_id = d.id
         ORDER BY d.id
-        """
-    )
+        """)
     return [dict(row) for row in rows]
 
 
@@ -241,13 +238,11 @@ async def set_preview_target(
 
 
 async def get_preview_target() -> dict[str, Any] | None:
-    row = await fetchrow(
-        """
+    row = await fetchrow("""
         SELECT chat_id, thread_id, set_by, updated_at
         FROM public.schedule_preview_target
         WHERE singleton_id = 1
-        """
-    )
+        """)
     return dict(row) if row else None
 
 
@@ -352,19 +347,18 @@ async def get_setup_audit() -> dict[str, Any]:
             "currency:diamonds",
             "currency:tea",
             "whole_deck",
+            *(spec.key for spec in SPECIAL_SCHEDULE_ASSETS),
         ],
     )
-    totals = await fetchrow(
-        """
+    totals = await fetchrow("""
         SELECT (SELECT COUNT(*) FROM public.decks) AS decks_total,
                (SELECT COUNT(*) FROM public.schedule_deck_emojis) AS decks_configured,
                (SELECT COUNT(*) FROM public.cards) AS cards_total,
                (SELECT COUNT(*) FROM public.schedule_card_emojis WHERE verified) AS cards_verified
-        """
-    )
+        """)
     return {
         "common_configured": int(common["configured"] or 0) if common else 0,
-        "common_total": 7,
+        "common_total": 7 + len(SPECIAL_SCHEDULE_ASSETS),
         "decks_total": int(totals["decks_total"] or 0) if totals else 0,
         "decks_configured": int(totals["decks_configured"] or 0) if totals else 0,
         "cards_total": int(totals["cards_total"] or 0) if totals else 0,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from bot.services.schedule_setup import expected_reward, validate_card_economy
+from bot.services.schedule_setup import COMMON_ASSETS, expected_reward, validate_card_economy
 from userbot.schedule_announcements import schedule_configuration_issues
 from userbot.schedule_publication import render_schedule_announcement
 
@@ -31,6 +31,28 @@ def test_card_economy_matrix_matches_rarity() -> None:
     )
     assert ok is False
     assert "Ожидалось 80" in reason
+
+
+def test_setup_master_contains_every_special_lot_asset() -> None:
+    keys = {asset.key for asset in COMMON_ASSETS}
+    assert {
+        "lot:any_bronze",
+        "lot:any_silver",
+        "lot:any_gold",
+        "lot:any_diamond",
+        "lot:any_card",
+        "lot:any_deck",
+        "service:friends_plus",
+        "service:progress_slots",
+        "service:subscription_gold",
+        "service:subscription_premium",
+        "service:spins_10",
+        "service:spins_50",
+        "service:spins_100",
+        "service:deck_constructor",
+        "resource:diamonds_for_tea",
+        "resource:tea_for_diamonds",
+    } <= keys
 
 
 def test_enriched_schedule_template_uses_card_rarity_deck_and_rewards() -> None:

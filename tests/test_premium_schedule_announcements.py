@@ -61,7 +61,8 @@ def test_render_schedule_announcement_applies_public_currency_and_kind_policy() 
                 "start_time": datetime(2026, 8, 1, 11, 30, tzinfo=timezone.utc),
                 "obtain_amount": 40,
                 "obtain_type": "diamonds",
-                "currency": "сокровища",
+                "currency": "чашки",
+                "accepted_currencies": ["чашки", "алмазы"],
                 "auction_kind": "reverse",
             },
             {
@@ -109,16 +110,72 @@ def test_render_schedule_announcement_applies_public_currency_and_kind_policy() 
     assert "за алмазы" not in rendered.text
     assert "стандарт" not in rendered.text.casefold()
     assert "🎴 12:30 Чай +2☕ (за чай) · быстрый" in rendered.text
-    assert (
-        "🎴 13:30 Свободный +20💎 (за чай и алмазы) · свободный"
-        in rendered.text
-    )
-    assert "🎴 14:30 Реверс +40💎 (за сокровища) · обратный" in rendered.text
+    assert "🎴 13:30 Свободный +20💎 (за чай и алмазы) · свободный" in rendered.text
+    assert "🎴 14:30 Реверс +40💎 (за чай и алмазы) · обратный" in rendered.text
     assert [entity.document_id for entity in rendered.entities[:2]] == [11, 11]
     assert all(
         _entity_text(rendered.text, entity) in {"🦋", "🎴", "💎", "☕"}
         for entity in rendered.entities
     )
+
+
+def test_render_schedule_announcement_uses_special_lot_assets() -> None:
+    rendered = render_schedule_announcement(
+        date(2026, 8, 4),
+        [
+            {
+                "auction_id": 11,
+                "hero_name": "Лот от игрока",
+                "card_name": "Любая золотая",
+                "start_time": datetime(2026, 8, 4, 8, 0, tzinfo=timezone.utc),
+                "start_price": 800,
+                "currency": "алмазы",
+            },
+            {
+                "auction_id": 12,
+                "card_name": "Друзья+",
+                "start_time": datetime(2026, 8, 4, 9, 0, tzinfo=timezone.utc),
+                "start_price": 10,
+                "currency": "чашки",
+            },
+            {
+                "auction_id": 13,
+                "card_name": "Премиум пропуск (6 месяцев)",
+                "start_time": datetime(2026, 8, 4, 10, 0, tzinfo=timezone.utc),
+                "start_price": 1480,
+                "currency": "алмазы",
+            },
+            {
+                "auction_id": 14,
+                "card_name": "Кручения (50 шт.)",
+                "start_time": datetime(2026, 8, 4, 11, 0, tzinfo=timezone.utc),
+                "start_price": 14,
+                "currency": "чашки",
+            },
+        ],
+        {
+            "header": 1,
+            "lot:any_gold": 101,
+            "service:friends_plus": 102,
+            "service:subscription_premium": 103,
+            "service:spins_50": 104,
+            "currency:diamonds": 201,
+            "currency:tea": 202,
+        },
+    )
+
+    assert "Любая золотая" in rendered.text
+    assert "Лот от игрока" not in rendered.text
+    assert "Друзья+" in rendered.text
+    assert "Премиум пропуск (6 месяцев)" in rendered.text
+    assert "Кручения (50 шт.)" in rendered.text
+    entities = {
+        (entity.document_id, _entity_text(rendered.text, entity)) for entity in rendered.entities
+    }
+    assert (101, "🥇") in entities
+    assert (102, "👥") in entities
+    assert (103, "💎") in entities
+    assert (104, "🎰") in entities
 
 
 def test_announcement_target_date_only_after_configured_time() -> None:
