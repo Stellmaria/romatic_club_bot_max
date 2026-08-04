@@ -78,6 +78,16 @@ def test_deploy_orders_restore_and_migrations_before_runtime_replacement() -> No
     assert "Database was not automatically restored" in deploy
 
 
+def test_deploy_postgres_preflight_preserves_line_records() -> None:
+    deploy = source("deploy/server/deploy.sh")
+
+    assert "mapfile -t postgres_metrics" in deploy
+    assert "Unexpected PostgreSQL preflight metrics output" in deploy
+    assert "Invalid PostgreSQL preflight metrics" in deploy
+    assert "read -r postgres_version_num database_size_bytes" not in deploy
+    assert "| tr '\\n' ' '" not in deploy
+
+
 def test_restore_drill_runs_full_restore_and_business_probes() -> None:
     drill = source("deploy/server/restore-drill.sh")
 
