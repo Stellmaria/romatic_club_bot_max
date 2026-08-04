@@ -10,6 +10,7 @@ from bot.application_ports import Clock, FileStoragePort, LocalFileStorage
 from bot.core.time import SystemClock
 from bot.repositories.auction_workflows import AuctionWorkflowRepository
 from bot.repositories.exchanges import ExchangeRepository
+from bot.repositories.privacy_exports import PrivacyExportRepository
 from bot.services.auction_workflows import (
     AuctionCreationService,
     AuctionLifecycleService,
@@ -18,6 +19,7 @@ from bot.services.auction_workflows import (
     AuctionPublicationService,
 )
 from bot.services.exchanges import ExchangeService
+from bot.services.privacy_exports import PrivacyExportService
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,12 +32,14 @@ class ApplicationContainer:
 
     auction_repository: AuctionWorkflowRepository
     exchange_repository: ExchangeRepository
+    privacy_export_repository: PrivacyExportRepository
     auction_creation: AuctionCreationService
     auction_moderation: AuctionModerationService
     auction_owner: AuctionOwnerService
     auction_lifecycle: AuctionLifecycleService
     auction_publication: AuctionPublicationService
     exchange: ExchangeService
+    privacy_export: PrivacyExportService
     clock: Clock
     file_storage: FileStoragePort
 
@@ -50,18 +54,25 @@ class ApplicationContainer:
     ) -> ApplicationContainer:
         """Build concrete adapters once from explicit lifecycle resources."""
 
+        effective_clock = clock or SystemClock()
         auction_repository = AuctionWorkflowRepository(pool)
         exchange_repository = ExchangeRepository(pool)
+        privacy_export_repository = PrivacyExportRepository(pool)
         return cls(
             auction_repository=auction_repository,
             exchange_repository=exchange_repository,
+            privacy_export_repository=privacy_export_repository,
             auction_creation=AuctionCreationService(auction_repository),
             auction_moderation=AuctionModerationService(auction_repository),
             auction_owner=AuctionOwnerService(auction_repository),
             auction_lifecycle=AuctionLifecycleService(auction_repository),
             auction_publication=AuctionPublicationService(auction_repository),
             exchange=ExchangeService(exchange_repository),
-            clock=clock or SystemClock(),
+            privacy_export=PrivacyExportService(
+                privacy_export_repository,
+                clock=effective_clock,
+            ),
+            clock=effective_clock,
             file_storage=file_storage or LocalFileStorage(storage_root),
         )
 
