@@ -5,14 +5,15 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from bot.core.observability import ObservationContextFilter, redact
+from bot.core.observability import ObservationContextFilter
+from bot.core.privacy import redact
 from bot.core.settings import LogLevel
 
 _STANDARD_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 
 
 class JsonLogFormatter(logging.Formatter):
-    """Structured formatter with correlation context and secret redaction."""
+    """Structured formatter with correlation context and personal-data redaction."""
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
