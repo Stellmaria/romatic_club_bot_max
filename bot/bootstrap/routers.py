@@ -55,6 +55,9 @@ from bot.handlers.emoji_setup import router as emoji_setup_router
 from bot.handlers.helper.appeals import router as admin_appeals_router
 from bot.handlers.profile import router as profile_router
 from bot.handlers.uid_verification import router as uid_verification_router
+from bot.handlers.uid_verification_recovery import (
+    router as uid_verification_recovery_router,
+)
 from bot.handlers.user_access_control import router as user_access_control_router
 from bot.handlers.user_menu import router as user_menu_router
 from bot.handlers.users import router as users_router
@@ -418,6 +421,13 @@ def get_router_registry() -> RouterRegistry:
             stats_posts_router,
             callbacks=("stats_posts",),
             description="Statistics publication callbacks.",
+        ),
+        _feature(
+            "uid.verification-recovery",
+            RoutePriority.CALLBACKS,
+            uid_verification_recovery_router,
+            callbacks=("uid_hotfix",),
+            description="Legacy UID encryption recovery and revision bootstrap.",
         ),
         _feature(
             "uid.user-verification",
