@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -11,6 +12,7 @@ Claim = Callable[[int], Awaitable[Row]]
 BuildPayload = Callable[[Row], Awaitable[Any]]
 Send = Callable[[Row, Any], Awaitable[int]]
 MarkPublished = Callable[[int, int], Awaitable[bool]]
+MarkDeferred = Callable[[int], Awaitable[bool]]
 MarkFailed = Callable[[int, str], Awaitable[Any]]
 PostCommit = Callable[[Row, int], Awaitable[None]]
 
@@ -42,12 +44,14 @@ class PublishAuctionUseCase:
         send: Send,
         mark_published: MarkPublished,
         mark_failed: MarkFailed,
+        mark_deferred: MarkDeferred | None = None,
         after_published: PostCommit | None = None,
     ) -> None:
         self._claim = claim
         self._build_payload = build_payload
         self._send = send
         self._mark_published = mark_published
+        self._mark_deferred = mark_deferred
         self._mark_failed = mark_failed
         self._after_published = after_published
 
@@ -70,11 +74,22 @@ class PublishAuctionUseCase:
             payload = await self._build_payload(auction)
             message_id = int(await self._send(auction, payload))
         except Exception as exc:
-            try:
+            with contextlib.suppress(Exception):
                 await self._mark_failed(auction_id, repr(exc))
-            except Exception:
-                pass
             raise
+
+        if message_id < 0:
+            raise ApplicationInvalidState(
+                "Telegram returned a negative message id",
+                details={"message_id": message_id},
+            )
+        if message_id == 0:
+            if self._mark_deferred is None:
+                raise ApplicationInvalidState("deferred publication is not supported")
+            deferred = await self._mark_deferred(auction_id)
+            if not deferred:
+                raise ApplicationInvalidState("auction deferred publication claim was lost")
+            return PublishedAuction(auction=auction, message_id=0)
 
         # Delivery already happened.  Never mark the lot failed here because a
         # retry could duplicate a visible Telegram post.  Lost/unknown commit

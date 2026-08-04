@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF006, S110, SIM102, SIM105
 """Application services shared by the Telethon event handlers.
 
 This layer coordinates Telegram operations, domain services and the userbot
@@ -8,8 +9,9 @@ directly.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from telethon.tl.types import ChannelParticipantsAdmins
@@ -18,7 +20,7 @@ from bot.core.legacy_config import legacy_config
 from bot.core.time import ensure_utc, utc_now
 from bot.domain.auctions import BidFormatError, auction_bidding_closes_at
 from bot.domain.auctions.rules import parse_bid_amount
-from bot.services.auction_workflows import AuctionLifecycleService
+from bot.services.auction_workflows import AuctionLifecycleService, AuctionPublicationService
 from db.auctions import get_autobid_action_by_msg_id
 from userbot.autobid_engine import get_local_autobid_action
 from userbot.presentation import RULES_TEXT, mention, random_warning, user_link
@@ -31,6 +33,7 @@ from userbot.runtime import (
     require_client,
 )
 
+logger = logging.getLogger("auction_userbot.publication")
 
 AUTO_DELETE_BOT_NOTICE_SEC = 0
 
@@ -44,7 +47,7 @@ def _user_link(user_id: int, username: str | None = None) -> str:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def get_thread_root_msg_id(message: Any) -> int | None:
@@ -169,7 +172,7 @@ async def _mute_1m(chat_id: int, user_id: int) -> None:
             int(chat_id),
             int(user_id),
             send_messages=False,
-            until_date=datetime.now(timezone.utc) + timedelta(minutes=1),
+            until_date=datetime.now(UTC) + timedelta(minutes=1),
         )
     except Exception:  # noqa: BLE001
         pass
@@ -183,7 +186,8 @@ def _get_root_id(message: Any) -> int | None:
     if reply:
         top_id = getattr(reply, "reply_to_top_id", None)
         message_id = getattr(reply, "reply_to_msg_id", None)
-        return int(top_id or message_id) if (top_id or message_id) else None
+        candidate = top_id or message_id
+        return int(candidate) if candidate is not None else None
     return None
 
 
@@ -192,7 +196,7 @@ def _is_direct_reply_to_root(message: Any, root_id: int) -> bool:
     return reply_to is None or int(reply_to) == int(root_id)
 
 
-async def _fetch_auction_by_root(root_id: int) -> dict | None:
+async def _fetch_auction_by_root(root_id: int) -> dict[str, Any] | None:
     return await (await _repository()).fetch_auction_by_root(int(root_id))
 
 
@@ -200,15 +204,12 @@ def _to_utc(value: datetime) -> datetime:
     return ensure_utc(value)
 
 
-async def _is_auction_active(auction: dict) -> bool:
+async def _is_auction_active(auction: dict[str, Any]) -> bool:
     start_time = auction.get("start_time")
     end_time = auction.get("end_time")
     if not start_time or not end_time:
         return False
-    return (
-        ensure_utc(start_time) <= utc_now()
-        < auction_bidding_closes_at(ensure_utc(end_time))
-    )
+    return ensure_utc(start_time) <= utc_now() < auction_bidding_closes_at(ensure_utc(end_time))
 
 
 async def _fetch_best_bid(auction_id: int, *, lowest_wins: bool) -> int | None:
@@ -226,7 +227,7 @@ async def _fetch_max_bid(auction_id: int) -> int | None:
     return await _fetch_best_bid(int(auction_id), lowest_wins=False)
 
 
-async def _get_bid_by_msg_id(message_id: int) -> dict | None:
+async def _get_bid_by_msg_id(message_id: int) -> dict[str, Any] | None:
     return await (await _repository()).get_bid_by_message_id(int(message_id))
 
 
@@ -326,11 +327,11 @@ async def _post_rules_under_lot(root_id: int) -> None:
             pass
 
 
-async def _fetch_auction_meta(auction_id: int) -> dict | None:
+async def _fetch_auction_meta(auction_id: int) -> dict[str, Any] | None:
     return await (await _repository()).fetch_auction_meta(int(auction_id))
 
 
-def _is_auction_closed_row(auction: dict | None) -> bool:
+def _is_auction_closed_row(auction: dict[str, Any] | None) -> bool:
     if not auction:
         return False
     status = str(auction.get("status") or "").strip().lower()
@@ -345,7 +346,11 @@ def _is_auction_closed_row(auction: dict | None) -> bool:
         return False
 
 
-def _bid_change_root_id(previous: dict | None, message: Any, auction: dict | None) -> int:
+def _bid_change_root_id(
+    previous: dict[str, Any] | None,
+    message: Any,
+    auction: dict[str, Any] | None,
+) -> int:
     if previous and previous.get("root_id"):
         return int(previous["root_id"])
     if auction and auction.get("discussion_message_id"):
@@ -399,6 +404,39 @@ async def _try_bind_root_message(message: Any) -> int | None:
             if _norm_channel_id(source_id) != _norm_channel_id(legacy_config.AUCTION_CHANNEL_ID):
                 channel_post = None
 
+    text = (getattr(message, "message", None) or "").strip()
+    lot_id = _extract_lot_id(text) if _looks_like_auction_post(text.lower()) else None
+
+    if channel_post and lot_id:
+        try:
+            publication = await AuctionPublicationService.create()
+            row = await publication.confirm_deferred_publication(
+                int(lot_id),
+                channel_message_id=int(channel_post),
+                discussion_message_id=int(message.id),
+            )
+        except Exception:
+            logger.exception(
+                "auction_publication_confirmation_failed "
+                "auction_id=%s channel_message_id=%s discussion_message_id=%s",
+                lot_id,
+                channel_post,
+                message.id,
+            )
+            return None
+        logger.info(
+            "auction_publication_confirmed_after_defer "
+            "auction_id=%s channel_message_id=%s discussion_message_id=%s "
+            "previous_status=%s final_status=%s requires_finalization=%s",
+            row.get("auction_id"),
+            channel_post,
+            message.id,
+            row.get("_previous_status"),
+            row.get("_final_status"),
+            row.get("_requires_finalization"),
+        )
+        return int(row["auction_id"])
+
     if channel_post:
         try:
             auction_id = await lifecycle.bind_by_channel_message(
@@ -410,10 +448,6 @@ async def _try_bind_root_message(message: Any) -> int | None:
         except Exception:  # noqa: BLE001
             pass
 
-    text = (getattr(message, "message", None) or "").strip()
-    if not _looks_like_auction_post(text.lower()):
-        return None
-    lot_id = _extract_lot_id(text)
     if not lot_id:
         return None
     try:
@@ -432,8 +466,8 @@ async def _resolve_autobid_mapping(
     wait_for_race: bool = False,
     attempts: int = 8,
     delay: float = 0.15,
-) -> dict | None:
-    mapped = await get_autobid_action_by_msg_id(int(message_id))
+) -> dict[str, Any] | None:
+    mapped: dict[str, Any] | None = await get_autobid_action_by_msg_id(int(message_id))
     if not mapped:
         mapped = get_local_autobid_action(int(message_id))
     if mapped or not wait_for_race:

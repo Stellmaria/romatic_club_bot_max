@@ -1,3 +1,4 @@
+# ruff: noqa: S311
 from __future__ import annotations
 
 import asyncio
@@ -41,17 +42,16 @@ class TelegramRateLimiter:
 
     async def wait(self, chat_id: int) -> None:
         chat_lock = self._chat_locks[chat_id]
-        async with chat_lock:
-            async with self._global_lock:
+        async with chat_lock, self._global_lock:
+            now = monotonic()
+            due = max(self._next_global, self._next_chat.get(chat_id, 0.0))
+            delay = due - now
+            if delay > 0:
+                await asyncio.sleep(delay)
                 now = monotonic()
-                due = max(self._next_global, self._next_chat.get(chat_id, 0.0))
-                delay = due - now
-                if delay > 0:
-                    await asyncio.sleep(delay)
-                    now = monotonic()
-                jitter = random.uniform(0.0, 0.02)
-                self._next_global = now + self._global_interval + jitter
-                self._next_chat[chat_id] = now + self._chat_interval + jitter
+            jitter = random.uniform(0.0, 0.02)
+            self._next_global = now + self._global_interval + jitter
+            self._next_chat[chat_id] = now + self._chat_interval + jitter
 
 
 def _payload(raw: Any) -> dict[str, Any]:
@@ -62,6 +62,50 @@ def _payload(raw: Any) -> dict[str, Any]:
         if isinstance(value, dict):
             return value
     raise OutboxCommandError("outbox payload must be a JSON object")
+
+
+async def _refresh_auction_publication(
+    bot: Bot,
+    *,
+    auction_id: int,
+) -> int:
+    from bot.core.legacy_config import legacy_config
+    from bot.handlers.admin.helper.admin_constants import render_auction_caption
+    from bot.handlers.auction.publication import _media_id, _publication_context
+    from bot.services.auction_workflows import AuctionPublicationService
+
+    service = await AuctionPublicationService.create()
+    auction = await service.get_publication(int(auction_id))
+    message_id = int(auction.get("message_id") or 0)
+    if message_id <= 0:
+        raise OutboxCommandError(
+            "refresh_auction_publication requires an existing positive message_id"
+        )
+    full_auction, card, deck, owners_count = await _publication_context(auction)
+    caption = render_auction_caption(
+        full_auction,
+        card=card,
+        deck=deck,
+        owners_count=owners_count,
+        show_min_bid=True,
+    )
+    chat_id = int(legacy_config.AUCTION_CHANNEL_ID)
+    if _media_id(full_auction, card, auction):
+        await bot.edit_message_caption(
+            chat_id=chat_id,
+            message_id=message_id,
+            caption=caption,
+            parse_mode="HTML",
+        )
+    else:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=caption,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+    return message_id
 
 
 async def _deliver_one(
@@ -79,15 +123,20 @@ async def _deliver_one(
         )
         payload = dict(command.payload)
         await limiter.wait(chat_id)
+        message: Any
         if command.command_type == "send_message":
             text = str(payload.pop("text"))
             message = await bot.send_message(chat_id, text, **payload)
         elif command.command_type == "copy_message":
             message = await bot.copy_message(chat_id, **payload)
-        else:  # registry and dispatch must stay in lock-step
-            raise OutboxCommandError(
-                f"unsupported outbox command type: {command.command_type}"
+        elif command.command_type == "refresh_auction_publication":
+            message_id = await _refresh_auction_publication(
+                bot,
+                auction_id=int(payload["auction_id"]),
             )
+            message = type("EditedMessage", (), {"message_id": message_id})()
+        else:  # registry and dispatch must stay in lock-step
+            raise OutboxCommandError(f"unsupported outbox command type: {command.command_type}")
     except asyncio.CancelledError:
         raise
     except TelegramRetryAfter as exc:
@@ -168,8 +217,7 @@ async def deliver_outbox_batch(
                     delivered += 1
 
     workers = [
-        asyncio.create_task(worker())
-        for _ in range(min(max(1, int(concurrency)), len(claimed)))
+        asyncio.create_task(worker()) for _ in range(min(max(1, int(concurrency)), len(claimed)))
     ]
     try:
         await asyncio.gather(*workers)

@@ -9,7 +9,7 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     versions = [migration.version for migration in migrations]
 
     assert len(versions) == len(set(versions))
-    assert filenames[-1] == "018_utc_timestamp_policy.sql"
+    assert filenames[-1] == "019_deferred_auction_publication.sql"
 
     schedule_migration = next(
         migration

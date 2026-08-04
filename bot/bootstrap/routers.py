@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from aiogram import Dispatcher
+from aiogram import Dispatcher, Router
 
 from bot.bootstrap.router_registry import (
     FeatureRegistration,
@@ -23,6 +23,9 @@ from bot.handlers.admin.helper.new.card_economy import router as card_economy_ro
 from bot.handlers.admin.media_assets import router as media_assets_router
 from bot.handlers.admin.moderation import router as moderation_router
 from bot.handlers.admin.outbox import router as outbox_admin_router
+from bot.handlers.admin.publication_diagnostics import (
+    router as publication_diagnostics_router,
+)
 from bot.handlers.admin.schedule_setup import router as schedule_setup_router
 from bot.handlers.admin.schedule_setup_fields import router as schedule_setup_fields_router
 from bot.handlers.admin.schedule_setup_restart import router as schedule_setup_restart_router
@@ -78,7 +81,7 @@ def _register_admin_extension_handlers() -> None:
 def _feature(
     name: str,
     priority: RoutePriority,
-    router,
+    router: Router,
     *,
     parent: str | None = None,
     dependencies: tuple[str, ...] = (),
@@ -131,9 +134,7 @@ def get_router_registry() -> RouterRegistry:
                     factory=UserSyncMiddleware,
                 ),
             ),
-            prepare_hooks=(
-                PrepareHook("user-entrypoints", _configure_user_entrypoints),
-            ),
+            prepare_hooks=(PrepareHook("user-entrypoints", _configure_user_entrypoints),),
             description="Global Telegram boundary and user lifecycle middleware.",
         ),
         _feature(
@@ -190,6 +191,13 @@ def get_router_registry() -> RouterRegistry:
             user_access_control_router,
             callbacks=("user_access",),
             description="Administrative user access controls.",
+        ),
+        _feature(
+            "admin.publication-diagnostics",
+            RoutePriority.EXACT_COMMANDS,
+            publication_diagnostics_router,
+            commands=("publication_diag",),
+            description="Auction publication integrity diagnostics.",
         ),
         _feature(
             "auctions.schedule",
