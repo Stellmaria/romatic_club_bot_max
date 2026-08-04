@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feat/issue-42-observability
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -51,13 +54,19 @@ jobs:
           old = "    assert REQUIRED_PANELS <= titles"
           if old not in text:
               raise SystemExit("missing monitoring comparison")
-          monitoring.write_text(text.replace(old, "    assert titles >= REQUIRED_PANELS", 1), encoding="utf-8")
+          monitoring.write_text(
+              text.replace(old, "    assert titles >= REQUIRED_PANELS", 1),
+              encoding="utf-8",
+          )
 
           observability = Path("tests/test_observability.py")
           text = observability.read_text(encoding="utf-8")
           if text.count("  # noqa: SLF001") != 2:
               raise SystemExit("unexpected private-access noqa count")
-          observability.write_text(text.replace("  # noqa: SLF001", ""), encoding="utf-8")
+          observability.write_text(
+              text.replace("  # noqa: SLF001", ""),
+              encoding="utf-8",
+          )
 
           compile_locks = Path("scripts/compile_locks.sh")
           text = compile_locks.read_text(encoding="utf-8")
@@ -65,7 +74,10 @@ jobs:
           normalization = '''  python - "$generated_lock" "requirements/$group.lock" <<'PYTHON'\nfrom pathlib import Path\nimport sys\n\nlock_path = Path(sys.argv[1])\ncanonical_output = sys.argv[2]\ncontent = lock_path.read_text(encoding="utf-8")\nlock_path.write_text(\n    content.replace(str(lock_path), canonical_output, 1),\n    encoding="utf-8",\n)\nPYTHON\n\n'''
           if marker not in text:
               raise SystemExit("missing lock copy marker")
-          compile_locks.write_text(text.replace(marker, normalization + marker, 1), encoding="utf-8")
+          compile_locks.write_text(
+              text.replace(marker, normalization + marker, 1),
+              encoding="utf-8",
+          )
           PY
       - name: Format and validate changed files
         run: |
