@@ -8,7 +8,6 @@ from typing import Literal
 from bot.uid_crypto import norm_uid, uid_decrypt, uid_encrypt, uid_hash, uid_last4
 from db.core import get_db_pool
 
-
 UIDRecoveryState = Literal[
     "ready",
     "needs_uid",
