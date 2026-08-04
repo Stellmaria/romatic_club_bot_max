@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import html
-from typing import Any
+from contextlib import suppress
+from typing import Any, cast
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -11,11 +12,12 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
 
-from bot.core.process_restart import process_restart_coordinator
 from bot.core.legacy_config import legacy_config
+from bot.core.process_restart import process_restart_coordinator
 from bot.core.supervisor_client import SupervisorClient, SupervisorUnavailable
 from bot.handlers.admin.helper.admin_constants import ADMIN_MESSAGES
 from bot.handlers.admin.helper.new.keyboards import menu_keyboard
@@ -36,7 +38,8 @@ _RESTART_CONFIRM_TEXT = (
 )
 _USERBOT_RESTART_CONFIRM_TEXT = (
     "🔄 <b>Перезапустить userbot?</b>\n\n"
-    "Перезапустится только сервис <code>userbot</code>. PostgreSQL и основной бот останутся работать."
+    "Перезапустится только сервис <code>userbot</code>. "
+    "PostgreSQL и основной бот останутся работать."
 )
 _UPDATE_CONFIRM_TEXT = (
     "⬇️ <b>Обновить Romatic Club из main?</b>\n\n"
@@ -50,7 +53,9 @@ _ROLLBACK_CONFIRM_TEXT = (
 
 
 def _is_owner(user_id: int | None) -> bool:
-    return user_id is not None and int(user_id) in {int(value) for value in legacy_config.ADMINS_OWNERS}
+    return user_id is not None and int(user_id) in {
+        int(value) for value in legacy_config.ADMINS_OWNERS
+    }
 
 
 async def _require_owner(target: Message | CallbackQuery) -> bool:
@@ -65,7 +70,7 @@ async def _require_owner(target: Message | CallbackQuery) -> bool:
     return False
 
 
-def _admin_main_keyboard(*, include_system: bool):
+def _admin_main_keyboard(*, include_system: bool) -> ReplyKeyboardMarkup:
     rows = [
         ["⚙️ Модерация", "👥 Пользователи", "🎴 Карты"],
         ["📊 Статистика", "📣 Рассылка", "🚫 Логи"],
@@ -141,21 +146,41 @@ async def _edit_or_answer(
         return
     try:
         await message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
-    except Exception:
+    except Exception:  # noqa: BLE001
         await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _status_text(payload: dict[str, Any]) -> tuple[str, bool]:
-    bot = payload.get("bot") if isinstance(payload.get("bot"), dict) else {}
-    userbot = payload.get("userbot") if isinstance(payload.get("userbot"), dict) else {}
-    git = payload.get("git") if isinstance(payload.get("git"), dict) else {}
-    operation = payload.get("operation") if isinstance(payload.get("operation"), dict) else {}
+    bot_value = payload.get("bot")
+    userbot_value = payload.get("userbot")
+    git_value = payload.get("git")
+    operation_value = payload.get("operation")
+    bot = cast(dict[str, Any], bot_value) if isinstance(bot_value, dict) else {}
+    userbot = cast(dict[str, Any], userbot_value) if isinstance(userbot_value, dict) else {}
+    git = cast(dict[str, Any], git_value) if isinstance(git_value, dict) else {}
+    operation = cast(dict[str, Any], operation_value) if isinstance(operation_value, dict) else {}
     rollback_sha = str(payload.get("rollback_sha") or "")
 
-    bot_ok = bool(bot.get("running"))
-    userbot_ok = bool(userbot.get("running"))
-    bot_icon = "✅" if bot_ok else "❌"
-    userbot_icon = "✅" if userbot_ok else "❌"
+    def service_view(service: dict[str, Any]) -> tuple[str, str, str]:
+        running = bool(service.get("running"))
+        pid = service.get("pid")
+        status = str(service.get("status") or "unknown")
+        health = str(service.get("health") or "")
+        healthy = (
+            running
+            and status == "running"
+            and isinstance(pid, int)
+            and pid > 0
+            and health in {"", "healthy"}
+        )
+        if healthy:
+            return "✅", "работает", html.escape(str(pid))
+        if running or status == "restarting":
+            return "⚠️", f"не здоров · {html.escape(status)}", html.escape(str(pid or "?"))
+        return "❌", "остановлен", html.escape(str(pid or "?"))
+
+    bot_icon, bot_label, bot_pid = service_view(bot)
+    userbot_icon, userbot_label, userbot_pid = service_view(userbot)
     branch = html.escape(str(git.get("branch") or "unknown"))
     commit = html.escape(str(git.get("commit") or "unknown")[:16])
     clean = "чистое" if git.get("clean") else "изменено"
@@ -169,8 +194,8 @@ def _status_text(payload: dict[str, Any]) -> tuple[str, bool]:
         "🛡 <b>Romatic Club Supervisor</b>",
         "",
         f"Supervisor PID: <code>{html.escape(str(payload.get('pid') or '?'))}</code>",
-        f"Основной бот: {bot_icon} {'работает' if bot_ok else 'остановлен'} · PID <code>{html.escape(str(bot.get('pid') or '?'))}</code>",
-        f"Userbot: {userbot_icon} {'работает' if userbot_ok else 'остановлен'} · PID <code>{html.escape(str(userbot.get('pid') or '?'))}</code>",
+        f"Основной бот: {bot_icon} {bot_label} · PID <code>{bot_pid}</code>",
+        f"Userbot: {userbot_icon} {userbot_label} · PID <code>{userbot_pid}</code>",
         "",
         f"Git-ветка: <code>{branch}</code>",
         f"Commit: <code>{commit}</code>",
@@ -322,7 +347,8 @@ async def _accept_supervisor_operation(
     operation_id = html.escape(str(result.get("operation_id") or "принята"))
     await _edit_or_answer(
         call,
-        f"✅ <b>Операция принята</b>\n\nID: <code>{operation_id}</code>\nСтатус можно обновить в меню системы.",
+        f"✅ <b>Операция принята</b>\n\nID: <code>{operation_id}</code>\n"
+        "Статус можно обновить в меню системы.",
         _system_keyboard(),
     )
     await call.answer("Операция принята.")
@@ -379,21 +405,19 @@ async def close_system_callback(call: CallbackQuery) -> None:
     if not await _require_owner(call):
         return
     if isinstance(call.message, Message):
-        try:
+        with suppress(Exception):
             await call.message.delete()
-        except Exception:
-            pass
     await call.answer()
 
 
 __all__ = [
+    "close_system_callback",
     "router",
+    "run_system_operation",
     "show_admin_menu_with_system",
-    "show_system_menu",
     "show_restart_confirmation",
     "show_system_callback",
     "show_system_confirmation",
-    "run_system_operation",
     "show_system_logs",
-    "close_system_callback",
+    "show_system_menu",
 ]

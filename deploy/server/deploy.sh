@@ -60,23 +60,113 @@ export COMPOSE_BAKE=false
 compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 previous_sha="$(git rev-parse HEAD)"
-backup_path="$data_dir/backups/predeploy-$(date -u +%Y%m%dT%H%M%SZ)-${previous_sha:0:12}.dump"
+deployment_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+backup_path="$data_dir/backups/predeploy-${deployment_stamp}-${previous_sha:0:12}.dump"
+session_dir="$data_dir/userbot-session"
+session_file="$session_dir/userbot.session"
+session_snapshot_path="$data_dir/backups/userbot-session-predeploy-${deployment_stamp}-${previous_sha:0:12}.session"
+session_probe_dir="$data_dir/runtime/supervisor/userbot-session-probe-$$"
+session_snapshot_created=0
+session_owner_uid=""
+session_owner_gid=""
+session_mode=""
 code_switched=0
 runtime_replaced=0
 
+cleanup_session_probe() {
+  rm -rf "$session_probe_dir"
+}
+
+snapshot_userbot_session() {
+  if [[ ! -f "$session_file" ]]; then
+    echo "Userbot session file is absent; compatibility probe skipped: $session_file"
+    return 0
+  fi
+
+  session_owner_uid="$(stat -c '%u' "$session_file")"
+  session_owner_gid="$(stat -c '%g' "$session_file")"
+  session_mode="$(stat -c '%a' "$session_file")"
+  python3 - "$session_file" "$session_snapshot_path" <<'PYTHON'
+import sqlite3
+import sys
+
+source_path, target_path = sys.argv[1:]
+source = sqlite3.connect(f"file:{source_path}?mode=ro", uri=True)
+target = sqlite3.connect(target_path)
+try:
+    source.backup(target)
+    result = target.execute("PRAGMA quick_check").fetchone()
+    if result != ("ok",):
+        raise RuntimeError(f"Telethon session quick_check failed: {result!r}")
+finally:
+    target.close()
+    source.close()
+PYTHON
+  chmod 0600 "$session_snapshot_path"
+  session_snapshot_created=1
+  echo "Verified userbot session snapshot: $session_snapshot_path"
+}
+
+prepare_session_probe() {
+  cleanup_session_probe
+  mkdir -p "$session_probe_dir"
+  cp "$session_snapshot_path" "$session_probe_dir/userbot.session"
+  chown "$session_owner_uid:$session_owner_gid"     "$session_probe_dir" "$session_probe_dir/userbot.session"
+  chmod 0700 "$session_probe_dir"
+  chmod "0$session_mode" "$session_probe_dir/userbot.session"
+}
+
+restore_userbot_session() {
+  if [[ "$session_snapshot_created" != "1" ]]; then
+    return 0
+  fi
+  echo "Restoring pre-deploy Telethon session snapshot..." >&2
+  "${compose[@]}" stop userbot >&2 || true
+  mkdir -p "$session_dir"
+  rm -f     "$session_file"     "$session_file-journal"     "$session_file-shm"     "$session_file-wal"
+  install     -o "$session_owner_uid"     -g "$session_owner_gid"     -m "0$session_mode"     "$session_snapshot_path"     "$session_file.restore"
+  mv -f "$session_file.restore" "$session_file"
+  python3 - "$session_file" <<'PYTHON'
+import sqlite3
+import sys
+
+connection = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+try:
+    result = connection.execute("PRAGMA quick_check").fetchone()
+    if result != ("ok",):
+        raise RuntimeError(f"Restored Telethon session quick_check failed: {result!r}")
+finally:
+    connection.close()
+PYTHON
+  echo "Telethon session restored from $session_snapshot_path" >&2
+}
+
 rollback_code() {
   local exit_code="$?"
+  local session_restore_ok=1
+  cleanup_session_probe || true
   if [[ "$code_switched" == "1" ]]; then
     echo "Deployment failed; rolling application code back to $previous_sha" >&2
+    if [[ "$runtime_replaced" == "1" ]] && ! restore_userbot_session; then
+      session_restore_ok=0
+      echo "Telethon session restore failed; userbot will remain stopped." >&2
+    fi
     git reset --hard "$previous_sha" >&2 || true
     "${compose[@]}" build postgres bot userbot supervisor-proxy >&2 || true
     if [[ "$runtime_replaced" == "1" ]]; then
-      "${compose[@]}" up -d postgres supervisor-proxy bot userbot >&2 || true
+      if [[ "$session_restore_ok" == "1" ]]; then
+        "${compose[@]}" up -d postgres supervisor-proxy bot userbot >&2 || true
+      else
+        "${compose[@]}" up -d postgres supervisor-proxy bot >&2 || true
+      fi
     else
       echo "Running containers were not replaced; runtime left untouched." >&2
     fi
     echo "Database was not automatically restored." >&2
     echo "Verified pre-deploy dump: $backup_path" >&2
+    if [[ "$session_snapshot_created" == "1" ]]; then
+      echo "Verified pre-deploy Telethon session: $session_snapshot_path" >&2
+    fi
   fi
   exit "$exit_code"
 }
@@ -111,6 +201,9 @@ test -s "$backup_path"
 chmod 0600 "$backup_path"
 echo "Verified dump: $backup_path"
 
+echo "Creating pre-deploy Telethon session snapshot..."
+snapshot_userbot_session
+
 echo "Preparing $target_sha..."
 git reset --hard "$target_sha"
 code_switched=1
@@ -135,6 +228,19 @@ assert config.userbot.api_hash
 assert config.database.url
 print("Userbot configuration preflight OK")
 PY
+
+if [[ "$session_snapshot_created" == "1" ]]; then
+  echo "Checking target Telethon against an isolated session copy..."
+  prepare_session_probe
+  "${compose[@]}" run --rm --no-deps     -e USERBOT_SESSION=/tmp/session-probe/userbot     -v "$session_probe_dir:/tmp/session-probe"     userbot python - <<'PY'
+from telethon.sessions import SQLiteSession
+
+session = SQLiteSession("/tmp/session-probe/userbot")
+session.close()
+print("Target Telethon session compatibility preflight OK")
+PY
+  cleanup_session_probe
+fi
 
 echo "Deploying $target_sha..."
 "${compose[@]}" up -d --remove-orphans postgres supervisor-proxy bot userbot
@@ -267,7 +373,11 @@ fi
 
 code_switched=0
 runtime_replaced=0
+cleanup_session_probe
 trap - ERR INT TERM
 echo "Romatic Club deployment succeeded: $deployed_sha"
 echo "Verified pre-deploy backup: $backup_path"
+if [[ "$session_snapshot_created" == "1" ]]; then
+  echo "Verified pre-deploy Telethon session: $session_snapshot_path"
+fi
 "${compose[@]}" ps
