@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.handlers.admin.schedule_setup_ui import show_next
@@ -25,10 +30,26 @@ from db.schedule_setup_extensions import (
 
 router = Router(name=__name__)
 
+_INCOMPLETE_CARD_FIELDS: tuple[tuple[str, str], ...] = (
+    ("card_name", "название карты"),
+    ("hero_name", "имя героя"),
+    ("image_id", "изображение"),
+    ("rarity", "редкость"),
+    ("obtain_type", "тип награды"),
+    ("obtain_amount", "размер награды"),
+    ("story", "история"),
+    ("quote", "цитата"),
+)
+
 
 def _deck_picker_keyboard(decks: list[dict[str, object]]) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text="🔄 Проверить все колоды", callback_data="schsetup:restart:all")]
+        [
+            InlineKeyboardButton(
+                text="🔄 Проверить все колоды",
+                callback_data="schsetup:restart:all",
+            )
+        ]
     ]
     deck_buttons: list[InlineKeyboardButton] = []
     for deck in decks:
@@ -46,6 +67,29 @@ def _deck_picker_keyboard(decks: list[dict[str, object]]) -> InlineKeyboardMarku
         rows.append(deck_buttons[index : index + 2])
     rows.append([InlineKeyboardButton(text="✖️ Закрыть", callback_data="schsetup:stop")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _is_blank(value: object) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _missing_card_fields(card: dict[str, object]) -> list[str]:
+    return [label for field, label in _INCOMPLETE_CARD_FIELDS if _is_blank(card.get(field))]
+
+
+def _split_messages(header: str, lines: list[str], *, limit: int = 3800) -> list[str]:
+    chunks: list[str] = []
+    current = header
+    for line in lines:
+        candidate = f"{current}\n{line}"
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+        chunks.append(current)
+        current = line
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 async def _show_deck_picker(message: Message) -> None:
@@ -103,6 +147,43 @@ async def start_full_schedule_setup(message: Message) -> None:
 @admin_only
 async def restart_schedule_setup(message: Message) -> None:
     await _show_deck_picker(message)
+
+
+@router.message(Command("schedule_setup_incomplete"), F.chat.type == "private")
+@admin_only
+async def show_incomplete_schedule_cards(message: Message) -> None:
+    lines: list[str] = []
+    total_cards = 0
+    incomplete_cards = 0
+    for deck in await get_all_decks_for_setup():
+        deck_id = int(deck["deck_id"])
+        deck_name = " ".join(str(deck.get("deck_name") or "Без названия").split())
+        for card in await get_cards_for_setup(deck_id):
+            total_cards += 1
+            missing = _missing_card_fields(card)
+            if not missing:
+                continue
+            incomplete_cards += 1
+            card_id = int(card["card_id"])
+            number = card.get("num")
+            hero = " ".join(str(card.get("hero_name") or "—").split())
+            card_name = " ".join(str(card.get("card_name") or "—").split())
+            number_text = f"№{number}" if number is not None else f"ID {card_id}"
+            lines.append(
+                f"• колода {deck_id} «{deck_name}», {number_text}, card_id={card_id}: "
+                f"{hero} — {card_name}; нет: {', '.join(missing)}"
+            )
+
+    if not lines:
+        await message.answer(f"✅ Все {total_cards} карт заполнены по обязательным полям.")
+        return
+
+    header = (
+        "🧩 <b>Карты с незаполненными полями</b>\n"
+        f"Найдено: <b>{incomplete_cards}</b> из <b>{total_cards}</b>."
+    )
+    for chunk in _split_messages(header, lines):
+        await message.answer(chunk, parse_mode="HTML")
 
 
 @router.callback_query(F.data == "schsetup:restart")
@@ -178,7 +259,8 @@ async def extended_schedule_audit(message: Message) -> None:
         f"Колоды: {audit['decks_configured']}/{audit['decks_total']} (временных: {temp['decks']})\n"
         f"Карты: {audit['cards_verified']}/{audit['cards_total']} (временных: {temp['cards']})\n"
         f"Ошибки экономики: {len(errors)}\n\n{tail}\n\n"
-        "Выбор колоды: /schedule_setup_restart · временные: /schedule_temp",
+        "Выбор колоды: /schedule_setup_restart · незаполненные: "
+        "/schedule_setup_incomplete · временные: /schedule_temp",
         parse_mode="HTML",
     )
 
