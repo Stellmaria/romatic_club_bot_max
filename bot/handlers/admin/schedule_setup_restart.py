@@ -97,9 +97,7 @@ def _safe_text(value: object, *, fallback: str = "—", limit: int = 80) -> str:
 
 
 def _card_issues(card: dict[str, object]) -> list[str]:
-    issues = [
-        label for field, label in _INCOMPLETE_CARD_FIELDS if _is_blank(card.get(field))
-    ]
+    issues = [label for field, label in _INCOMPLETE_CARD_FIELDS if _is_blank(card.get(field))]
     if not _is_positive_int(card.get("card_emoji_id")):
         issues.append("мини-эмодзи")
     elif not bool(card.get("emoji_verified")):
