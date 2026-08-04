@@ -17,6 +17,7 @@ class PublicationRepairAction:
     channel_message_id: int | None = None
     discussion_message_id: int | None = None
     post_verified_absent: bool = False
+    expected_previous_channel_message_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
