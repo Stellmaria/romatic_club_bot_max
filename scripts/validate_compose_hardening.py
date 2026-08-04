@@ -132,9 +132,7 @@ def _assert_common_runtime(service: Mapping[str, object], *, name: str) -> None:
         _fail(f"services.{name} must not publish host ports")
 
 
-def _validate_writable_paths(
-    bot: Mapping[str, object], userbot: Mapping[str, object]
-) -> None:
+def _validate_writable_paths(bot: Mapping[str, object], userbot: Mapping[str, object]) -> None:
     if _mount_targets(bot, name="bot") != {"/app/var"}:
         _fail("services.bot writable mounts must be limited to /app/var")
     if _mount_targets(userbot, name="userbot") != {
@@ -144,9 +142,7 @@ def _validate_writable_paths(
         _fail("services.userbot writable mounts must be runtime and Telethon session only")
 
 
-def _validate_supervisor_secrets(
-    bot: Mapping[str, object], userbot: Mapping[str, object]
-) -> None:
+def _validate_supervisor_secrets(bot: Mapping[str, object], userbot: Mapping[str, object]) -> None:
     if _secret_sources(bot, name="bot") != {"supervisor_token"}:
         _fail("services.bot must receive only the supervisor_token secret")
     if "supervisor_token" in _secret_sources(userbot, name="userbot"):
@@ -158,9 +154,7 @@ def _validate_supervisor_secrets(
     if bot_environment.get("SUPERVISOR_TOKEN_FILE") != "/run/secrets/supervisor_token":
         _fail("services.bot must use the Supervisor token file")
 
-    userbot_environment = _mapping(
-        userbot.get("environment"), field="services.userbot.environment"
-    )
+    userbot_environment = _mapping(userbot.get("environment"), field="services.userbot.environment")
     if str(userbot_environment.get("SUPERVISOR_ENABLED", "")).lower() != "false":
         _fail("services.userbot must disable Supervisor integration")
     for field in ("SUPERVISOR_TOKEN", "SUPERVISOR_TOKEN_FILE", "SUPERVISOR_BASE_URL"):
@@ -168,9 +162,7 @@ def _validate_supervisor_secrets(
             _fail(f"services.userbot.{field} must be empty")
 
 
-def _validate_healthchecks(
-    bot: Mapping[str, object], userbot: Mapping[str, object]
-) -> None:
+def _validate_healthchecks(bot: Mapping[str, object], userbot: Mapping[str, object]) -> None:
     if "/readyz" not in _healthcheck_command(bot, name="bot"):
         _fail("services.bot healthcheck must use application readiness")
     if "userbot.healthcheck" not in _healthcheck_command(userbot, name="userbot"):
