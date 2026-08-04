@@ -1,3 +1,9 @@
+-- compatibility: expand
+-- rollback: code-only-safe
+-- note: Enforce append-only privacy audit evidence while remaining compatible with earlier application code.
+
+SET search_path = public, pg_catalog;
+
 CREATE OR REPLACE FUNCTION public.reject_privacy_audit_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
