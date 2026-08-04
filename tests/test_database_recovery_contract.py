@@ -38,26 +38,24 @@ def test_compose_has_one_controlled_schema_executor() -> None:
     assert 'DB_AUTO_MIGRATE: "false"' in bot
     assert 'DB_AUTO_MIGRATE: "false"' in userbot
     assert 'DB_AUTO_MIGRATE: "false"' in runner
-    assert "python\", \"-m\", \"db.migrator\", \"apply\", \"--json" in runner
-    assert "profiles: [\"operations\"]" in runner
+    assert 'python", "-m", "db.migrator", "apply", "--json' in runner
+    assert 'profiles: ["operations"]' in runner
     assert "romatic-database" in runner
     assert "romatic-application" not in runner
     assert "romatic-supervisor-control" not in runner
     assert "cap_drop:\n      - ALL" in runner
     assert "no-new-privileges:true" in runner
-    assert "restart: \"no\"" in runner
+    assert 'restart: "no"' in runner
 
 
 def test_restore_drill_is_disposable_and_not_host_published() -> None:
     compose = source("compose.yaml")
-    service = compose.split("  restore-drill-postgres:", 1)[1].split(
-        "\n  supervisor-proxy:", 1
-    )[0]
+    service = compose.split("  restore-drill-postgres:", 1)[1].split("\n  supervisor-proxy:", 1)[0]
 
-    assert "profiles: [\"operations\"]" in service
+    assert 'profiles: ["operations"]' in service
     assert "/var/lib/postgresql/data" in service
     assert "tmpfs:" in service
-    assert "restart: \"no\"" in service
+    assert 'restart: "no"' in service
     assert "ports:" not in service
     assert "restore-drill-postgres" in service
 
@@ -69,7 +67,7 @@ def test_deploy_orders_restore_and_migrations_before_runtime_replacement() -> No
     restore = deploy.index("Running disposable PostgreSQL restore drill")
     plan = deploy.index("Planning production migrations")
     apply = deploy.index("Applying production migrations")
-    replace = deploy.index('up -d --remove-orphans postgres supervisor-proxy bot userbot')
+    replace = deploy.index("up -d --remove-orphans postgres supervisor-proxy bot userbot")
 
     assert backup < restore < plan < apply < replace
     assert "migration-runner" in deploy
