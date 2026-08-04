@@ -66,29 +66,176 @@ def load_inventory(path: Path = DEFAULT_INVENTORY_PATH) -> dict[str, Any]:
     return payload
 
 
+def _validate_retention_policy(class_name: str, raw_policy: object) -> dict[str, Any]:
+    if not isinstance(raw_policy, dict):
+        raise InventoryError(f"retention class {class_name!r} must be an object")
+    if raw_policy.get("status") not in _ALLOWED_RETENTION_STATUS:
+        raise InventoryError(f"retention class {class_name!r} has invalid status")
+
+    days = raw_policy.get("days")
+    if days is not None and (
+        not isinstance(days, int) or isinstance(days, bool) or days <= 0
+    ):
+        raise InventoryError(f"retention class {class_name!r} days must be positive")
+    if raw_policy.get("destructive_enabled") is not False:
+        raise InventoryError(
+            f"retention class {class_name!r} must keep destructive_enabled=false"
+        )
+    return raw_policy
+
+
+def _validate_retention_classes(value: object) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict) or not value:
+        raise InventoryError("retention_classes must be a non-empty object")
+
+    result: dict[str, dict[str, Any]] = {}
+    for class_name, raw_policy in value.items():
+        if not isinstance(class_name, str) or not class_name:
+            raise InventoryError("retention class names must be non-empty strings")
+        result[class_name] = _validate_retention_policy(class_name, raw_policy)
+    return result
+
+
+def _require_string_list(dataset_id: str, field_name: str, value: object) -> list[str]:
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) and item for item in value
+    ):
+        raise InventoryError(f"dataset {dataset_id!r} {field_name} must contain strings")
+    return value
+
+
+def _require_non_empty_string(dataset_id: str, field_name: str, value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise InventoryError(
+            f"dataset {dataset_id!r} {field_name} must be a non-empty string"
+        )
+    return value
+
+
+def _validate_dataset_identity(
+    raw_dataset: Mapping[str, Any],
+    *,
+    seen_dataset_ids: set[str],
+    seen_tables: set[str],
+) -> tuple[str, list[str]]:
+    missing = sorted(_REQUIRED_DATASET_FIELDS - raw_dataset.keys())
+    if missing:
+        raise InventoryError(
+            f"dataset {raw_dataset.get('id', '<unknown>')!r} misses fields: {missing}"
+        )
+
+    dataset_id = raw_dataset["id"]
+    if not isinstance(dataset_id, str) or not dataset_id:
+        raise InventoryError("dataset id must be a non-empty string")
+    if dataset_id in seen_dataset_ids:
+        raise InventoryError(f"duplicate dataset id: {dataset_id}")
+    seen_dataset_ids.add(dataset_id)
+
+    tables = _require_string_list(dataset_id, "tables", raw_dataset["tables"])
+    if not tables:
+        raise InventoryError(f"dataset {dataset_id!r} tables must be non-empty strings")
+    overlap = seen_tables.intersection(tables)
+    if overlap:
+        raise InventoryError(f"tables assigned to multiple datasets: {sorted(overlap)}")
+    seen_tables.update(tables)
+    return dataset_id, tables
+
+
+def _validate_dataset_policy(
+    dataset_id: str,
+    raw_dataset: Mapping[str, Any],
+    retention_classes: Mapping[str, Mapping[str, Any]],
+) -> str:
+    for field_name in ("data_fields", "access_roles", "exceptions"):
+        _require_string_list(dataset_id, field_name, raw_dataset[field_name])
+    for field_name in ("purpose", "deletion_action"):
+        _require_non_empty_string(dataset_id, field_name, raw_dataset[field_name])
+
+    if raw_dataset["sensitivity"] not in _ALLOWED_SENSITIVITY:
+        raise InventoryError(f"dataset {dataset_id!r} has invalid sensitivity")
+
+    retention_class = raw_dataset["retention_class"]
+    if not isinstance(retention_class, str) or retention_class not in retention_classes:
+        raise InventoryError(
+            f"dataset {dataset_id!r} references unknown retention class {retention_class!r}"
+        )
+    if raw_dataset["backup_presence"] is not True:
+        raise InventoryError(
+            f"dataset {dataset_id!r} must explicitly acknowledge backup presence"
+        )
+    return retention_class
+
+
+def _validate_cleanup_rule(
+    dataset_id: str,
+    raw_rule: object,
+    *,
+    retention_policy: Mapping[str, Any],
+    seen_rule_ids: set[str],
+) -> None:
+    if not isinstance(raw_rule, dict):
+        raise InventoryError(f"dataset {dataset_id!r} cleanup rule must be an object")
+
+    rule_id = raw_rule.get("id")
+    if not isinstance(rule_id, str) or not rule_id:
+        raise InventoryError(f"dataset {dataset_id!r} cleanup rule id is invalid")
+    if rule_id in seen_rule_ids:
+        raise InventoryError(f"duplicate cleanup rule id: {rule_id}")
+    seen_rule_ids.add(rule_id)
+
+    planner_key = raw_rule.get("planner_key")
+    if planner_key not in _COUNT_QUERIES:
+        raise InventoryError(f"cleanup rule {rule_id!r} uses unknown planner key")
+    if raw_rule.get("status") != "approved":
+        raise InventoryError(f"cleanup rule {rule_id!r} must be explicitly approved")
+    if raw_rule.get("destructive_enabled") is not False:
+        raise InventoryError(
+            f"cleanup rule {rule_id!r} must keep destructive_enabled=false"
+        )
+    if retention_policy.get("status") != "approved" or not isinstance(
+        retention_policy.get("days"), int
+    ):
+        raise InventoryError(
+            f"cleanup rule {rule_id!r} requires an approved finite retention class"
+        )
+
+
+def _validate_dataset(
+    raw_dataset: object,
+    *,
+    retention_classes: Mapping[str, Mapping[str, Any]],
+    seen_dataset_ids: set[str],
+    seen_tables: set[str],
+    seen_rule_ids: set[str],
+) -> None:
+    if not isinstance(raw_dataset, dict):
+        raise InventoryError("each dataset must be an object")
+
+    dataset_id, _tables = _validate_dataset_identity(
+        raw_dataset,
+        seen_dataset_ids=seen_dataset_ids,
+        seen_tables=seen_tables,
+    )
+    retention_class = _validate_dataset_policy(
+        dataset_id,
+        raw_dataset,
+        retention_classes,
+    )
+    retention_policy = retention_classes[retention_class]
+    for raw_rule in raw_dataset.get("cleanup_rules", []):
+        _validate_cleanup_rule(
+            dataset_id,
+            raw_rule,
+            retention_policy=retention_policy,
+            seen_rule_ids=seen_rule_ids,
+        )
+
+
 def validate_inventory(inventory: Mapping[str, Any]) -> None:
     if inventory.get("schema_version") != 1:
         raise InventoryError("privacy inventory schema_version must be 1")
 
-    retention_classes = inventory.get("retention_classes")
-    if not isinstance(retention_classes, dict) or not retention_classes:
-        raise InventoryError("retention_classes must be a non-empty object")
-
-    for class_name, raw_policy in retention_classes.items():
-        if not isinstance(class_name, str) or not class_name:
-            raise InventoryError("retention class names must be non-empty strings")
-        if not isinstance(raw_policy, dict):
-            raise InventoryError(f"retention class {class_name!r} must be an object")
-        if raw_policy.get("status") not in _ALLOWED_RETENTION_STATUS:
-            raise InventoryError(f"retention class {class_name!r} has invalid status")
-        days = raw_policy.get("days")
-        if days is not None and (not isinstance(days, int) or isinstance(days, bool) or days <= 0):
-            raise InventoryError(f"retention class {class_name!r} days must be positive")
-        if raw_policy.get("destructive_enabled") is not False:
-            raise InventoryError(
-                f"retention class {class_name!r} must keep destructive_enabled=false"
-            )
-
+    retention_classes = _validate_retention_classes(inventory.get("retention_classes"))
     datasets = inventory.get("datasets")
     if not isinstance(datasets, list) or not datasets:
         raise InventoryError("datasets must be a non-empty array")
@@ -96,83 +243,14 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
     seen_dataset_ids: set[str] = set()
     seen_tables: set[str] = set()
     seen_rule_ids: set[str] = set()
-
     for raw_dataset in datasets:
-        if not isinstance(raw_dataset, dict):
-            raise InventoryError("each dataset must be an object")
-        missing = sorted(_REQUIRED_DATASET_FIELDS - raw_dataset.keys())
-        if missing:
-            raise InventoryError(
-                f"dataset {raw_dataset.get('id', '<unknown>')!r} misses fields: {missing}"
-            )
-
-        dataset_id = raw_dataset["id"]
-        if not isinstance(dataset_id, str) or not dataset_id:
-            raise InventoryError("dataset id must be a non-empty string")
-        if dataset_id in seen_dataset_ids:
-            raise InventoryError(f"duplicate dataset id: {dataset_id}")
-        seen_dataset_ids.add(dataset_id)
-
-        tables = raw_dataset["tables"]
-        if (
-            not isinstance(tables, list)
-            or not tables
-            or not all(isinstance(table, str) and table for table in tables)
-        ):
-            raise InventoryError(f"dataset {dataset_id!r} tables must be non-empty strings")
-        overlap = seen_tables.intersection(tables)
-        if overlap:
-            raise InventoryError(f"tables assigned to multiple datasets: {sorted(overlap)}")
-        seen_tables.update(tables)
-
-        for field_name in ("data_fields", "access_roles", "exceptions"):
-            values = raw_dataset[field_name]
-            if not isinstance(values, list) or not all(
-                isinstance(value, str) and value for value in values
-            ):
-                raise InventoryError(f"dataset {dataset_id!r} {field_name} must contain strings")
-        for field_name in ("purpose", "deletion_action"):
-            value = raw_dataset[field_name]
-            if not isinstance(value, str) or not value:
-                raise InventoryError(
-                    f"dataset {dataset_id!r} {field_name} must be a non-empty string"
-                )
-
-        if raw_dataset["sensitivity"] not in _ALLOWED_SENSITIVITY:
-            raise InventoryError(f"dataset {dataset_id!r} has invalid sensitivity")
-        retention_class = raw_dataset["retention_class"]
-        if retention_class not in retention_classes:
-            raise InventoryError(
-                f"dataset {dataset_id!r} references unknown retention class {retention_class!r}"
-            )
-        if raw_dataset["backup_presence"] is not True:
-            raise InventoryError(
-                f"dataset {dataset_id!r} must explicitly acknowledge backup presence"
-            )
-
-        for rule in raw_dataset.get("cleanup_rules", []):
-            if not isinstance(rule, dict):
-                raise InventoryError(f"dataset {dataset_id!r} cleanup rule must be an object")
-            rule_id = rule.get("id")
-            planner_key = rule.get("planner_key")
-            if not isinstance(rule_id, str) or not rule_id:
-                raise InventoryError(f"dataset {dataset_id!r} cleanup rule id is invalid")
-            if rule_id in seen_rule_ids:
-                raise InventoryError(f"duplicate cleanup rule id: {rule_id}")
-            seen_rule_ids.add(rule_id)
-            if planner_key not in _COUNT_QUERIES:
-                raise InventoryError(f"cleanup rule {rule_id!r} uses unknown planner key")
-            if rule.get("status") != "approved":
-                raise InventoryError(f"cleanup rule {rule_id!r} must be explicitly approved")
-            if rule.get("destructive_enabled") is not False:
-                raise InventoryError(
-                    f"cleanup rule {rule_id!r} must keep destructive_enabled=false"
-                )
-            policy = retention_classes[retention_class]
-            if policy.get("status") != "approved" or not isinstance(policy.get("days"), int):
-                raise InventoryError(
-                    f"cleanup rule {rule_id!r} requires an approved finite retention class"
-                )
+        _validate_dataset(
+            raw_dataset,
+            retention_classes=retention_classes,
+            seen_dataset_ids=seen_dataset_ids,
+            seen_tables=seen_tables,
+            seen_rule_ids=seen_rule_ids,
+        )
 
 
 def inventory_sha256(path: Path) -> str:
@@ -264,7 +342,9 @@ async def _run_plan(args: argparse.Namespace) -> int:
     if not args.offline:
         database_url = os.environ.get("DATABASE_URL", "").strip()
         if not database_url:
-            raise InventoryError("DATABASE_URL is required unless --offline is explicitly selected")
+            raise InventoryError(
+                "DATABASE_URL is required unless --offline is explicitly selected"
+            )
         connection, counter = await _database_counter(database_url)
 
     try:
