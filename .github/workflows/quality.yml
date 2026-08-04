@@ -36,8 +36,17 @@ jobs:
           cache-dependency-glob: requirements/*.lock
       - name: Install hashed development graph
         run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Print exact Black diff
-        run: python -m black --diff db/migrator.py tests/test_database_recovery_contract.py || true
+      - name: Format recovery files for exact artifact
+        run: python -m black db/migrator.py tests/test_database_recovery_contract.py
+      - name: Upload formatted recovery files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: issue44-black-formatted
+          path: |
+            db/migrator.py
+            tests/test_database_recovery_contract.py
+          if-no-files-found: error
+          retention-days: 1
       - name: Run changed-file quality ratchet
         run: python scripts/quality.py changed
 
