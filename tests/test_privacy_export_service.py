@@ -38,7 +38,7 @@ class _Repository:
 def _uid_crypto() -> None:
     configure_uid_crypto(
         "test-hash-key",
-        "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+        "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
     )
     try:
         yield
