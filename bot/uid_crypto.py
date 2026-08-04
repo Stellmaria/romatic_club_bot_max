@@ -62,7 +62,7 @@ def identity_digest(domain: str, value: str) -> str:
     normalized_domain = domain.strip().lower()
     if not normalized_domain:
         raise ValueError("identity digest domain must be non-empty")
-    payload = f"{normalized_domain}\x00{value.strip()}".encode("utf-8")
+    payload = f"{normalized_domain}\x00{value.strip()}".encode()
     return hmac.new(_require_hash_key(), payload, hashlib.sha256).hexdigest()
 
 

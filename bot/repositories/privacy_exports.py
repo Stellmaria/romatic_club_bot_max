@@ -222,10 +222,11 @@ class PrivacyExportRepository:
             selected = ", ".join(self._quote_identifier(column) for column in columns)
             table = self._quote_identifier(source.table)
             subject_column = self._quote_identifier(source.subject_column)
-            rows = await connection.fetch(
-                f"SELECT {selected} FROM public.{table} WHERE {subject_column} = $1",
-                int(subject_user_id),
+            query = (
+                f"SELECT {selected} FROM public.{table} "  # noqa: S608
+                f"WHERE {subject_column} = $1"
             )
+            rows = await connection.fetch(query, int(subject_user_id))
             datasets.setdefault(source.dataset_id, {})[source.table] = [dict(row) for row in rows]
         return datasets
 

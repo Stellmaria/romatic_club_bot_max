@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 from uuid import UUID, uuid4
 
 from bot.application_ports import Clock
@@ -104,13 +103,15 @@ class PrivacyExportService:
             },
             sort_keys=True,
         )
-        async with self._repository.acquire() as connection:
-            async with connection.transaction():
-                await self._repository.append_audit(
-                    connection,
-                    action_type="privacy.export.denied",
-                    details=details,
-                )
+        async with (
+            self._repository.acquire() as connection,
+            connection.transaction(),
+        ):
+            await self._repository.append_audit(
+                connection,
+                action_type="privacy.export.denied",
+                details=details,
+            )
 
     async def export_self(
         self,
@@ -134,59 +135,61 @@ class PrivacyExportService:
                 "self-service export is restricted to the authenticated Telegram user"
             )
 
-        async with self._repository.acquire() as connection:
-            async with connection.transaction():
-                datasets = await self._repository.collect(connection, subject_user_id)
-                _assert_no_forbidden_keys(datasets)
-                dataset_counts = {
-                    dataset_id: sum(len(rows) for rows in tables.values())
-                    for dataset_id, tables in datasets.items()
-                }
-                exported_rows = sum(dataset_counts.values())
-                generated_at = self._clock.now()
-                document = {
+        async with (
+            self._repository.acquire() as connection,
+            connection.transaction(),
+        ):
+            datasets = await self._repository.collect(connection, subject_user_id)
+            _assert_no_forbidden_keys(datasets)
+            dataset_counts = {
+                dataset_id: sum(len(rows) for rows in tables.values())
+                for dataset_id, tables in datasets.items()
+            }
+            exported_rows = sum(dataset_counts.values())
+            generated_at = self._clock.now()
+            document = {
+                "schema_version": 1,
+                "export_type": "authenticated-self-service",
+                "generated_at": generated_at.isoformat(),
+                "correlation_id": str(correlation_id),
+                "policy_sha256": policy_sha256,
+                "subject": {"telegram_user_id": int(subject_user_id)},
+                "datasets": datasets,
+                "safety": {
+                    "read_only_subject_data": True,
+                    "source_data_mutated": False,
+                    "excluded_secret_material": True,
+                    "excluded_uid_hash_and_ciphertext": True,
+                    "excluded_telegram_media_identifiers": True,
+                    "audit_contains_personal_values": False,
+                },
+            }
+            payload = json.dumps(
+                document,
+                ensure_ascii=False,
+                sort_keys=True,
+                indent=2,
+                default=_json_default,
+            ).encode("utf-8")
+            audit_details = json.dumps(
+                {
                     "schema_version": 1,
-                    "export_type": "authenticated-self-service",
-                    "generated_at": generated_at.isoformat(),
                     "correlation_id": str(correlation_id),
+                    "actor_digest": actor_digest,
+                    "subject_digest": subject_digest,
                     "policy_sha256": policy_sha256,
-                    "subject": {"telegram_user_id": int(subject_user_id)},
-                    "datasets": datasets,
-                    "safety": {
-                        "read_only_subject_data": True,
-                        "source_data_mutated": False,
-                        "excluded_secret_material": True,
-                        "excluded_uid_hash_and_ciphertext": True,
-                        "excluded_telegram_media_identifiers": True,
-                        "audit_contains_personal_values": False,
-                    },
-                }
-                payload = json.dumps(
-                    document,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    indent=2,
-                    default=_json_default,
-                ).encode("utf-8")
-                audit_details = json.dumps(
-                    {
-                        "schema_version": 1,
-                        "correlation_id": str(correlation_id),
-                        "actor_digest": actor_digest,
-                        "subject_digest": subject_digest,
-                        "policy_sha256": policy_sha256,
-                        "outcome": "generated",
-                        "dataset_counts": dataset_counts,
-                        "exported_rows": exported_rows,
-                        "contains_personal_values": False,
-                    },
-                    sort_keys=True,
-                )
-                await self._repository.append_audit(
-                    connection,
-                    action_type="privacy.export.generated",
-                    details=audit_details,
-                )
+                    "outcome": "generated",
+                    "dataset_counts": dataset_counts,
+                    "exported_rows": exported_rows,
+                    "contains_personal_values": False,
+                },
+                sort_keys=True,
+            )
+            await self._repository.append_audit(
+                connection,
+                action_type="privacy.export.generated",
+                details=audit_details,
+            )
 
         return PrivacyExportResult(
             correlation_id=correlation_id,
