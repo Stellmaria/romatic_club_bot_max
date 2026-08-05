@@ -9,10 +9,12 @@ from uuid import UUID
 
 import asyncpg
 
+from bot.core.settings import DatabaseSettings
 from bot.core.time import SystemClock
 from bot.repositories.privacy_requests import PrivacyRequestRepository
 from bot.services.privacy_requests import PrivacyRequestService
 from bot.uid_crypto import configure_uid_crypto
+from db.pool import DatabaseRuntime
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -35,14 +37,14 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def _run(args: argparse.Namespace) -> int:
-    database_url = os.getenv("DATABASE_URL", "").strip()
     hash_key = os.getenv("UID_HASH_KEY", "").strip()
     encryption_key = os.getenv("UID_ENC_KEY", "").strip()
-    if not database_url or not hash_key or not encryption_key:
-        raise RuntimeError("DATABASE_URL, UID_HASH_KEY and UID_ENC_KEY are required")
+    if not hash_key or not encryption_key:
+        raise RuntimeError("UID_HASH_KEY and UID_ENC_KEY are required")
     configure_uid_crypto(hash_key, encryption_key)
 
-    pool = await asyncpg.create_pool(database_url, min_size=1, max_size=2, command_timeout=30)
+    runtime = DatabaseRuntime(DatabaseSettings.from_env())
+    pool = await runtime.start()
     try:
         service = PrivacyRequestService(
             PrivacyRequestRepository(pool),
@@ -83,7 +85,7 @@ async def _run(args: argparse.Namespace) -> int:
             return 0
         raise RuntimeError(f"unsupported command: {args.command}")
     finally:
-        await pool.close()
+        await runtime.close()
 
 
 def main(argv: list[str] | None = None) -> int:

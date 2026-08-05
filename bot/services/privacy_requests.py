@@ -48,9 +48,7 @@ class PrivacyRequestService:
             action_type=f"privacy.request.{action}.denied",
             details={
                 "schema_version": 1,
-                "actor_digest": identity_digest(
-                    "privacy-request-actor", str(int(actor_user_id))
-                ),
+                "actor_digest": identity_digest("privacy-request-actor", str(int(actor_user_id))),
                 "subject_digest": self._subject_digest(subject_user_id),
                 "outcome": "denied",
                 "reason": "self-service-subject-mismatch",

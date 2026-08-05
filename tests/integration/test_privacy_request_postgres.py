@@ -33,9 +33,7 @@ async def test_reviewed_privacy_request_anonymizes_optional_data_and_keeps_holds
             """,
             user_id,
         )
-        await connection.execute(
-            "INSERT INTO public.settings (user_id) VALUES ($1)", user_id
-        )
+        await connection.execute("INSERT INTO public.settings (user_id) VALUES ($1)", user_id)
         await connection.execute(
             "INSERT INTO public.unreachable_users (user_id, reason) VALUES ($1, 'blocked')",
             user_id,
@@ -176,19 +174,15 @@ async def test_reviewed_privacy_request_anonymizes_optional_data_and_keeps_holds
     assert completed.status == "completed_with_holds"
 
     async with postgres_pool.acquire() as connection:
-        user = await connection.fetchrow(
-            "SELECT * FROM public.users WHERE user_id = $1", user_id
-        )
+        user = await connection.fetchrow("SELECT * FROM public.users WHERE user_id = $1", user_id)
         assert user is None
-        surrogate = await connection.fetchrow(
-            """
+        surrogate = await connection.fetchrow("""
             SELECT user_id, username, full_name, is_subscribed, is_luxury, is_trusted
             FROM public.users
             WHERE user_id < 0
             ORDER BY user_id
             LIMIT 1
-            """
-        )
+            """)
         assert surrogate is not None
         surrogate_user_id = int(surrogate["user_id"])
         assert surrogate_user_id != user_id
@@ -197,12 +191,18 @@ async def test_reviewed_privacy_request_anonymizes_optional_data_and_keeps_holds
         assert surrogate["is_subscribed"] is False
         assert surrogate["is_luxury"] is False
         assert surrogate["is_trusted"] is False
-        assert await connection.fetchval(
-            "SELECT count(*) FROM public.settings WHERE user_id = $1", user_id
-        ) == 0
-        assert await connection.fetchval(
-            "SELECT count(*) FROM public.unreachable_users WHERE user_id = $1", user_id
-        ) == 0
+        assert (
+            await connection.fetchval(
+                "SELECT count(*) FROM public.settings WHERE user_id = $1", user_id
+            )
+            == 0
+        )
+        assert (
+            await connection.fetchval(
+                "SELECT count(*) FROM public.unreachable_users WHERE user_id = $1", user_id
+            )
+            == 0
+        )
 
         uid_row = await connection.fetchrow(
             """
@@ -219,20 +219,32 @@ async def test_reviewed_privacy_request_anonymizes_optional_data_and_keeps_holds
         assert uid_row["uid_last4"] is None
         assert uid_row["status"] == "revoked"
 
-        assert await connection.fetchval(
-            "SELECT seller_id FROM public.market_listings WHERE listing_id = $1",
-            listing_id,
-        ) == surrogate_user_id
-        assert await connection.fetchval(
-            "SELECT user_id FROM public.exchange_batches ORDER BY batch_id DESC LIMIT 1"
-        ) == surrogate_user_id
-        assert await connection.fetchval(
-            "SELECT count(*) FROM public.users WHERE user_id = $1", user_id
-        ) == 0
+        assert (
+            await connection.fetchval(
+                "SELECT seller_id FROM public.market_listings WHERE listing_id = $1",
+                listing_id,
+            )
+            == surrogate_user_id
+        )
+        assert (
+            await connection.fetchval(
+                "SELECT user_id FROM public.exchange_batches ORDER BY batch_id DESC LIMIT 1"
+            )
+            == surrogate_user_id
+        )
+        assert (
+            await connection.fetchval(
+                "SELECT count(*) FROM public.users WHERE user_id = $1", user_id
+            )
+            == 0
+        )
 
-        assert await connection.fetchval(
-            "SELECT user_id FROM public.audit_logs WHERE id = $1", audit_id
-        ) is None
+        assert (
+            await connection.fetchval(
+                "SELECT user_id FROM public.audit_logs WHERE id = $1", audit_id
+            )
+            is None
+        )
         request_row = await connection.fetchrow(
             """
             SELECT subject_user_id, status, retained_holds

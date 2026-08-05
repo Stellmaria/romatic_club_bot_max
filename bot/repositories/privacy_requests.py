@@ -4,13 +4,13 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
 
 import asyncpg
 
 _ACTIVE_STATUSES = ("pending_review", "approved")
-_TERMINAL_APPEAL_STATUSES = ("resolved", "rejected", "closed")
 _NON_FK_IDENTITY_COLUMNS = (
     ("autobids", "target_user_id"),
     ("autobids", "created_by"),
@@ -81,8 +81,16 @@ class PrivacyRequestPlan:
         return not self.blocking_holds and self.status in _ACTIVE_STATUSES
 
 
+def _outcome_counts(value: object) -> dict[str, int]:
+    if value is None:
+        return {}
+    decoded: object = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(decoded, Mapping):
+        raise ValueError("privacy outcome_counts must be a JSON object")
+    return {str(key): int(item) for key, item in decoded.items()}
+
+
 def _row_to_record(row: asyncpg.Record) -> PrivacyRequestRecord:
-    raw_counts = row["outcome_counts"] or {}
     return PrivacyRequestRecord(
         request_id=row["request_id"],
         subject_digest=str(row["subject_digest"]),
@@ -91,7 +99,7 @@ def _row_to_record(row: asyncpg.Record) -> PrivacyRequestRecord:
         approved_plan_sha256=row["approved_plan_sha256"],
         blocking_holds=tuple(row["blocking_holds"] or ()),
         retained_holds=tuple(row["retained_holds"] or ()),
-        outcome_counts={str(key): int(value) for key, value in dict(raw_counts).items()},
+        outcome_counts=_outcome_counts(row["outcome_counts"]),
         requested_at=row["requested_at"],
         updated_at=row["updated_at"],
         completed_at=row["completed_at"],
@@ -477,8 +485,9 @@ class PrivacyRequestRepository:
         operator_digest: str,
         approved_at: datetime,
     ) -> PrivacyRequestPlan:
-        async with self._pool.acquire() as connection, connection.transaction(
-            isolation="serializable"
+        async with (
+            self._pool.acquire() as connection,
+            connection.transaction(isolation="serializable"),
         ):
             row = await self._fetch_request(connection, request_id, for_update=True)
             if row["status"] != "pending_review" or row["subject_user_id"] is None:
@@ -552,8 +561,7 @@ class PrivacyRequestRepository:
         subject_user_id: int,
         surrogate_user_id: int,
     ) -> int:
-        rows = await connection.fetch(
-            """
+        rows = await connection.fetch("""
             SELECT ns.nspname AS table_schema, child.relname AS table_name,
                    attribute.attname AS column_name
             FROM pg_catalog.pg_constraint constraint_row
@@ -571,8 +579,7 @@ class PrivacyRequestRepository:
               AND array_length(constraint_row.confkey, 1) = 1
               AND ns.nspname = 'public'
             ORDER BY child.relname, attribute.attname
-            """
-        )
+            """)
         changed = 0
         for row in rows:
             table = str(row["table_name"])
@@ -596,16 +603,12 @@ class PrivacyRequestRepository:
         subject_user_id: int,
         surrogate_user_id: int,
     ) -> int:
-        available_rows = await connection.fetch(
-            """
+        available_rows = await connection.fetch("""
             SELECT table_name, column_name
             FROM information_schema.columns
             WHERE table_schema = 'public'
-            """
-        )
-        available = {
-            (str(row["table_name"]), str(row["column_name"])) for row in available_rows
-        }
+            """)
+        available = {(str(row["table_name"]), str(row["column_name"])) for row in available_rows}
         changed = 0
         for table, column in _NON_FK_IDENTITY_COLUMNS:
             if (table, column) not in available:
@@ -862,8 +865,9 @@ class PrivacyRequestRepository:
         operator_digest: str,
         completed_at: datetime,
     ) -> PrivacyRequestRecord:
-        async with self._pool.acquire() as connection, connection.transaction(
-            isolation="serializable"
+        async with (
+            self._pool.acquire() as connection,
+            connection.transaction(isolation="serializable"),
         ):
             row = await self._fetch_request(connection, request_id, for_update=True)
             if row["status"] != "approved" or row["subject_user_id"] is None:

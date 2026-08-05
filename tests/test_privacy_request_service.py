@@ -13,6 +13,7 @@ from bot.services.privacy_requests import (
     PrivacyRequestAuthorizationError,
     PrivacyRequestService,
 )
+from bot.uid_crypto import configure_uid_crypto
 
 
 @dataclass(frozen=True)
@@ -42,9 +43,7 @@ class FakeRepository:
             completed_at=None,
         )
 
-    async def append_denied_audit(
-        self, *, action_type: str, details: dict[str, Any]
-    ) -> None:
+    async def append_denied_audit(self, *, action_type: str, details: dict[str, Any]) -> None:
         self.denied.append((action_type, details))
 
     async def create_request(self, **kwargs: Any) -> PrivacyRequestRecord:
@@ -75,6 +74,14 @@ class FakeRepository:
     async def execute_request(self, **kwargs: Any) -> PrivacyRequestRecord:
         self.executed = kwargs
         return self.record
+
+
+@pytest.fixture(autouse=True)
+def _configure_crypto() -> None:
+    configure_uid_crypto(
+        "privacy-request-test-hmac-key",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    )
 
 
 @pytest.mark.asyncio

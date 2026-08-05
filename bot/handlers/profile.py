@@ -95,8 +95,7 @@ async def privacy_delete_request(
         )
     except PrivacyRequestConflict:
         await message.answer(
-            "У вас уже есть активный запрос на анонимизацию. "
-            "Статус: /privacy_delete_status"
+            "У вас уже есть активный запрос на анонимизацию. " "Статус: /privacy_delete_status"
         )
         return
     await message.answer(
