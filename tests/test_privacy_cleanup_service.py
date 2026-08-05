@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +135,26 @@ async def test_manual_apply_requires_exact_plan_confirmation(tmp_path: Path) -> 
     assert result.deleted_rows == 2
     assert result.audit_id == 17
     assert len(repository.applied) == 1
+
+
+@pytest.mark.asyncio
+async def test_apply_rejects_tampered_plan(tmp_path: Path) -> None:
+    inventory_path = _write_inventory(tmp_path, _inventory())
+    repository = FakeRepository(3)
+    service = PrivacyCleanupService(
+        repository,  # type: ignore[arg-type]
+        clock=FixedClock(datetime(2026, 8, 5, 1, tzinfo=UTC)),
+        inventory_path=inventory_path,
+    )
+    plan = await service.build_plan(batch_limit=2)
+    tampered = replace(plan, cutoff=plan.cutoff + timedelta(days=365))
+
+    with pytest.raises(PrivacyCleanupConfirmationError, match="integrity"):
+        await service.apply_plan(
+            tampered,
+            confirmation=tampered.confirmation_token,
+        )
+    assert repository.applied == []
 
 
 def test_inventory_fails_closed_for_unapproved_destructive_policy(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import uuid
 from dataclasses import dataclass
@@ -21,6 +22,30 @@ _APPROVED_RETENTION_CLASS = "temporary_7d"
 _APPROVED_DATASET_ID = "schedule_operator_state"
 _APPROVED_RULE_ID = "expired_schedule_setup_sessions"
 _APPROVED_PLANNER_KEY = "schedule_setup_sessions"
+
+_REQUIRED_DATASET_FIELDS = frozenset(
+    {
+        "id",
+        "tables",
+        "data_fields",
+        "purpose",
+        "sensitivity",
+        "access_roles",
+        "retention_class",
+        "backup_presence",
+        "deletion_action",
+        "exceptions",
+    }
+)
+_REQUIRED_STRING_LIST_FIELDS = ("data_fields", "access_roles", "exceptions")
+_ALLOWED_SENSITIVITY = frozenset({"moderate", "high", "restricted"})
+_ALLOWED_RETENTION_STATUS = frozenset(
+    {
+        "approved",
+        "proposed",
+        "owner-legal-decision-required",
+    }
+)
 
 
 class InventoryError(ValueError):
@@ -122,6 +147,10 @@ def _validate_retention_classes(value: object) -> Mapping[str, Mapping[str, obje
         name = _string(raw_name, field="retention class name")
         if not isinstance(raw_policy, dict):
             raise InventoryError(f"retention class {name!r} must be an object")
+        status = raw_policy.get("status")
+        if status not in _ALLOWED_RETENTION_STATUS:
+            raise InventoryError(f"retention class {name!r} has invalid status")
+        _string(raw_policy.get("purpose"), field=f"retention class {name!r} purpose")
         days = raw_policy.get("days")
         if days is not None and (not isinstance(days, int) or isinstance(days, bool) or days <= 0):
             raise InventoryError(f"retention class {name!r} days must be positive")
@@ -148,11 +177,30 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
 
     seen_ids: set[str] = set()
     seen_tables: set[str] = set()
+    seen_rule_ids: set[str] = set()
     enabled_rules: list[tuple[str, Mapping[str, object]]] = []
     for raw_dataset in datasets:
         if not isinstance(raw_dataset, dict):
             raise InventoryError("each dataset must be an object")
+        missing = sorted(_REQUIRED_DATASET_FIELDS - raw_dataset.keys())
+        if missing:
+            raise InventoryError(
+                f"dataset {raw_dataset.get('id', '<unknown>')!r} misses fields: {missing}"
+            )
         dataset_id = _string(raw_dataset.get("id"), field="dataset id")
+        for field_name in _REQUIRED_STRING_LIST_FIELDS:
+            values = raw_dataset.get(field_name)
+            if not isinstance(values, list) or not all(
+                isinstance(item, str) and item for item in values
+            ):
+                raise InventoryError(f"dataset {dataset_id!r} {field_name} must contain strings")
+        _string(raw_dataset.get("purpose"), field=f"dataset {dataset_id!r} purpose")
+        _string(
+            raw_dataset.get("deletion_action"),
+            field=f"dataset {dataset_id!r} deletion_action",
+        )
+        if raw_dataset.get("sensitivity") not in _ALLOWED_SENSITIVITY:
+            raise InventoryError(f"dataset {dataset_id!r} has invalid sensitivity")
         if dataset_id in seen_ids:
             raise InventoryError(f"duplicate dataset id: {dataset_id}")
         seen_ids.add(dataset_id)
@@ -181,6 +229,13 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
         for raw_rule in rules:
             if not isinstance(raw_rule, dict):
                 raise InventoryError(f"dataset {dataset_id!r} cleanup rule must be an object")
+            rule_id = _string(raw_rule.get("id"), field="cleanup rule id")
+            if rule_id in seen_rule_ids:
+                raise InventoryError(f"duplicate cleanup rule id: {rule_id}")
+            seen_rule_ids.add(rule_id)
+            _string(raw_rule.get("planner_key"), field=f"cleanup rule {rule_id!r} planner_key")
+            if raw_rule.get("status") != "approved":
+                raise InventoryError(f"cleanup rule {rule_id!r} must be explicitly approved")
             enabled = raw_rule.get("destructive_enabled")
             if not isinstance(enabled, bool):
                 raise InventoryError(
@@ -267,6 +322,34 @@ def _plan_sha256(
     return hashlib.sha256(canonical).hexdigest()
 
 
+def _validate_plan_integrity(
+    plan: PrivacyCleanupPlan,
+    policy: PrivacyCleanupPolicy,
+) -> None:
+    if plan.schema_version != 1:
+        raise PrivacyCleanupConfirmationError("cleanup plan schema is invalid")
+    if (
+        plan.dataset_id != policy.dataset_id
+        or plan.rule_id != policy.rule_id
+        or plan.retention_days != policy.retention_days
+    ):
+        raise PrivacyCleanupConfirmationError("cleanup plan is outside the allowlist")
+    if not plan.run_id or plan.eligible_rows < 0:
+        raise PrivacyCleanupConfirmationError("cleanup plan counters are invalid")
+    if plan.delete_limit <= 0 or plan.delete_limit > 10_000:
+        raise PrivacyCleanupConfirmationError("cleanup plan batch limit is invalid")
+    if plan.generated_at.tzinfo is None or plan.cutoff.tzinfo is None:
+        raise PrivacyCleanupConfirmationError("cleanup plan timestamps must be timezone-aware")
+    expected_sha256 = _plan_sha256(
+        policy=policy,
+        cutoff=plan.cutoff,
+        eligible_rows=plan.eligible_rows,
+        delete_limit=plan.delete_limit,
+    )
+    if not hmac.compare_digest(plan.plan_sha256, expected_sha256):
+        raise PrivacyCleanupConfirmationError("cleanup plan integrity check failed")
+
+
 class PrivacyCleanupService:
     """Plan and execute only the explicitly approved temporary cleanup rule."""
 
@@ -319,6 +402,7 @@ class PrivacyCleanupService:
         current_policy = load_cleanup_policy(self._inventory_path)
         if current_policy.policy_sha256 != plan.policy_sha256:
             raise PrivacyCleanupConfirmationError("privacy inventory changed after plan generation")
+        _validate_plan_integrity(plan, current_policy)
         if not automated and confirmation != plan.confirmation_token:
             raise PrivacyCleanupConfirmationError(
                 "confirmation must exactly match the current plan token"
