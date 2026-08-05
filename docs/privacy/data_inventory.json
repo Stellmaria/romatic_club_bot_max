@@ -3,7 +3,7 @@
   "owner": "Stellmaria",
   "technical_owner": "romatic_club_bot_max maintainers",
   "review_interval_days": 90,
-  "last_reviewed": "2026-08-04",
+  "last_reviewed": "2026-08-05",
   "policy_state": "engineering-baseline",
   "jurisdiction_status": "legal-retention-periods-not-approved",
   "backup_policy": {
@@ -72,7 +72,7 @@
       ],
       "retention_class": "account_lifetime",
       "backup_presence": true,
-      "deletion_action": "anonymize identity fields only after business-history review",
+      "deletion_action": "replace the Telegram user identifier with an unlinkable negative surrogate and remove optional profile fields after reviewed holds",
       "exceptions": [
         "owner/admin role",
         "security investigation",
@@ -111,7 +111,7 @@
       ],
       "retention_class": "security_365d",
       "backup_presence": true,
-      "deletion_action": "remove proof media after approved period; preserve minimal abuse-prevention digest when justified",
+      "deletion_action": "remove proof media and ciphertext; preserve only a minimal keyed abuse-prevention digest when reviewed holds require it",
       "exceptions": [
         "active ban",
         "open appeal",
@@ -153,7 +153,7 @@
       ],
       "retention_class": "business_hold",
       "backup_presence": true,
-      "deletion_action": "anonymize direct identity while preserving financial and integrity facts after approval",
+      "deletion_action": "replace direct Telegram identity with a request-specific surrogate while preserving financial and integrity facts",
       "exceptions": [
         "active auction",
         "open dispute",
@@ -188,7 +188,7 @@
       ],
       "retention_class": "business_hold",
       "backup_presence": true,
-      "deletion_action": "anonymize identity and proof references after approval",
+      "deletion_action": "replace direct Telegram identity with a request-specific surrogate and remove proof or publication references after reviewed holds",
       "exceptions": [
         "pending moderation",
         "open dispute",
@@ -219,7 +219,7 @@
       ],
       "retention_class": "business_hold",
       "backup_presence": true,
-      "deletion_action": "remove proof references and anonymize seller linkage after approved business retention",
+      "deletion_action": "remove proof and publication references and replace seller identity with a request-specific surrogate after reviewed holds",
       "exceptions": [
         "active listing",
         "open dispute"
@@ -250,7 +250,7 @@
       ],
       "retention_class": "account_lifetime",
       "backup_presence": true,
-      "deletion_action": "delete with account unless needed for short delivery suppression window",
+      "deletion_action": "delete during reviewed account anonymization unless an active delivery or review hold exists",
       "exceptions": [
         "active delivery retry"
       ]
@@ -283,7 +283,7 @@
       ],
       "retention_class": "security_365d",
       "backup_presence": true,
-      "deletion_action": "anonymize resolved records after approved security retention",
+      "deletion_action": "block while active; otherwise replace direct identity with a surrogate and redact free text or media references while retaining security facts",
       "exceptions": [
         "active ban",
         "open appeal",
@@ -310,7 +310,7 @@
       ],
       "retention_class": "security_365d",
       "backup_presence": true,
-      "deletion_action": "set actor identity null or pseudonymous while preserving action facts after approval",
+      "deletion_action": "set direct actor identity null while preserving action facts; privacy lifecycle evidence remains append-only and pseudonymous",
       "exceptions": [
         "open incident",
         "security investigation",
@@ -339,7 +339,7 @@
       ],
       "retention_class": "operational_30d",
       "backup_presence": true,
-      "deletion_action": "delete completed deliveries after approved period; retain unresolved failures",
+      "deletion_action": "block pending or unreviewed delivery; minimize terminal payload and replace direct chat identity with a surrogate",
       "exceptions": [
         "pending delivery",
         "review required",
@@ -386,6 +386,37 @@
           "status": "approved",
           "destructive_enabled": false
         }
+      ]
+    },
+    {
+      "id": "privacy_request_lifecycle",
+      "tables": [
+        "privacy_requests"
+      ],
+      "data_fields": [
+        "request_id",
+        "nullable subject_user_id",
+        "subject_digest",
+        "request status",
+        "policy and plan hashes",
+        "blocking and retained holds",
+        "aggregate outcome counts",
+        "timestamps"
+      ],
+      "purpose": "reviewed user-request lifecycle, execution authorization, evidence and replay protection",
+      "sensitivity": "restricted",
+      "access_roles": [
+        "application",
+        "owner-admin",
+        "incident-response"
+      ],
+      "retention_class": "security_365d",
+      "backup_presence": true,
+      "deletion_action": "null the direct subject identifier at cancellation or completion and preserve immutable pseudonymous lifecycle evidence",
+      "exceptions": [
+        "active request",
+        "open incident",
+        "required execution evidence"
       ]
     }
   ]
