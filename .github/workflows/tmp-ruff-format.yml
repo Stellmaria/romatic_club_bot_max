@@ -1,0 +1,108 @@
+name: Temporary Ruff Format
+
+on:
+  push:
+    branches:
+      - fix/profile-sync-and-telegram-retry
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install pinned development dependencies
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Apply non-automatic safe fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          profile = Path("db/profile_sync.py")
+          text = profile.read_text(encoding="utf-8")
+          old = '''    async with db_pool.acquire() as conn:
+              async with track_database_query("users.profile.sync", pool=db_pool.pool):
+                  async with conn.transaction():
+          '''
+          new = '''    async with (
+              db_pool.acquire() as conn,
+              track_database_query("users.profile.sync", pool=db_pool.pool),
+              conn.transaction(),
+          ):
+          '''
+          if old not in text:
+              raise SystemExit("profile_sync context pattern not found")
+          profile.write_text(text.replace(old, new), encoding="utf-8")
+
+          users = Path("db/users.py")
+          text = users.read_text(encoding="utf-8")
+          text = text.replace("from typing import Any, Dict, Optional", "from typing import Any")
+          text = text.replace("Optional[bool]", "bool | None")
+          text = text.replace("Optional[Dict[str, Any]]", "dict[str, Any] | None")
+          users.write_text(text, encoding="utf-8")
+          PY
+      - name: Apply Ruff fixes
+        run: |
+          python -m ruff check --fix --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --ignore S101,S603,S607 \
+            bot/services/admin_logging.py \
+            db/profile_sync.py \
+            db/users.py \
+            tests/integration/test_user_profile_sync_postgres.py \
+            tests/test_admin_logging_delivery.py \
+            tests/test_db_modularization.py \
+            tests/test_profile_sync.py
+      - name: Apply Black
+        run: |
+          python -m black \
+            bot/services/admin_logging.py \
+            db/profile_sync.py \
+            db/users.py \
+            tests/integration/test_user_profile_sync_postgres.py \
+            tests/test_admin_logging_delivery.py \
+            tests/test_db_modularization.py \
+            tests/test_profile_sync.py
+      - name: Verify quality
+        run: |
+          python -m black --check \
+            bot/services/admin_logging.py \
+            db/profile_sync.py \
+            db/users.py \
+            tests/integration/test_user_profile_sync_postgres.py \
+            tests/test_admin_logging_delivery.py \
+            tests/test_db_modularization.py \
+            tests/test_profile_sync.py
+          python -m ruff check --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --ignore S101,S603,S607 \
+            bot/services/admin_logging.py \
+            db/profile_sync.py \
+            db/users.py \
+            tests/integration/test_user_profile_sync_postgres.py \
+            tests/test_admin_logging_delivery.py \
+            tests/test_db_modularization.py \
+            tests/test_profile_sync.py
+      - name: Upload formatted files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: exact-ruff-black-format
+          path: |
+            bot/services/admin_logging.py
+            db/profile_sync.py
+            db/users.py
+            tests/integration/test_user_profile_sync_postgres.py
+            tests/test_admin_logging_delivery.py
+            tests/test_db_modularization.py
+            tests/test_profile_sync.py
+          if-no-files-found: error
+          retention-days: 1
