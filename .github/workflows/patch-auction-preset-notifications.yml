@@ -1,0 +1,127 @@
+name: Patch auction preset notifications
+
+on:
+  push:
+    branches: [fix/auction-preset-subscription-notifications]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/auction-preset-subscription-notifications
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install pinned development dependencies
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Connect named presets to auction notifications
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("bot/auction_notify.py")
+          source = path.read_text(encoding="utf-8")
+
+          import_needle = "    subscribers_for_rarity,\n)"
+          import_replacement = (
+              "    subscribers_for_rarity,\n"
+              "    subscribers_for_auction_presets,\n"
+              ")"
+          )
+          if "    subscribers_for_auction_presets,\n" not in source:
+              if import_needle not in source:
+                  raise SystemExit("auction preset import anchor not found")
+              source = source.replace(import_needle, import_replacement, 1)
+
+          main_anchor = "            async def pref(name: str) -> Set[int]:\n"
+          main_block = '''            try:
+              uids_presets = await subscribers_for_auction_presets(
+                  lot_title=lot_title,
+                  card_id=cid_for_meta,
+                  rarity=rarity_raw,
+                  deck_id=deck_id,
+                  deck_name=deck_name,
+              )
+              recipients.update(
+                  int(user_id)
+                  for user_id in (uids_presets or [])
+                  if _to_int(user_id) is not None
+              )
+          except DBError as err:
+              logger.warning(
+                  "subscribers_for_auction_presets(%r) failed: %s",
+                  lot_title,
+                  err,
+              )
+
+'''
+          if source.count("await subscribers_for_auction_presets(") < 1:
+              if main_anchor not in source:
+                  raise SystemExit("auction notification recipient anchor not found")
+              source = source.replace(main_anchor, main_block + main_anchor, 1)
+
+          helper_anchor = '''        except DBError as err:
+              logger.warning("subscribers_for_rarity(%r) failed: %s", rarity_slug, err)
+
+      return recipients
+'''
+          helper_replacement = '''        except DBError as err:
+              logger.warning("subscribers_for_rarity(%r) failed: %s", rarity_slug, err)
+
+      try:
+          uids_presets = await subscribers_for_auction_presets(
+              lot_title=lot_title,
+              card_id=_to_int(auction.get("card_id")),
+              rarity=rarity_slug or None,
+              deck_id=_to_int(auction.get("deck_id")),
+              deck_name=_to_str(auction.get("deck_name")).strip() or None,
+          )
+          recipients.update(
+              int(user_id)
+              for user_id in (uids_presets or [])
+              if _to_int(user_id) is not None
+          )
+      except DBError as err:
+          logger.warning(
+              "subscribers_for_auction_presets(%r) failed: %s",
+              lot_title,
+              err,
+          )
+
+      return recipients
+'''
+          if source.count("await subscribers_for_auction_presets(") < 2:
+              if helper_anchor not in source:
+                  raise SystemExit("recipient helper anchor not found")
+              source = source.replace(helper_anchor, helper_replacement, 1)
+
+          path.write_text(source, encoding="utf-8")
+          PY
+      - name: Format and run focused tests
+        run: |
+          python -m black bot/auction_notify.py tests/test_auction_named_preset_notifications.py
+          python -m pytest -q \
+            tests/test_auction_named_preset_notifications.py \
+            tests/test_auction_notification_recipients.py
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add bot/auction_notify.py tests/test_auction_named_preset_notifications.py
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix: notify named auction preset subscribers"
+          git push origin HEAD:fix/auction-preset-subscription-notifications
