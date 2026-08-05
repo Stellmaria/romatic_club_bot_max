@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Literal
 
@@ -18,11 +19,36 @@ UIDRecoveryState = Literal[
 ]
 
 _UID_RE = re.compile(r"^[0-9a-f]{24}$", re.IGNORECASE)
+_CODE_RE = re.compile(r"^MX-[0-9]{5}$", re.IGNORECASE)
 
 
 def _valid_uid(value: str | None) -> str | None:
     normalized = norm_uid(value or "")
     return normalized if _UID_RE.fullmatch(normalized) else None
+
+
+async def _lock_revision_request(
+    conn: object,
+    request_id: int,
+    *,
+    user_id: int,
+) -> UIDRecoveryState:
+    row = await conn.fetchrow(  # type: ignore[attr-defined]
+        """
+        SELECT user_id, status
+        FROM public.uid_verification_requests
+        WHERE id=$1
+        FOR UPDATE
+        """,
+        int(request_id),
+    )
+    if not row:
+        return "not_found"
+    if int(row["user_id"] or 0) != int(user_id):
+        return "forbidden"
+    if str(row["status"] or "").strip().lower() != "revision":
+        return "wrong_status"
+    return "ready"
 
 
 async def ensure_request_uid(
@@ -116,21 +142,13 @@ async def replace_revision_uid(
 
     pool = await get_db_pool()
     async with pool.acquire() as conn, conn.transaction():
-        row = await conn.fetchrow(
-            """
-            SELECT user_id, status
-            FROM public.uid_verification_requests
-            WHERE id=$1
-            FOR UPDATE
-            """,
-            int(request_id),
+        state = await _lock_revision_request(
+            conn,
+            request_id,
+            user_id=user_id,
         )
-        if not row:
-            return "not_found"
-        if int(row["user_id"] or 0) != int(user_id):
-            return "forbidden"
-        if str(row["status"] or "").strip().lower() != "revision":
-            return "wrong_status"
+        if state != "ready":
+            return state
 
         await conn.execute(
             """
@@ -149,4 +167,124 @@ async def replace_revision_uid(
     return "ready"
 
 
-__all__ = ["UIDRecoveryState", "ensure_request_uid", "replace_revision_uid"]
+async def prepare_revision_profile(
+    request_id: int,
+    *,
+    user_id: int,
+    verification_code: str,
+) -> UIDRecoveryState:
+    """Store a fresh challenge code before accepting a replacement profile proof."""
+
+    code = str(verification_code or "").strip().upper()
+    if not _CODE_RE.fullmatch(code):
+        return "invalid"
+
+    pool = await get_db_pool()
+    async with pool.acquire() as conn, conn.transaction():
+        state = await _lock_revision_request(
+            conn,
+            request_id,
+            user_id=user_id,
+        )
+        if state != "ready":
+            return state
+
+        await conn.execute(
+            """
+            UPDATE public.uid_verification_requests
+            SET verification_code=$2
+            WHERE id=$1
+            """,
+            int(request_id),
+            code,
+        )
+    return "ready"
+
+
+async def replace_revision_profile(
+    request_id: int,
+    *,
+    user_id: int,
+    packed_file_id: str,
+) -> UIDRecoveryState:
+    """Replace the profile proof only for the owner of an active revision."""
+
+    packed = str(packed_file_id or "").strip()
+    if not packed:
+        return "invalid"
+
+    pool = await get_db_pool()
+    async with pool.acquire() as conn, conn.transaction():
+        state = await _lock_revision_request(
+            conn,
+            request_id,
+            user_id=user_id,
+        )
+        if state != "ready":
+            return state
+
+        await conn.execute(
+            """
+            UPDATE public.uid_verification_requests
+            SET profile_proof_file_id=$2
+            WHERE id=$1
+            """,
+            int(request_id),
+            packed,
+        )
+    return "ready"
+
+
+async def save_revision_other_response(
+    request_id: int,
+    *,
+    user_id: int,
+    response: str,
+) -> UIDRecoveryState:
+    """Persist the user's free-form revision response in the immutable event log."""
+
+    text = str(response or "").strip()
+    if not text:
+        return "invalid"
+
+    payload = json.dumps(
+        {"flag": "other", "response": text},
+        ensure_ascii=False,
+    )
+
+    pool = await get_db_pool()
+    async with pool.acquire() as conn, conn.transaction():
+        state = await _lock_revision_request(
+            conn,
+            request_id,
+            user_id=user_id,
+        )
+        if state != "ready":
+            return state
+
+        await conn.execute(
+            """
+            INSERT INTO public.uid_verification_events(
+                request_id,
+                actor_id,
+                actor_username,
+                event_type,
+                details
+            )
+            VALUES ($1, $2, NULL, 'revision_response', $3::jsonb)
+            """,
+            int(request_id),
+            int(user_id),
+            payload,
+        )
+    return "ready"
+
+
+__all__ = [
+    "UIDRecoveryState",
+    "ensure_request_uid",
+    "prepare_revision_profile",
+    "replace_revision_profile",
+    "replace_revision_uid",
+    "save_revision_other_response",
+]
