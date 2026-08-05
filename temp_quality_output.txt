@@ -1,0 +1,41 @@
++ /opt/hostedtoolcache/Python/3.13.14/x64/bin/python -m black --check tests/test_schedule_admin_access.py userbot/handlers/schedule_admin.py
+All done! ✨ 🍰 ✨
+2 files would be left unchanged.
++ /opt/hostedtoolcache/Python/3.13.14/x64/bin/python -m ruff check --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --output-format=concise --ignore S101,S603,S607 tests/test_schedule_admin_access.py userbot/handlers/schedule_admin.py
+All checks passed!
++ /opt/hostedtoolcache/Python/3.13.14/x64/bin/python -m mypy --strict --follow-imports=silent --no-error-summary --namespace-packages --explicit-package-bases userbot/handlers/schedule_admin.py
+userbot/handlers/schedule_admin.py:64: error: Argument "config" has
+incompatible type "LegacyConfigAdapter"; expected "UserbotSettings"  [arg-type]
+    ...eys = await store_emoji_assignments(assignments, config=legacy_config)
+                                                               ^~~~~~~~~~~~~
+userbot/handlers/schedule_admin.py:81: error: Argument "config" to
+"preview_schedule_announcement" has incompatible type "LegacyConfigAdapter";
+expected "UserbotSettings"  [arg-type]
+                    config=legacy_config,
+                           ^~~~~~~~~~~~~
+pyproject.toml: note: unused section(s): module = ['aiogram.*', 'dateutil.*']
+Traceback (most recent call last):
+  File "/home/runner/work/romatic_club_bot_max/romatic_club_bot_max/scripts/quality.py", line 447, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/home/runner/work/romatic_club_bot_max/romatic_club_bot_max/scripts/quality.py", line 422, in main
+    command_changed(base)
+    ~~~~~~~~~~~~~~~^^^^^^
+  File "/home/runner/work/romatic_club_bot_max/romatic_club_bot_max/scripts/quality.py", line 176, in command_changed
+    run(
+    ~~~^
+        (
+        ^
+    ...<9 lines>...
+        )
+        ^
+    )
+    ^
+  File "/home/runner/work/romatic_club_bot_max/romatic_club_bot_max/scripts/quality.py", line 43, in run
+    subprocess.run(args, cwd=ROOT, check=True, timeout=timeout)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.13.14/x64/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '('/opt/hostedtoolcache/Python/3.13.14/x64/bin/python', '-m', 'mypy', '--strict', '--follow-imports=silent', '--no-error-summary', '--namespace-packages', '--explicit-package-bases', 'userbot/handlers/schedule_admin.py')' returned non-zero exit status 1.
+STATUS=1
