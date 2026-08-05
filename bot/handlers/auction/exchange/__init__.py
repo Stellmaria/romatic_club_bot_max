@@ -33,7 +33,7 @@ _original_q_exchange_approved_decks = _catalog.q_exchange_approved_decks
 
 
 async def _fixed_q_exchange_approved_decks() -> list[dict[str, Any]]:
-    """Return the four supported decks with ID-consistent labels."""
+    """Build the four supported deck rows with matching labels."""
     rows = await _original_q_exchange_approved_decks()
     by_id = {int(row.get("deck_id") or 0): row for row in rows}
     result: list[dict[str, Any]] = []
