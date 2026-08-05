@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from bot.handlers.uid_verification_recovery import _revision_text, _valid_uid
+import re
+
+from bot.handlers.uid_verification_recovery import (
+    MAX_OTHER_RESPONSE_LENGTH,
+    _new_revision_code,
+    _normalize_other_response,
+    _remaining_after_completion,
+    _revision_text,
+    _valid_uid,
+)
 
 
 def test_valid_uid_normalizes_legacy_plaintext() -> None:
@@ -20,3 +29,23 @@ def test_revision_text_escapes_moderator_comment() -> None:
     assert "Профиль + код" in text
     assert "&lt;b&gt;unsafe&lt;/b&gt;" in text
     assert "<b>unsafe</b>" not in text
+
+
+def test_new_revision_code_matches_profile_challenge_contract() -> None:
+    values = {_new_revision_code() for _ in range(20)}
+
+    assert values
+    assert all(re.fullmatch(r"MX-[0-9]{5}", value) for value in values)
+
+
+def test_other_response_is_trimmed_and_bounded() -> None:
+    assert _normalize_other_response("  исправлено  ") == "исправлено"
+    assert _normalize_other_response("   ") is None
+    assert _normalize_other_response("x" * (MAX_OTHER_RESPONSE_LENGTH + 1)) is None
+
+
+def test_completed_revision_item_is_removed_without_reordering() -> None:
+    remaining = ["profile", "other", "deal1_screen"]
+
+    assert _remaining_after_completion(remaining, "other") == ["profile", "deal1_screen"]
+    assert _remaining_after_completion(remaining, "missing") == remaining
