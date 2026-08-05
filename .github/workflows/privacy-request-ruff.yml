@@ -10,7 +10,7 @@ jobs:
   finalize:
     if: >-
       github.ref == 'refs/heads/privacy/request-lifecycle-anonymization' &&
-      github.event.head_commit.message == 'chore(ci): finalize privacy request lint'
+      github.event.head_commit.message == 'chore(ci): retry privacy request lint'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -32,15 +32,8 @@ jobs:
 
           path = Path('bot/handlers/profile.py')
           text = path.read_text(encoding='utf-8')
-          old = '''        await message.answer(
-            "У вас уже есть активный запрос на анонимизацию. " "Статус: /privacy_delete_status"
-        )
-'''
-          new = '''        await message.answer(
-            "У вас уже есть активный запрос на анонимизацию. "  # noqa: RUF001
-            "Статус: /privacy_delete_status"
-        )
-'''
+          old = '            "У вас уже есть активный запрос на анонимизацию. " "Статус: /privacy_delete_status"\n'
+          new = '            "У вас уже есть активный запрос на анонимизацию. "  # noqa: RUF001\n            "Статус: /privacy_delete_status"\n'
           if old not in text:
               raise SystemExit('conflict message marker not found')
           text = text.replace(old, new)
@@ -52,9 +45,7 @@ jobs:
           PY
           python -m ruff check --select I --fix bot/repositories/privacy_requests.py
           python -m black bot/handlers/profile.py bot/repositories/privacy_requests.py
-          python -m ruff check \
-            bot/handlers/profile.py \
-            bot/repositories/privacy_requests.py
+          python -m ruff check bot/handlers/profile.py bot/repositories/privacy_requests.py
           git diff --check
       - name: Commit exact lint fixes
         run: |
