@@ -20,18 +20,20 @@ jobs:
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
       - name: Install development graph
-        run: uv sync --frozen --all-extras
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
       - name: Apply and validate patch
         run: |
-          uv run python scripts/temp_patch_schedule_preview.py
-          uv run black \
+          python scripts/temp_patch_schedule_preview.py
+          black \
             userbot/schedule_publication.py \
             userbot/schedule_review_service.py \
             userbot/handlers/schedule_admin.py \
             tests/test_schedule_admin_access.py \
             tests/test_schedule_preview_graceful_degradation.py
-          uv run pytest -q \
+          pytest -q \
             tests/test_schedule_admin_access.py \
             tests/test_schedule_preview_graceful_degradation.py
       - name: Commit patch
