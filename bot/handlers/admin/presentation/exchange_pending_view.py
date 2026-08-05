@@ -1,6 +1,10 @@
 """Presentation helpers for choosing and browsing pending exchange requests."""
 
+# ruff: noqa: RUF001
+
 from __future__ import annotations
+
+from contextlib import suppress
 
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -97,7 +101,7 @@ async def _edit_or_answer(
             disable_web_page_preview=True,
         )
         return edited if isinstance(edited, Message) else message
-    except Exception:
+    except Exception:  # noqa: BLE001
         return await message.answer(
             text,
             parse_mode="HTML",
@@ -123,7 +127,7 @@ async def _edit_header_or_answer(
             disable_web_page_preview=True,
         )
         return header_message_id
-    except Exception:
+    except Exception:  # noqa: BLE001
         header = await message.answer(
             text,
             parse_mode="HTML",
@@ -140,13 +144,11 @@ async def clear_pending_exchange_detail(
     data = await state.get_data()
     detail_message_id = data.get(_DETAIL_MESSAGE_ID_KEY)
     if detail_message_id:
-        try:
+        with suppress(Exception):
             await message.bot.delete_message(
                 chat_id=message.chat.id,
                 message_id=int(detail_message_id),
             )
-        except Exception:
-            pass
     await state.update_data(
         **{
             _DETAIL_MESSAGE_ID_KEY: None,
@@ -200,7 +202,7 @@ async def _send_pending_exchange_detail(
     cover_id = None
     try:
         cover_id, _ = await get_exchange_cover_media(batch_id)
-    except Exception:
+    except Exception:  # noqa: BLE001
         cover_id = None
     media_id = cover_id or (proof_id if has_proof else None)
 

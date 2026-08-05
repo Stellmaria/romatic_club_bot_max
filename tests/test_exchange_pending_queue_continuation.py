@@ -39,10 +39,10 @@ async def test_approval_continuation_shows_next_pending_exchange(
             assert include_luxury is True
             return rows
 
-    async def fake_create(cls):
+    async def fake_create(_cls):
         return FakeModeration()
 
-    async def fake_send_detail(message, batch):
+    async def fake_send_detail(_message, batch):
         assert batch["batch_id"] == 202
         return SimpleNamespace(message_id=303)
 
