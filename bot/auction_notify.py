@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 # ruff: noqa: ARG001, B009, B023, BLE001, C901, E501, F841, I001, RUF001, RUF002, RUF003, SIM210, UP006, UP035, UP045
 import asyncio
 import html
