@@ -1,5 +1,8 @@
 """Public composition package for the auction exchange feature."""
 
+# Public compatibility exports are intentionally grouped by feature module.
+# ruff: noqa: I001
+
 from __future__ import annotations
 
 from aiogram import Router
