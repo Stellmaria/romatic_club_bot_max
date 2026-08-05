@@ -1,5 +1,7 @@
 """Owner commands and approval callbacks for Premium schedule publication."""
 
+# ruff: noqa: RUF001
+
 from __future__ import annotations
 
 import logging
