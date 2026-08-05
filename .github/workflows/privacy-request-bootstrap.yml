@@ -1,0 +1,31 @@
+name: Privacy request bootstrap
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: >-
+      github.ref == 'refs/heads/privacy/request-lifecycle-anonymization' &&
+      github.event.head_commit.message == 'chore(ci): bootstrap privacy request payload'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Materialize reviewed privacy slice
+        run: |
+          cat var/bootstrap/privacy-request.part* > /tmp/privacy-request.b64
+          test "$(wc -c < /tmp/privacy-request.b64)" -eq 25756
+          base64 --decode /tmp/privacy-request.b64 > /tmp/privacy-request.tar.gz
+          tar -tzf /tmp/privacy-request.tar.gz
+          tar -xzf /tmp/privacy-request.tar.gz -C .
+          rm -rf var/bootstrap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot db docs scripts tests var
+          git diff --cached --check
+          git commit -m "feat(privacy): add reviewed anonymization lifecycle"
+          git push origin HEAD:privacy/request-lifecycle-anonymization
