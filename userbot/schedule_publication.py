@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from telethon import TelegramClient
+from telethon import Button, TelegramClient
 
 from bot.core.settings import UserbotSettings
 from bot.core.time import MOSCOW, to_moscow
@@ -21,9 +21,11 @@ from db.schedule_publication import (
 )
 from db.schedule_setup import (
     get_emoji_assets,
+    get_preview_target,
     get_publication_review,
     get_schedule_lots_for_day,
     mark_publication_published,
+    record_pending_preview,
 )
 from userbot import schedule_announcements as base
 
@@ -177,6 +179,102 @@ async def preview_schedule_announcement(
     return await base.preview_schedule_announcement(target_date, config=config)
 
 
+def render_schedule_configuration_warning(
+    target_date: date,
+    issues: Sequence[str],
+) -> str:
+    trimmed = "; ".join(issues)[:3500]
+    return (
+        "⚠️ Расписание показано, но данные заполнены не полностью\n\n"
+        f"Дата: {target_date:%d.%m.%Y}\n"
+        f"Нужно исправить: {trimmed}\n\n"
+        "Исправьте карточки через /schedule_setup и проверьте /schedule_audit."
+    )
+
+
+async def schedule_preview_issues(target_date: date) -> tuple[str, ...]:
+    lots = await get_schedule_lots_for_day(target_date)
+    if not lots:
+        return ()
+    assets = await get_emoji_assets()
+    return base.schedule_configuration_issues(lots, assets)
+
+
+async def _send_schedule_configuration_warning(
+    telegram_client: TelegramClient,
+    *,
+    chat_id: int,
+    thread_id: int | None,
+    target_date: date,
+    issues: Sequence[str],
+) -> None:
+    await telegram_client.send_message(
+        int(chat_id),
+        render_schedule_configuration_warning(target_date, issues),
+        link_preview=False,
+        reply_to=int(thread_id) if thread_id else None,
+    )
+
+
+async def send_schedule_review_preview(
+    telegram_client: TelegramClient,
+    target_date: date,
+) -> int | None:
+    existing = await get_publication_review(target_date)
+    if existing and existing.get("preview_message_id"):
+        return int(existing["preview_message_id"])
+
+    target = await get_preview_target()
+    if not target:
+        raise ScheduleEmojiConfigurationError(
+            "не настроена админская ветка для проверки расписания"
+        )
+
+    lots = await get_schedule_lots_for_day(target_date)
+    if not lots:
+        return None
+    assets = await get_emoji_assets()
+    issues = base.schedule_configuration_issues(lots, assets)
+    rendered = render_schedule_announcement(target_date, lots, assets)
+    buttons = [
+        [
+            Button.inline(
+                "✅ Всё верно",
+                data=f"sched:approve:{target_date.isoformat()}".encode(),
+            ),
+            Button.inline(
+                "❌ Отклонить",
+                data=f"sched:reject:{target_date.isoformat()}".encode(),
+            ),
+        ]
+    ]
+    chat_id = int(target["chat_id"])
+    thread_id = int(target["thread_id"]) if target.get("thread_id") else None
+    message = await telegram_client.send_message(
+        chat_id,
+        rendered.text,
+        formatting_entities=list(rendered.entities),
+        buttons=buttons,
+        link_preview=False,
+        reply_to=thread_id,
+    )
+    await record_pending_preview(
+        target_date,
+        chat_id=chat_id,
+        thread_id=thread_id,
+        message_id=int(message.id),
+    )
+    if issues:
+        await _send_schedule_configuration_warning(
+            telegram_client,
+            chat_id=chat_id,
+            thread_id=thread_id,
+            target_date=target_date,
+            issues=issues,
+        )
+    return int(message.id)
+
+
 def _as_moscow(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=MOSCOW)
@@ -326,7 +424,7 @@ async def schedule_announcement_watchdog(  # noqa: C901
                 )
                 if preview_date is not None:
                     try:
-                        preview_message_id = await base.send_schedule_review_preview(
+                        preview_message_id = await send_schedule_review_preview(
                             telegram_client,
                             preview_date,
                         )
@@ -397,8 +495,11 @@ __all__ = [
     "preview_schedule_announcement",
     "publish_schedule_announcement",
     "render_schedule_announcement",
+    "render_schedule_configuration_warning",
     "schedule_announcement_watchdog",
+    "schedule_preview_issues",
     "schedule_publication_is_ready",
     "schedule_publication_ready_at",
+    "send_schedule_review_preview",
     "store_emoji_assignments",
 ]
