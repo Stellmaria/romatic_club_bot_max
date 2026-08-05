@@ -99,8 +99,7 @@ async def count_new_users() -> int:
 
 
 async def get_all_trusted_users():
-    return await fetch(
-        """
+    return await fetch("""
         SELECT u.username, u.user_id, u.is_luxury
         FROM users u
         WHERE u.is_trusted = true
@@ -114,8 +113,7 @@ async def get_all_trusted_users():
             WHERE u2.username = t.username AND u2.is_trusted = true
         )
         ORDER BY username
-        """
-    )
+        """)
 
 
 async def is_luxury_user(user_id: int) -> bool:

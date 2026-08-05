@@ -26,7 +26,6 @@ from bot.repositories.admin_logs import AdminLogsRepository
 from bot.services.admin_owners import get_lot_owners_text
 from db.pool import get_db_pool
 
-
 _MESSAGE_LOCKS: dict[int, asyncio.Lock] = {}
 _MAX_SEND_ATTEMPTS = 2
 
@@ -113,8 +112,7 @@ async def send_message_safe(
             except TelegramRetryAfter as exc:
                 retry_after = max(0.0, float(exc.retry_after))
                 logging.warning(
-                    "send_message_safe rate limited chat_id=%s retry_after=%.3f "
-                    "attempt=%d/%d",
+                    "send_message_safe rate limited chat_id=%s retry_after=%.3f " "attempt=%d/%d",
                     chat_id,
                     retry_after,
                     attempt,
@@ -128,9 +126,7 @@ async def send_message_safe(
                 TelegramBadRequest,
                 TelegramNetworkError,
             ) as exc:
-                logging.warning(
-                    "send_message_safe failed chat_id=%s: %s", chat_id, exc
-                )
+                logging.warning("send_message_safe failed chat_id=%s: %s", chat_id, exc)
                 return False
             except Exception as exc:  # noqa: BLE001
                 logging.exception(
@@ -157,10 +153,7 @@ async def send_admin_log(
 
     chats = _iter_admin_log_chats()
     if not chats:
-        logging.info(
-            "send_admin_log: no log chats configured "
-            "(LOG_CHAT_ID/ADMIN_LOG_CHATS)"
-        )
+        logging.info("send_admin_log: no log chats configured " "(LOG_CHAT_ID/ADMIN_LOG_CHATS)")
         return
 
     for chat_id in chats:
@@ -242,9 +235,7 @@ async def log_delete_request(
 ) -> None:
     """Resolve and deliver the audit message for a lot deletion request."""
     raw_snapshot = request.get("snapshot")
-    snapshot: Mapping[str, Any] = (
-        raw_snapshot if isinstance(raw_snapshot, Mapping) else {}
-    )
+    snapshot: Mapping[str, Any] = raw_snapshot if isinstance(raw_snapshot, Mapping) else {}
     candidates = (
         request.get("auction_id"),
         request.get("lot_id"),

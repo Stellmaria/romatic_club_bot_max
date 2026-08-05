@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DB_MODULES = (
     "core",
@@ -76,16 +75,11 @@ def test_every_in_repository_legacy_import_is_still_available() -> None:
     for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if (
-                not isinstance(node, ast.ImportFrom)
-                or node.module not in {"db.db", "db.legacy"}
-            ):
+            if not isinstance(node, ast.ImportFrom) or node.module not in {"db.db", "db.legacy"}:
                 continue
             for alias in node.names:
                 if alias.name != "*" and not hasattr(facade, alias.name):
-                    missing.setdefault(alias.name, []).append(
-                        str(path.relative_to(ROOT))
-                    )
+                    missing.setdefault(alias.name, []).append(str(path.relative_to(ROOT)))
     assert missing == {}
 
 
