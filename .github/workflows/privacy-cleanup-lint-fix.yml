@@ -70,6 +70,7 @@ jobs:
               'from collections.abc import Mapping\nfrom pathlib import Path\n',
               1,
           )
+          text = text.replace('import asyncpg  # noqa: E402\n', 'import asyncpg\n', 1)
           script.write_text(text, encoding='utf-8')
 
           tests = Path('tests/test_privacy_cleanup_service.py')
