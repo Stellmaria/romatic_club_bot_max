@@ -1,0 +1,46 @@
+name: Temporary Black Format
+
+on:
+  push:
+    branches:
+      - fix/profile-sync-and-telegram-retry
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install pinned development dependencies
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Format changed Python files
+        run: |
+          python -m black \
+            bot/services/admin_logging.py \
+            db/users.py \
+            tests/integration/test_user_profile_sync_postgres.py \
+            tests/test_db_modularization.py
+      - name: Upload formatted files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: exact-black-format
+          path: |
+            bot/services/admin_logging.py
+            db/users.py
+            tests/integration/test_user_profile_sync_postgres.py
+            tests/test_db_modularization.py
+          if-no-files-found: error
+          retention-days: 1
