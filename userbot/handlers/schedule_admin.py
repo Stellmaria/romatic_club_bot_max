@@ -28,7 +28,9 @@ async def _is_authorized(event: object) -> bool:
     if getattr(event, "out", False):
         return True
     sender_id = getattr(event, "sender_id", None)
-    allowed = set(legacy_config.ADMINS_OWNERS or legacy_config.ADMINS)
+    owners = legacy_config.ADMINS_OWNERS or ()
+    admins = legacy_config.ADMINS or ()
+    allowed = {int(admin_id) for admin_id in (*owners, *admins)}
     return bool(sender_id and int(sender_id) in allowed)
 
 
