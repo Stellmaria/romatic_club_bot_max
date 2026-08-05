@@ -32,51 +32,50 @@ jobs:
 
           service = Path('bot/services/privacy_cleanup.py')
           text = service.read_text(encoding='utf-8')
-          marker = '''    tables = schedule_dataset.get("tables")
-    if _APPROVED_PLANNER_KEY not in tables:
-'''
-          replacement = '''    tables = schedule_dataset.get("tables")
-    if not isinstance(tables, list):
-        raise InventoryError("schedule_operator_state tables must be an array")
-    if _APPROVED_PLANNER_KEY not in tables:
-'''
+          marker = (
+              '    tables = schedule_dataset.get("tables")\n'
+              '    if _APPROVED_PLANNER_KEY not in tables:\n'
+          )
+          replacement = (
+              '    tables = schedule_dataset.get("tables")\n'
+              '    if not isinstance(tables, list):\n'
+              '        raise InventoryError("schedule_operator_state tables must be an array")\n'
+              '    if _APPROVED_PLANNER_KEY not in tables:\n'
+          )
           if marker not in text:
               raise SystemExit('service table validation marker not found')
           service.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
 
           workers = Path('bot/bootstrap/workers.py')
           text = workers.read_text(encoding='utf-8')
-          import_marker = '''import asyncio
-import logging
-
-from aiogram import Bot
-'''
-          import_replacement = '''import asyncio
-import logging
-from collections.abc import Awaitable, Callable
-from typing import TypedDict, cast
-
-from aiogram import Bot
-'''
+          import_marker = (
+              'import asyncio\n'
+              'import logging\n\n'
+              'from aiogram import Bot\n'
+          )
+          import_replacement = (
+              'import asyncio\n'
+              'import logging\n'
+              'from collections.abc import Awaitable, Callable\n'
+              'from typing import TypedDict, cast\n\n'
+              'from aiogram import Bot\n'
+          )
           if import_marker not in text:
               raise SystemExit('workers import marker not found')
           text = text.replace(import_marker, import_replacement, 1)
 
           logger_marker = 'logger = logging.getLogger("auction_bot.privacy_cleanup")\n'
-          definitions = '''logger = logging.getLogger("auction_bot.privacy_cleanup")
-
-
-type _LegacyBotLoop = Callable[[Bot], Awaitable[None]]
-
-
-class _WorkerOptions(TypedDict):
-    criticality: WorkerCriticality
-    restart_policy: RestartPolicy
-    initial_backoff: float
-    max_backoff: float
-    max_failures: int
-    shutdown_timeout: float
-'''
+          definitions = (
+              'logger = logging.getLogger("auction_bot.privacy_cleanup")\n\n\n'
+              'type _LegacyBotLoop = Callable[[Bot], Awaitable[None]]\n\n\n'
+              'class _WorkerOptions(TypedDict):\n'
+              '    criticality: WorkerCriticality\n'
+              '    restart_policy: RestartPolicy\n'
+              '    initial_backoff: float\n'
+              '    max_backoff: float\n'
+              '    max_failures: int\n'
+              '    shutdown_timeout: float\n'
+          )
           if logger_marker not in text:
               raise SystemExit('workers logger marker not found')
           text = text.replace(logger_marker, definitions, 1)
