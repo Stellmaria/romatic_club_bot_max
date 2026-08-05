@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+import asyncpg
+
 from db.core import (
     execute,
     fetch,
@@ -41,10 +43,11 @@ async def set_subscription(user_id: int, value: bool) -> None:
 @require_db_pool
 async def is_subscribed(user_id: int) -> bool | None:
     async with db_pool.acquire() as conn:
-        return await conn.fetchval(
+        value = await conn.fetchval(
             "SELECT is_subscribed FROM users WHERE user_id = $1",
             user_id,
         )
+    return bool(value) if value is not None else None
 
 
 @require_db_pool
@@ -79,7 +82,7 @@ async def get_user_id_by_username(username: str) -> int | None:
 
 
 @require_db_pool
-async def get_users_by_ids(user_ids: list[int]) -> list[dict]:
+async def get_users_by_ids(user_ids: list[int]) -> list[dict[str, Any]]:
     if not user_ids:
         return []
     async with db_pool.acquire() as conn:
@@ -100,7 +103,7 @@ async def count_new_users() -> int:
     return int(value or 0)
 
 
-async def get_all_trusted_users():
+async def get_all_trusted_users() -> list[asyncpg.Record]:
     return await fetch("""
         SELECT u.username, u.user_id, u.is_luxury
         FROM users u
@@ -133,7 +136,7 @@ async def set_trusted_status(user_id: int, is_trusted: bool) -> None:
     )
 
 
-async def get_all_users():
+async def get_all_users() -> list[asyncpg.Record]:
     return await fetch("SELECT user_id, username, is_luxury FROM users")
 
 
@@ -169,7 +172,7 @@ async def sync_trusted_status(user_id: int, username: str | None = None) -> None
 
 
 @require_db_pool
-async def get_user_by_username(username: str) -> dict | None:
+async def get_user_by_username(username: str) -> dict[str, Any] | None:
     normalized = (username or "").strip().lstrip("@").lower()
     if not normalized:
         return None

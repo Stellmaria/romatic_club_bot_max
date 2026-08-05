@@ -187,7 +187,7 @@ async def send_lot_edit_log(
     *,
     admin_user: object,
     auction_id: int,
-    lot_for_log: dict,
+    lot_for_log: dict[str, Any],
     changes: list[tuple[str, object, object]],
     audit_action_type: str,
     audit_details: str,
@@ -223,9 +223,11 @@ def _as_str(value: object, default: str = "") -> str:
 
 
 def _try_int(value: object) -> int | None:
+    if not isinstance(value, (str, bytes, bytearray, int)):
+        return None
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except ValueError:
         return None
 
 
