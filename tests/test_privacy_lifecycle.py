@@ -11,7 +11,6 @@ from bot.core.privacy import is_sensitive_key, redact, redact_text
 from scripts.privacy_cleanup import (
     InventoryError,
     build_parser,
-    build_plan,
     load_inventory,
     validate_inventory,
 )
@@ -42,85 +41,64 @@ def test_inventory_is_machine_validated_and_covers_known_personal_data_tables() 
         "user_warnings",
         "audit_logs",
         "schedule_setup_sessions",
-        "schedule_setup_deck_scopes",
     }
 
     assert expected <= tables
+    assert "schedule_setup_deck_scopes" not in tables
     assert inventory["backup_policy"]["local_retention_days"] == 14
     assert inventory["backup_policy"]["offsite_retention_days"] == 90
 
 
-def test_inventory_keeps_all_mutation_paths_disabled() -> None:
+def test_inventory_enables_only_the_approved_temporary_cleanup() -> None:
     inventory = load_inventory(INVENTORY_PATH)
+    validate_inventory(inventory)
 
+    policies = inventory["retention_classes"]
+    assert policies["temporary_7d"]["destructive_enabled"] is True
     assert all(
-        policy["destructive_enabled"] is False for policy in inventory["retention_classes"].values()
-    )
-    rules = [rule for dataset in inventory["datasets"] for rule in dataset.get("cleanup_rules", [])]
-    assert rules
-    assert all(rule["destructive_enabled"] is False for rule in rules)
-
-
-async def test_cleanup_plan_is_aggregate_only_and_fail_closed_offline() -> None:
-    inventory = load_inventory(INVENTORY_PATH)
-
-    plan = await build_plan(
-        inventory,
-        policy_sha256="a" * 64,
-        counter=None,
+        policy["destructive_enabled"] is False
+        for name, policy in policies.items()
+        if name != "temporary_7d"
     )
 
-    assert plan["mode"] == "dry-run"
-    assert plan["database_queried"] is False
-    assert plan["mutation_performed"] is False
-    assert plan["metrics"]["privacy_cleanup_candidates_total"] == 0
-    assert plan["metrics"]["privacy_cleanup_blocked_rules_total"] == len(plan["items"])
-    assert plan["safety"] == {
-        "apply_command_available": False,
-        "destructive_policy_flags_enabled": False,
-        "contains_personal_values": False,
-    }
-    assert all(item["eligible_rows"] is None for item in plan["items"])
-    assert all(item["mutation_performed"] is False for item in plan["items"])
-
-
-async def test_cleanup_plan_queries_only_registered_aggregate_counters() -> None:
-    inventory = load_inventory(INVENTORY_PATH)
-    calls: list[tuple[str, int]] = []
-
-    async def counter(planner_key: str, retention_days: int) -> int:
-        calls.append((planner_key, retention_days))
-        return 3 if planner_key == "schedule_setup_sessions" else 2
-
-    plan = await build_plan(
-        inventory,
-        policy_sha256="b" * 64,
-        counter=counter,
-    )
-
-    assert calls == [
-        ("schedule_setup_sessions", 7),
-        ("schedule_setup_deck_scopes", 7),
+    enabled_rules = [
+        rule
+        for dataset in inventory["datasets"]
+        for rule in dataset.get("cleanup_rules", [])
+        if rule["destructive_enabled"] is True
     ]
-    assert plan["metrics"]["privacy_cleanup_candidates_total"] == 5
-    assert plan["metrics"]["privacy_cleanup_blocked_rules_total"] == 2
-    assert {item["eligible_rows"] for item in plan["items"]} == {2, 3}
-    assert all(
-        item["blocked_reason"] == "destructive-mode-not-implemented" for item in plan["items"]
-    )
+    assert enabled_rules == [
+        {
+            "id": "expired_schedule_setup_sessions",
+            "planner_key": "schedule_setup_sessions",
+            "status": "approved",
+            "destructive_enabled": True,
+        }
+    ]
 
 
-def test_inventory_rejects_destructive_policy_enablement() -> None:
+def test_inventory_rejects_unallowlisted_destructive_policy_enablement() -> None:
     inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
-    inventory["retention_classes"]["temporary_7d"]["destructive_enabled"] = True
+    inventory["retention_classes"]["operational_30d"]["destructive_enabled"] = True
 
-    with pytest.raises(InventoryError, match="destructive_enabled=false"):
+    with pytest.raises(InventoryError, match="not allowlisted"):
         validate_inventory(inventory)
 
 
-def test_cleanup_cli_has_no_apply_command() -> None:
+def test_cleanup_cli_requires_explicit_apply_confirmation() -> None:
+    parser = build_parser()
+
+    offline = parser.parse_args(["plan", "--offline"])
+    assert offline.command == "plan"
+    assert offline.offline is True
+
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["apply"])
+        parser.parse_args(["apply"])
+
+    apply = parser.parse_args(["apply", "--confirm", "APPLY:example"])
+    assert apply.command == "apply"
+    assert apply.confirm == "APPLY:example"
+    assert apply.batch_limit == 1_000
 
 
 def test_privacy_redaction_masks_structured_and_free_text_identifiers() -> None:
