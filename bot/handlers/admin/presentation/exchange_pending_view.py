@@ -15,6 +15,7 @@ from bot.services.exchange_moderation import ExchangeModerationService
 from bot.telegram.media import answer_media_any
 
 _DETAIL_MESSAGE_ID_KEY = "exchange_pending_detail_message_id"
+_HEADER_MESSAGE_ID_KEY = "exchange_pending_header_message_id"
 _PAGE_KEY = "exchange_pending_page"
 
 
@@ -76,26 +77,62 @@ def pending_exchange_navigation_kb(*, page: int, total: int) -> InlineKeyboardMa
     return builder.as_markup()
 
 
+def _pending_exchange_header_text(*, page: int, total: int) -> str:
+    return (
+        "🛒 <b>Заявки на биржу</b>\n\n"
+        "Режим: <b>по одному</b>\n"
+        f"Заявка: <b>{page + 1}</b> из <b>{total}</b>"
+    )
+
+
 async def _edit_or_answer(
     message: Message,
     *,
     text: str,
     reply_markup: InlineKeyboardMarkup,
-) -> None:
+) -> Message:
     try:
-        await message.edit_text(
+        edited = await message.edit_text(
             text,
             parse_mode="HTML",
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
+        return edited if isinstance(edited, Message) else message
     except Exception:
-        await message.answer(
+        return await message.answer(
             text,
             parse_mode="HTML",
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
+
+
+async def _edit_header_or_answer(
+    message: Message,
+    *,
+    header_message_id: int,
+    text: str,
+    reply_markup: InlineKeyboardMarkup,
+) -> int:
+    try:
+        await message.bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=header_message_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+        return header_message_id
+    except Exception:
+        header = await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+        return int(header.message_id)
 
 
 async def clear_pending_exchange_detail(
@@ -115,6 +152,7 @@ async def clear_pending_exchange_detail(
     await state.update_data(
         **{
             _DETAIL_MESSAGE_ID_KEY: None,
+            _HEADER_MESSAGE_ID_KEY: None,
             _PAGE_KEY: None,
         }
     )
@@ -146,40 +184,11 @@ async def show_pending_exchange_all_header(message: Message) -> None:
     )
 
 
-async def show_pending_exchange_request_one(
+async def _send_pending_exchange_detail(
     message: Message,
-    state: FSMContext,
-    *,
-    page: int = 0,
-) -> None:
-    moderation = await ExchangeModerationService.create()
-    rows = await moderation.pending_batches(include_luxury=True)
-
-    await clear_pending_exchange_detail(message, state)
-
-    if not rows:
-        await _edit_or_answer(
-            message,
-            text="🛒 <b>Заявки на биржу</b>\n\nНет заявок на модерацию.",
-            reply_markup=pending_exchange_mode_kb(),
-        )
-        return
-
-    total = len(rows)
-    page = min(max(0, int(page)), total - 1)
-    batch = rows[page]
+    batch: dict,
+) -> Message:
     batch_id = int(batch.get("batch_id") or 0)
-
-    await _edit_or_answer(
-        message,
-        text=(
-            "🛒 <b>Заявки на биржу</b>\n\n"
-            "Режим: <b>по одному</b>\n"
-            f"Заявка: <b>{page + 1}</b> из <b>{total}</b>"
-        ),
-        reply_markup=pending_exchange_navigation_kb(page=page, total=total),
-    )
-
     proof_id = str(batch.get("proof_photo_id") or "").strip()
     has_proof = bool(proof_id) and proof_id.upper() != "NO_PROOF"
     items_count = int(batch.get("items_count") or 0)
@@ -213,10 +222,104 @@ async def show_pending_exchange_request_one(
             reply_markup=actions,
             disable_web_page_preview=True,
         )
+    return detail
+
+
+async def show_pending_exchange_request_one(
+    message: Message,
+    state: FSMContext,
+    *,
+    page: int = 0,
+) -> None:
+    moderation = await ExchangeModerationService.create()
+    rows = await moderation.pending_batches(include_luxury=True)
+
+    await clear_pending_exchange_detail(message, state)
+
+    if not rows:
+        await _edit_or_answer(
+            message,
+            text="🛒 <b>Заявки на биржу</b>\n\nНет заявок на модерацию.",
+            reply_markup=pending_exchange_mode_kb(),
+        )
+        return
+
+    total = len(rows)
+    page = min(max(0, int(page)), total - 1)
+    batch = rows[page]
+
+    header = await _edit_or_answer(
+        message,
+        text=_pending_exchange_header_text(page=page, total=total),
+        reply_markup=pending_exchange_navigation_kb(page=page, total=total),
+    )
+    detail = await _send_pending_exchange_detail(message, batch)
 
     await state.update_data(
         **{
             _DETAIL_MESSAGE_ID_KEY: int(detail.message_id),
+            _HEADER_MESSAGE_ID_KEY: int(header.message_id),
+            _PAGE_KEY: page,
+        }
+    )
+
+
+async def continue_pending_exchange_request_one(
+    message: Message,
+    state: FSMContext,
+    *,
+    processed_batch_id: int,
+) -> None:
+    """Show the next pending request after an action in one-by-one mode."""
+
+    data = await state.get_data()
+    raw_page = data.get(_PAGE_KEY)
+    raw_header_message_id = data.get(_HEADER_MESSAGE_ID_KEY)
+    if raw_page is None or raw_header_message_id is None:
+        return
+
+    moderation = await ExchangeModerationService.create()
+    rows = await moderation.pending_batches(include_luxury=True)
+
+    if any(
+        int(row.get("batch_id") or 0) == int(processed_batch_id)
+        for row in rows
+    ):
+        return
+
+    if not rows:
+        await _edit_header_or_answer(
+            message,
+            header_message_id=int(raw_header_message_id),
+            text=(
+                "🛒 <b>Заявки на биржу</b>\n\n"
+                "✅ Все заявки на модерацию обработаны."
+            ),
+            reply_markup=pending_exchange_mode_kb(),
+        )
+        await state.update_data(
+            **{
+                _DETAIL_MESSAGE_ID_KEY: None,
+                _HEADER_MESSAGE_ID_KEY: None,
+                _PAGE_KEY: None,
+            }
+        )
+        return
+
+    total = len(rows)
+    page = min(max(0, int(raw_page)), total - 1)
+    header_message_id = await _edit_header_or_answer(
+        message,
+        header_message_id=int(raw_header_message_id),
+        text=_pending_exchange_header_text(page=page, total=total),
+        reply_markup=pending_exchange_navigation_kb(page=page, total=total),
+    )
+    detail = await _send_pending_exchange_detail(message, rows[page])
+
+    await state.update_data(
+        **{
+            _DETAIL_MESSAGE_ID_KEY: int(detail.message_id),
+            _HEADER_MESSAGE_ID_KEY: header_message_id,
             _PAGE_KEY: page,
         }
     )
@@ -224,6 +327,7 @@ async def show_pending_exchange_request_one(
 
 __all__ = [
     "clear_pending_exchange_detail",
+    "continue_pending_exchange_request_one",
     "pending_exchange_mode_kb",
     "pending_exchange_navigation_kb",
     "show_pending_exchange_all_header",
