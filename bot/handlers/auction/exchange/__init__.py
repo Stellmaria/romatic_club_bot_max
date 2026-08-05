@@ -46,9 +46,7 @@ from .moderation import router as moderation_router
 from .moderation_queue import ContinuePendingExchangeQueueMiddleware
 from .submission import router as submission_router
 
-moderation_router.callback_query.middleware(
-    ContinuePendingExchangeQueueMiddleware()
-)
+moderation_router.callback_query.middleware(ContinuePendingExchangeQueueMiddleware())
 
 router = Router(name="auction_exchange")
 router.include_router(submission_router)
