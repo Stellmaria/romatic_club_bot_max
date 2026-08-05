@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DB_MODULES = (
     "core",
@@ -76,10 +75,7 @@ def test_every_in_repository_legacy_import_is_still_available() -> None:
     for path in paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if (
-                not isinstance(node, ast.ImportFrom)
-                or node.module not in {"db.db", "db.legacy"}
-            ):
+            if not isinstance(node, ast.ImportFrom) or node.module not in {"db.db", "db.legacy"}:
                 continue
             for alias in node.names:
                 if alias.name != "*" and not hasattr(facade, alias.name):
@@ -130,13 +126,28 @@ def test_database_domain_import_graph_is_acyclic() -> None:
         visit(module_name)
 
 
+class _Transaction:
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+
 class _Connection:
     def __init__(self) -> None:
         self.executions: list[tuple[str, tuple[object, ...]]] = []
 
+    def transaction(self) -> _Transaction:
+        return _Transaction()
+
     async def execute(self, query: str, *args: object) -> str:
         self.executions.append((query, args))
         return "INSERT 0 1"
+
+    async def fetchval(self, query: str, *args: object) -> object:
+        self.executions.append((query, args))
+        return args[0] if args else None
 
 
 class _Acquire:
@@ -178,7 +189,13 @@ async def test_runtime_adapter_reaches_extracted_functions() -> None:
         if previous_runtime is not None:
             core.install_database_runtime(previous_runtime)
 
-    assert len(connection.executions) == 1
-    query, args = connection.executions[0]
-    assert "INSERT INTO users" in query
-    assert args == (42, "test_user", "Test User")
+    assert len(connection.executions) == 3
+    lock_query, lock_args = connection.executions[0]
+    release_query, release_args = connection.executions[1]
+    upsert_query, upsert_args = connection.executions[2]
+    assert "pg_advisory_xact_lock" in lock_query
+    assert len(lock_args) == 1
+    assert "UPDATE public.users" in release_query
+    assert release_args == (42, "test_user")
+    assert "INSERT INTO public.users" in upsert_query
+    assert upsert_args == (42, "test_user", "Test User")

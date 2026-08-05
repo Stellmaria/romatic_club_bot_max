@@ -8,68 +8,26 @@ remain normal business results; unavailable PostgreSQL is never represented as
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from db.core import execute, fetch, fetchrow, fetchval, pool_proxy as db_pool, require_db_pool
-from db.performance import track_database_query
+import asyncpg
 
-
-def _normalize_profile_username(username: str | None) -> str:
-    return (username or "").strip().lstrip("@")
-
-
-@require_db_pool
-async def sync_user_profile(user_id: int, username: str, full_name: str) -> bool:
-    """Insert a profile or update it only when Telegram profile fields changed.
-
-    ``RETURNING`` yields no row for a conflict whose values are identical, so a
-    cache miss after process restart still avoids a physical PostgreSQL update.
-    """
-
-    normalized_username = _normalize_profile_username(username)
-    normalized_full_name = (full_name or "").strip()
-    async with db_pool.acquire() as conn:
-        async with track_database_query("users.profile.sync", pool=db_pool.pool):
-            changed_user_id = await conn.fetchval(
-                """
-                INSERT INTO public.users (user_id, username, full_name)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (user_id) DO UPDATE
-                SET username = EXCLUDED.username,
-                    full_name = EXCLUDED.full_name
-                WHERE users.username IS DISTINCT FROM EXCLUDED.username
-                   OR users.full_name IS DISTINCT FROM EXCLUDED.full_name
-                RETURNING user_id
-                """,
-                int(user_id),
-                normalized_username,
-                normalized_full_name,
-            )
-    return changed_user_id is not None
+from db.core import (
+    execute,
+    fetch,
+    fetchrow,
+    require_db_pool,
+)
+from db.core import (
+    pool_proxy as db_pool,
+)
+from db.profile_sync import sync_user_profile
 
 
-@require_db_pool
 async def add_user(user_id: int, username: str, full_name: str) -> None:
-    """Compatibility adapter using the historical execute-only contract."""
+    """Compatibility adapter using the atomic profile synchronization contract."""
 
-    normalized_username = _normalize_profile_username(username)
-    normalized_full_name = (full_name or "").strip()
-    async with db_pool.acquire() as conn:
-        async with track_database_query("users.profile.add", pool=db_pool.pool):
-            await conn.execute(
-                """
-                INSERT INTO users (user_id, username, full_name)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (user_id) DO UPDATE
-                SET username = EXCLUDED.username,
-                    full_name = EXCLUDED.full_name
-                WHERE users.username IS DISTINCT FROM EXCLUDED.username
-                   OR users.full_name IS DISTINCT FROM EXCLUDED.full_name
-                """,
-                int(user_id),
-                normalized_username,
-                normalized_full_name,
-            )
+    await sync_user_profile(user_id, username, full_name)
 
 
 @require_db_pool
@@ -83,16 +41,17 @@ async def set_subscription(user_id: int, value: bool) -> None:
 
 
 @require_db_pool
-async def is_subscribed(user_id: int) -> Optional[bool]:
+async def is_subscribed(user_id: int) -> bool | None:
     async with db_pool.acquire() as conn:
-        return await conn.fetchval(
+        value = await conn.fetchval(
             "SELECT is_subscribed FROM users WHERE user_id = $1",
             user_id,
         )
+    return bool(value) if value is not None else None
 
 
 @require_db_pool
-async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
+async def get_user(user_id: int) -> dict[str, Any] | None:
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT user_id, username, full_name FROM users WHERE user_id = $1",
@@ -123,7 +82,7 @@ async def get_user_id_by_username(username: str) -> int | None:
 
 
 @require_db_pool
-async def get_users_by_ids(user_ids: list[int]) -> list[dict]:
+async def get_users_by_ids(user_ids: list[int]) -> list[dict[str, Any]]:
     if not user_ids:
         return []
     async with db_pool.acquire() as conn:
@@ -144,9 +103,8 @@ async def count_new_users() -> int:
     return int(value or 0)
 
 
-async def get_all_trusted_users():
-    return await fetch(
-        """
+async def get_all_trusted_users() -> list[asyncpg.Record]:
+    return await fetch("""
         SELECT u.username, u.user_id, u.is_luxury
         FROM users u
         WHERE u.is_trusted = true
@@ -160,8 +118,7 @@ async def get_all_trusted_users():
             WHERE u2.username = t.username AND u2.is_trusted = true
         )
         ORDER BY username
-        """
-    )
+        """)
 
 
 async def is_luxury_user(user_id: int) -> bool:
@@ -179,7 +136,7 @@ async def set_trusted_status(user_id: int, is_trusted: bool) -> None:
     )
 
 
-async def get_all_users():
+async def get_all_users() -> list[asyncpg.Record]:
     return await fetch("SELECT user_id, username, is_luxury FROM users")
 
 
@@ -215,7 +172,7 @@ async def sync_trusted_status(user_id: int, username: str | None = None) -> None
 
 
 @require_db_pool
-async def get_user_by_username(username: str) -> dict | None:
+async def get_user_by_username(username: str) -> dict[str, Any] | None:
     normalized = (username or "").strip().lstrip("@").lower()
     if not normalized:
         return None
@@ -255,22 +212,22 @@ async def add_user_if_not_exists(
 
 
 __all__ = [
+    "_normalize_username",
     "add_user",
-    "set_subscription",
-    "is_subscribed",
-    "get_user",
-    "set_luxury_status",
-    "get_user_id_by_username",
-    "get_users_by_ids",
+    "add_user_if_not_exists",
     "count_new_users",
     "get_all_trusted_users",
-    "is_luxury_user",
-    "set_trusted_status",
     "get_all_users",
-    "has_pending_delete_request",
-    "sync_trusted_status",
+    "get_user",
     "get_user_by_username",
-    "_normalize_username",
-    "add_user_if_not_exists",
+    "get_user_id_by_username",
+    "get_users_by_ids",
+    "has_pending_delete_request",
+    "is_luxury_user",
+    "is_subscribed",
+    "set_luxury_status",
+    "set_subscription",
+    "set_trusted_status",
+    "sync_trusted_status",
     "sync_user_profile",
 ]
