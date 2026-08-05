@@ -34,14 +34,14 @@ jobs:
           profile = Path("db/profile_sync.py")
           text = profile.read_text(encoding="utf-8")
           old = '''    async with db_pool.acquire() as conn:
-              async with track_database_query("users.profile.sync", pool=db_pool.pool):
-                  async with conn.transaction():
+                  async with track_database_query("users.profile.sync", pool=db_pool.pool):
+                      async with conn.transaction():
           '''
           new = '''    async with (
-              db_pool.acquire() as conn,
-              track_database_query("users.profile.sync", pool=db_pool.pool),
-              conn.transaction(),
-          ):
+                  db_pool.acquire() as conn,
+                  track_database_query("users.profile.sync", pool=db_pool.pool),
+                  conn.transaction(),
+              ):
           '''
           if old not in text:
               raise SystemExit("profile_sync context pattern not found")
