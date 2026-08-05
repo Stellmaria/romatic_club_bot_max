@@ -39,6 +39,7 @@ from db.legacy import (
     find_card_by_name_hero,
     subscribers_for_deck,
     subscribers_for_rarity,
+    subscribers_for_auction_presets,
 )
 
 router = Router()
@@ -696,6 +697,24 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                         "subscribers_for_deck(%r,%r) failed: %s", deck_id, deck_name, err
                     )
 
+            try:
+                uids_presets = await subscribers_for_auction_presets(
+                    lot_title=lot_title,
+                    card_id=cid_for_meta,
+                    rarity=rarity_raw,
+                    deck_id=deck_id,
+                    deck_name=deck_name,
+                )
+                recipients.update(
+                    int(user_id) for user_id in (uids_presets or []) if _to_int(user_id) is not None
+                )
+            except DBError as err:
+                logger.warning(
+                    "subscribers_for_auction_presets(%r) failed: %s",
+                    lot_title,
+                    err,
+                )
+
             async def pref(name: str) -> Set[int]:
                 try:
                     return set(await get_users_with_pref(name)) & globally_enabled_users
@@ -948,6 +967,24 @@ async def collect_recipients_for_auction(auction: Dict[str, Any]) -> Set[int]:
                         recipients.add(uid)
         except DBError as err:
             logger.warning("subscribers_for_rarity(%r) failed: %s", rarity_slug, err)
+
+    try:
+        uids_presets = await subscribers_for_auction_presets(
+            lot_title=lot_title,
+            card_id=_to_int(auction.get("card_id")),
+            rarity=rarity_slug or None,
+            deck_id=_to_int(auction.get("deck_id")),
+            deck_name=_to_str(auction.get("deck_name")).strip() or None,
+        )
+        recipients.update(
+            int(user_id) for user_id in (uids_presets or []) if _to_int(user_id) is not None
+        )
+    except DBError as err:
+        logger.warning(
+            "subscribers_for_auction_presets(%r) failed: %s",
+            lot_title,
+            err,
+        )
 
     return recipients
 
