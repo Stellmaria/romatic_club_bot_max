@@ -60,18 +60,14 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
             return
 
         stored_keys = await store_emoji_assignments(assignments, config=legacy_config)
-        missing = missing_required_emoji_keys(
-            {key: assignments.get(key, 1) for key in stored_keys}
-        )
+        missing = missing_required_emoji_keys({key: assignments.get(key, 1) for key in stored_keys})
         suffix = (
             "\n\nСтарый обязательный набор готов."
             if not missing
             else "\n\nВ старом наборе ещё нужны ключи: " + ", ".join(missing)
         )
         await event.reply(
-            "Сохранены совместимые Premium-эмодзи: "
-            + ", ".join(sorted(assignments))
-            + suffix
+            "Сохранены совместимые Premium-эмодзи: " + ", ".join(sorted(assignments)) + suffix
         )
         return
 
@@ -88,8 +84,7 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
                 target_date,
             )
             await event.reply(
-                "❌ Не удалось собрать превью расписания. "
-                "Ошибка записана в журнал userbot."
+                "❌ Не удалось собрать превью расписания. " "Ошибка записана в журнал userbot."
             )
             return
         if rendered is None:
@@ -165,9 +160,7 @@ async def on_schedule_review_callback(event: events.CallbackQuery.Event) -> None
             reviewed_by=int(event.sender_id),
         )
         await event.answer("Публикация отклонена")
-        status_text = (
-            f"❌ Расписание на {target_date:%d.%m.%Y} отклонено и в канал не уйдёт."
-        )
+        status_text = f"❌ Расписание на {target_date:%d.%m.%Y} отклонено и в канал не уйдёт."
     else:
         await event.answer("Неизвестное действие", alert=True)
         return
