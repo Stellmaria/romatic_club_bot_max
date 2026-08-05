@@ -1,19 +1,21 @@
 """Validate, plan, and explicitly execute approved temporary privacy cleanup."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import asyncpg  # noqa: E402
+import asyncpg
 
 from bot.core.settings import DatabaseSettings
 from bot.core.time import SystemClock

@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-import asyncpg
-
 _PRIVACY_CLEANUP_LOCK_KEY = 4_504_501_021
 
 _COUNT_EXPIRED_SESSIONS = """
@@ -70,61 +68,63 @@ class PrivacyCleanupRepository:
         plan_sha256: str,
         run_id: str,
     ) -> PrivacyCleanupExecution:
-        async with self._pool.acquire() as connection:
-            async with connection.transaction(isolation="serializable"):
-                locked = await connection.fetchval(
-                    "SELECT pg_try_advisory_xact_lock($1)",
-                    _PRIVACY_CLEANUP_LOCK_KEY,
+        async with (
+            self._pool.acquire() as connection,
+            connection.transaction(isolation="serializable"),
+        ):
+            locked = await connection.fetchval(
+                "SELECT pg_try_advisory_xact_lock($1)",
+                _PRIVACY_CLEANUP_LOCK_KEY,
+            )
+            if locked is not True:
+                raise PrivacyCleanupLockUnavailable(
+                    "another privacy cleanup execution owns the advisory lock"
                 )
-                if locked is not True:
-                    raise PrivacyCleanupLockUnavailable(
-                        "another privacy cleanup execution owns the advisory lock"
-                    )
 
-                current_count = int(await connection.fetchval(_COUNT_EXPIRED_SESSIONS, cutoff) or 0)
-                if current_count != expected_eligible_rows:
-                    raise PrivacyCleanupConflict(
-                        "eligible row count changed after the cleanup plan was generated"
-                    )
-
-                expected_delete_count = min(current_count, delete_limit)
-                deleted = await connection.fetch(
-                    _DELETE_EXPIRED_SESSIONS,
-                    cutoff,
-                    delete_limit,
+            current_count = int(await connection.fetchval(_COUNT_EXPIRED_SESSIONS, cutoff) or 0)
+            if current_count != expected_eligible_rows:
+                raise PrivacyCleanupConflict(
+                    "eligible row count changed after the cleanup plan was generated"
                 )
-                if len(deleted) != expected_delete_count:
-                    raise PrivacyCleanupConflict(
-                        "deleted row count differs from the approved cleanup plan"
-                    )
 
-                details = json.dumps(
-                    {
-                        "batch_limit": delete_limit,
-                        "cutoff": cutoff.isoformat(),
-                        "deleted_rows": len(deleted),
-                        "eligible_rows": current_count,
-                        "plan_sha256": plan_sha256,
-                        "policy_sha256": policy_sha256,
-                        "rule_id": "expired_schedule_setup_sessions",
-                        "run_id": run_id,
-                    },
-                    ensure_ascii=True,
-                    sort_keys=True,
-                    separators=(",", ":"),
+            expected_delete_count = min(current_count, delete_limit)
+            deleted = await connection.fetch(
+                _DELETE_EXPIRED_SESSIONS,
+                cutoff,
+                delete_limit,
+            )
+            if len(deleted) != expected_delete_count:
+                raise PrivacyCleanupConflict(
+                    "deleted row count differs from the approved cleanup plan"
                 )
-                audit_id = await connection.fetchval(
-                    """
+
+            details = json.dumps(
+                {
+                    "batch_limit": delete_limit,
+                    "cutoff": cutoff.isoformat(),
+                    "deleted_rows": len(deleted),
+                    "eligible_rows": current_count,
+                    "plan_sha256": plan_sha256,
+                    "policy_sha256": policy_sha256,
+                    "rule_id": "expired_schedule_setup_sessions",
+                    "run_id": run_id,
+                },
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            audit_id = await connection.fetchval(
+                """
                     INSERT INTO public.audit_logs (user_id, action_type, details)
                     VALUES (NULL, 'privacy.cleanup.applied', $1)
                     RETURNING id
                     """,
-                    details,
-                )
-                return PrivacyCleanupExecution(
-                    deleted_rows=len(deleted),
-                    audit_id=int(audit_id),
-                )
+                details,
+            )
+            return PrivacyCleanupExecution(
+                deleted_rows=len(deleted),
+                audit_id=int(audit_id),
+            )
 
 
 __all__ = [

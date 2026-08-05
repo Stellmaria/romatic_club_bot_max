@@ -32,6 +32,7 @@ class FakeRepository:
         self.applied: list[dict[str, object]] = []
 
     async def count_expired_schedule_sessions(self, *, cutoff: datetime) -> int:
+        del cutoff
         return self.count
 
     async def apply_expired_schedule_sessions(self, **kwargs: object) -> PrivacyCleanupExecution:

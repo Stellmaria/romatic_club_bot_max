@@ -6,10 +6,11 @@ import hashlib
 import hmac
 import json
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from bot.application_ports import Clock
 from bot.repositories.privacy_cleanup import (
@@ -167,7 +168,7 @@ def _validate_retention_classes(value: object) -> Mapping[str, Mapping[str, obje
     return result
 
 
-def validate_inventory(inventory: Mapping[str, Any]) -> None:
+def validate_inventory(inventory: Mapping[str, Any]) -> None:  # noqa: C901
     if inventory.get("schema_version") != 1:
         raise InventoryError("privacy inventory schema_version must be 1")
     retention_classes = _validate_retention_classes(inventory.get("retention_classes"))
