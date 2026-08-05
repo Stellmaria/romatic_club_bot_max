@@ -8,68 +8,16 @@ remain normal business results; unavailable PostgreSQL is never represented as
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from db.core import execute, fetch, fetchrow, fetchval, pool_proxy as db_pool, require_db_pool
-from db.performance import track_database_query
-
-
-def _normalize_profile_username(username: str | None) -> str:
-    return (username or "").strip().lstrip("@")
+from db.core import execute, fetch, fetchrow, pool_proxy as db_pool, require_db_pool
+from db.profile_sync import sync_user_profile
 
 
-@require_db_pool
-async def sync_user_profile(user_id: int, username: str, full_name: str) -> bool:
-    """Insert a profile or update it only when Telegram profile fields changed.
-
-    ``RETURNING`` yields no row for a conflict whose values are identical, so a
-    cache miss after process restart still avoids a physical PostgreSQL update.
-    """
-
-    normalized_username = _normalize_profile_username(username)
-    normalized_full_name = (full_name or "").strip()
-    async with db_pool.acquire() as conn:
-        async with track_database_query("users.profile.sync", pool=db_pool.pool):
-            changed_user_id = await conn.fetchval(
-                """
-                INSERT INTO public.users (user_id, username, full_name)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (user_id) DO UPDATE
-                SET username = EXCLUDED.username,
-                    full_name = EXCLUDED.full_name
-                WHERE users.username IS DISTINCT FROM EXCLUDED.username
-                   OR users.full_name IS DISTINCT FROM EXCLUDED.full_name
-                RETURNING user_id
-                """,
-                int(user_id),
-                normalized_username,
-                normalized_full_name,
-            )
-    return changed_user_id is not None
-
-
-@require_db_pool
 async def add_user(user_id: int, username: str, full_name: str) -> None:
-    """Compatibility adapter using the historical execute-only contract."""
+    """Compatibility adapter using the atomic profile synchronization contract."""
 
-    normalized_username = _normalize_profile_username(username)
-    normalized_full_name = (full_name or "").strip()
-    async with db_pool.acquire() as conn:
-        async with track_database_query("users.profile.add", pool=db_pool.pool):
-            await conn.execute(
-                """
-                INSERT INTO users (user_id, username, full_name)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (user_id) DO UPDATE
-                SET username = EXCLUDED.username,
-                    full_name = EXCLUDED.full_name
-                WHERE users.username IS DISTINCT FROM EXCLUDED.username
-                   OR users.full_name IS DISTINCT FROM EXCLUDED.full_name
-                """,
-                int(user_id),
-                normalized_username,
-                normalized_full_name,
-            )
+    await sync_user_profile(user_id, username, full_name)
 
 
 @require_db_pool
