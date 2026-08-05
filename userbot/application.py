@@ -166,7 +166,7 @@ async def run_userbot_application(
         await init_db(database_runtime)
         database_started = True
         register_handlers(telegram_client)
-        register_schedule_handlers(telegram_client)
+        register_schedule_handlers(telegram_client, userbot_settings)
 
         try:
             await run_issue99_publication_recovery(

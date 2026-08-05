@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
 from telethon import events
@@ -17,6 +18,8 @@ from userbot.runtime import bind_client
 
 if TYPE_CHECKING:
     from telethon import TelegramClient
+
+    from bot.core.settings import UserbotSettings
 
 
 _SCHEDULE_COMMAND_PATTERN = r"^/schedule_(?:emojis|preview|status)(?:@\w+)?(?:\s|$)"
@@ -41,15 +44,18 @@ def register_handlers(telegram_client: TelegramClient) -> None:
     )
 
 
-def register_schedule_handlers(telegram_client: TelegramClient) -> None:
-    """Register owner commands and review callbacks for schedule publication."""
+def register_schedule_handlers(
+    telegram_client: TelegramClient,
+    config: UserbotSettings,
+) -> None:
+    """Register owner commands and review callbacks with typed settings."""
 
     telegram_client.add_event_handler(
-        on_schedule_admin_command,
+        partial(on_schedule_admin_command, config=config),
         events.NewMessage(pattern=_SCHEDULE_COMMAND_PATTERN),
     )
     telegram_client.add_event_handler(
-        on_schedule_review_callback,
+        partial(on_schedule_review_callback, config=config),
         events.CallbackQuery(pattern=_SCHEDULE_CALLBACK_PATTERN),
     )
 
