@@ -28,7 +28,7 @@ async def _insert_session(
     *,
     user_id: int,
     updated_at: datetime,
-    active: bool = False,
+    stage: str = "card_review",
 ) -> None:
     await connection.execute(
         "INSERT INTO public.users (user_id, username) VALUES ($1, $2)",
@@ -38,46 +38,42 @@ async def _insert_session(
     await connection.execute(
         """
         INSERT INTO public.schedule_setup_sessions (
-            user_id, active, validation_summary, opened_at, updated_at
-        ) VALUES ($1, $2, '{}'::jsonb, $3, $3)
+            user_id, stage, asset_key, deck_id, card_id, updated_at
+        ) VALUES ($1, $2, NULL, NULL, NULL, $3)
         """,
         user_id,
-        active,
+        stage,
         updated_at,
     )
 
 
 @pytest.mark.asyncio
-async def test_approved_cleanup_deletes_only_old_inactive_rows_in_bounded_batch(
+async def test_approved_cleanup_deletes_only_stale_rows_in_bounded_batch(
     postgres_pool: asyncpg.Pool,
 ) -> None:
     now = datetime(2026, 8, 5, 12, tzinfo=UTC)
     oldest_user = 930000001
     stale_user = 930000002
     fresh_user = 930000003
-    active_stale_user = 930000004
 
     async with postgres_pool.acquire() as connection:
         await _insert_session(
             connection,
             user_id=oldest_user,
             updated_at=now - timedelta(days=10),
+            stage="asset_emoji",
         )
         await _insert_session(
             connection,
             user_id=stale_user,
             updated_at=now - timedelta(days=9),
+            stage="card_review",
         )
         await _insert_session(
             connection,
             user_id=fresh_user,
             updated_at=now - timedelta(days=2),
-        )
-        await _insert_session(
-            connection,
-            user_id=active_stale_user,
-            updated_at=now - timedelta(days=30),
-            active=True,
+            stage="card_economy",
         )
 
     service = PrivacyCleanupService(
@@ -104,7 +100,6 @@ async def test_approved_cleanup_deletes_only_old_inactive_rows_in_bounded_batch(
         assert oldest_user not in remaining
         assert stale_user in remaining
         assert fresh_user in remaining
-        assert active_stale_user in remaining
 
         audit = await connection.fetchrow(
             """
@@ -184,8 +179,13 @@ async def test_cleanup_plan_drift_rolls_back_without_deleting_rows(
             )
             == 2
         )
-        assert await connection.fetchval("""
+        assert (
+            await connection.fetchval(
+                """
                 SELECT count(*)::bigint
                 FROM public.audit_logs
                 WHERE action_type = 'privacy.cleanup.applied'
-                """) == 0
+                """
+            )
+            == 0
+        )
