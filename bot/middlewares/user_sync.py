@@ -10,7 +10,7 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, User
 
-from db.users import sync_user_profile
+from db.profile_sync import sync_user_profile
 
 logger = logging.getLogger("auction_bot.user_sync")
 
