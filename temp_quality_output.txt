@@ -1,5 +1,0 @@
-All done! ✨ 🍰 ✨
-2 files left unchanged.
-BLACK_STATUS=0
-All checks passed!
-RUFF_STATUS=0
