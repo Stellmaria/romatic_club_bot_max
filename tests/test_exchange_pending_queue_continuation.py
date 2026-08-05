@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,7 +17,13 @@ class _FakeState:
     async def get_data(self) -> dict[str, object]:
         return dict(self.data)
 
-    async def update_data(self, **kwargs: object) -> None:
+    async def update_data(
+        self,
+        data: Mapping[str, object] | None = None,
+        **kwargs: object,
+    ) -> None:
+        if data is not None:
+            self.data.update(data)
         self.data.update(kwargs)
 
 
@@ -96,10 +103,12 @@ async def test_approval_middleware_runs_handler_then_continues_queue(
     class FakeFsmContext:
         pass
 
-    event = SimpleNamespace(
-        data="exchange_approve|73",
-        message=FakeMessage(),
-    )
+    class FakeCallbackQuery:
+        def __init__(self) -> None:
+            self.data = "exchange_approve|73"
+            self.message = FakeMessage()
+
+    event = FakeCallbackQuery()
     state = FakeFsmContext()
 
     async def handler(received_event, data):
@@ -109,6 +118,7 @@ async def test_approval_middleware_runs_handler_then_continues_queue(
     async def continue_queue(message, received_state, *, processed_batch_id):
         calls.append(("continue", message, received_state, processed_batch_id))
 
+    monkeypatch.setattr(moderation_queue, "CallbackQuery", FakeCallbackQuery)
     monkeypatch.setattr(moderation_queue, "Message", FakeMessage)
     monkeypatch.setattr(moderation_queue, "FSMContext", FakeFsmContext)
     monkeypatch.setattr(

@@ -8,7 +8,7 @@ from typing import Any
 
 from aiogram import BaseMiddleware
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, TelegramObject
 
 from bot.telegram.callback_parser import split_callback_data
 
@@ -20,10 +20,13 @@ class ContinuePendingExchangeQueueMiddleware(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[CallbackQuery, dict[str, Any]], Awaitable[Any]],
-        event: CallbackQuery,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
+        if not isinstance(event, CallbackQuery):
+            return await handler(event, data)
+
         callback_data = event.data or ""
         if not callback_data.startswith("exchange_approve|"):
             return await handler(event, data)

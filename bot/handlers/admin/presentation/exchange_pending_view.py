@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from typing import Any
 
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -117,24 +118,26 @@ async def _edit_header_or_answer(
     text: str,
     reply_markup: InlineKeyboardMarkup,
 ) -> int:
-    try:
-        await message.bot.edit_message_text(
-            chat_id=message.chat.id,
-            message_id=header_message_id,
-            text=text,
-            parse_mode="HTML",
-            reply_markup=reply_markup,
-            disable_web_page_preview=True,
-        )
-        return header_message_id
-    except Exception:  # noqa: BLE001
-        header = await message.answer(
-            text,
-            parse_mode="HTML",
-            reply_markup=reply_markup,
-            disable_web_page_preview=True,
-        )
-        return int(header.message_id)
+    bot = message.bot
+    if bot is not None:
+        with suppress(Exception):
+            await bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=header_message_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+                disable_web_page_preview=True,
+            )
+            return header_message_id
+
+    header = await message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=reply_markup,
+        disable_web_page_preview=True,
+    )
+    return int(header.message_id)
 
 
 async def clear_pending_exchange_detail(
@@ -143,14 +146,15 @@ async def clear_pending_exchange_detail(
 ) -> None:
     data = await state.get_data()
     detail_message_id = data.get(_DETAIL_MESSAGE_ID_KEY)
-    if detail_message_id:
+    bot = message.bot
+    if detail_message_id and bot is not None:
         with suppress(Exception):
-            await message.bot.delete_message(
+            await bot.delete_message(
                 chat_id=message.chat.id,
                 message_id=int(detail_message_id),
             )
     await state.update_data(
-        **{
+        {
             _DETAIL_MESSAGE_ID_KEY: None,
             _HEADER_MESSAGE_ID_KEY: None,
             _PAGE_KEY: None,
@@ -186,7 +190,7 @@ async def show_pending_exchange_all_header(message: Message) -> None:
 
 async def _send_pending_exchange_detail(
     message: Message,
-    batch: dict,
+    batch: dict[str, Any],
 ) -> Message:
     batch_id = int(batch.get("batch_id") or 0)
     proof_id = str(batch.get("proof_photo_id") or "").strip()
@@ -256,7 +260,7 @@ async def show_pending_exchange_request_one(
     detail = await _send_pending_exchange_detail(message, batch)
 
     await state.update_data(
-        **{
+        {
             _DETAIL_MESSAGE_ID_KEY: int(detail.message_id),
             _HEADER_MESSAGE_ID_KEY: int(header.message_id),
             _PAGE_KEY: page,
@@ -292,7 +296,7 @@ async def continue_pending_exchange_request_one(
             reply_markup=pending_exchange_mode_kb(),
         )
         await state.update_data(
-            **{
+            {
                 _DETAIL_MESSAGE_ID_KEY: None,
                 _HEADER_MESSAGE_ID_KEY: None,
                 _PAGE_KEY: None,
@@ -311,7 +315,7 @@ async def continue_pending_exchange_request_one(
     detail = await _send_pending_exchange_detail(message, rows[page])
 
     await state.update_data(
-        **{
+        {
             _DETAIL_MESSAGE_ID_KEY: int(detail.message_id),
             _HEADER_MESSAGE_ID_KEY: header_message_id,
             _PAGE_KEY: page,
