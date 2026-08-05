@@ -276,6 +276,8 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:  # noqa: C901
     if schedule_dataset is None:
         raise InventoryError("schedule_operator_state dataset is missing")
     tables = schedule_dataset.get("tables")
+    if not isinstance(tables, list):
+        raise InventoryError("schedule_operator_state tables must be an array")
     if _APPROVED_PLANNER_KEY not in tables:
         raise InventoryError("approved cleanup table is absent from its dataset")
     if "schedule_setup_deck_scopes" in tables:

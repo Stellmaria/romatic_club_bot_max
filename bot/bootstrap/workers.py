@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
+from typing import TypedDict, cast
 
 from aiogram import Bot
 
@@ -28,6 +30,18 @@ from bot.services.privacy_cleanup import PrivacyCleanupService
 from bot.telegram.outbox import telegram_outbox_loop
 
 logger = logging.getLogger("auction_bot.privacy_cleanup")
+
+
+type _LegacyBotLoop = Callable[[Bot], Awaitable[None]]
+
+
+class _WorkerOptions(TypedDict):
+    criticality: WorkerCriticality
+    restart_policy: RestartPolicy
+    initial_backoff: float
+    max_backoff: float
+    max_failures: int
+    shutdown_timeout: float
 
 
 async def privacy_cleanup_loop(
@@ -98,7 +112,7 @@ def build_background_task_specs(
     metrics: MetricsRegistry | None = None,
     auction_channel_id: int | str | None = None,
 ) -> list[BackgroundTaskSpec]:
-    recoverable = {
+    recoverable: _WorkerOptions = {
         "criticality": WorkerCriticality.RECOVERABLE,
         "restart_policy": RestartPolicy.ALWAYS,
         "initial_backoff": 1.0,
@@ -106,7 +120,7 @@ def build_background_task_specs(
         "max_failures": 8,
         "shutdown_timeout": 15.0,
     }
-    critical = {
+    critical: _WorkerOptions = {
         "criticality": WorkerCriticality.CRITICAL,
         "restart_policy": RestartPolicy.ON_FAILURE,
         "initial_backoff": 1.0,
@@ -141,12 +155,12 @@ def build_background_task_specs(
         ),
         BackgroundTaskSpec(
             "card-subscriptions-watch",
-            lambda _context: card_subscriptions_watch_loop(bot),
+            lambda _context: cast(_LegacyBotLoop, card_subscriptions_watch_loop)(bot),
             **recoverable,
         ),
         BackgroundTaskSpec(
             "daily-maintenance",
-            lambda _context: daily_loop(bot),
+            lambda _context: cast(_LegacyBotLoop, daily_loop)(bot),
             **recoverable,
         ),
         BackgroundTaskSpec(
@@ -156,7 +170,7 @@ def build_background_task_specs(
         ),
         BackgroundTaskSpec(
             "luxury-status-sync",
-            lambda _context: luxury_status_sync_loop(bot),
+            lambda _context: cast(_LegacyBotLoop, luxury_status_sync_loop)(bot),
             **recoverable,
         ),
     ]
