@@ -5,7 +5,7 @@ The automated privacy cleanup is intentionally limited to one reviewed rule:
 - dataset: `schedule_operator_state`
 - table: `schedule_setup_sessions`
 - policy: `temporary_7d`
-- eligibility: inactive rows whose `updated_at` is before the UTC day boundary seven days ago
+- eligibility: rows whose `updated_at` is before the UTC day boundary seven days ago
 - maximum batch: 1,000 rows per worker run
 
 ## Safety controls
@@ -21,7 +21,11 @@ with `FOR UPDATE SKIP LOCKED`, and writes a pseudonymous `privacy.cleanup.applie
 audit record. Existing database triggers prevent privacy audit rows from being
 updated or deleted.
 
-Active schedule workflows are never eligible, even when their timestamps are old.
+A persisted schedule-setup row represents a workflow currently waiting for the
+operator. Starting or advancing the workflow refreshes `updated_at`; completing,
+cancelling, or stopping it deletes the row. The cleanup therefore treats a row as
+abandoned only after seven full days without an update. Recently used workflows
+are never eligible, regardless of their current stage.
 
 ## Operation
 
