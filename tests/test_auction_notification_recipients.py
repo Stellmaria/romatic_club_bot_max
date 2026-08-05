@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -26,8 +25,5 @@ def test_auction_lifecycle_notifications_respect_global_opt_out() -> None:
     source = _source()
 
     assert "globally_enabled_users = set(await list_broadcast_targets())" in source
-    assert (
-        "return set(await get_users_with_pref(name)) & globally_enabled_users"
-        in source
-    )
+    assert "return set(await get_users_with_pref(name)) & globally_enabled_users" in source
     assert "if owner_id and owner_id in users_end:" in source

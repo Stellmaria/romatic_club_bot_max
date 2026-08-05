@@ -21,10 +21,23 @@ from dateutil import tz
 from bot.handlers.helper.helpers_users import get_user_ids_from_usernames, format_today_lots_fancy
 from bot.services.outbox import TelegramOutboxService
 from bot.utils import currency_emoji
-from db.legacy import get_settings, set_settings, get_card_by_id, get_card_subscribers, get_auctions_by_date, \
-    list_auctions, get_auction_owner_id, get_users_with_pref, list_broadcast_targets, \
-    get_auction_winner, subscribers_for_lot_title, get_card_full_by_id, find_card_by_name_hero, subscribers_for_deck, \
-    subscribers_for_rarity
+from db.legacy import (
+    get_settings,
+    set_settings,
+    get_card_by_id,
+    get_card_subscribers,
+    get_auctions_by_date,
+    list_auctions,
+    get_auction_owner_id,
+    get_users_with_pref,
+    list_broadcast_targets,
+    get_auction_winner,
+    subscribers_for_lot_title,
+    get_card_full_by_id,
+    find_card_by_name_hero,
+    subscribers_for_deck,
+    subscribers_for_rarity,
+)
 
 router = Router()
 logger = logging.getLogger("auction_notificator")
@@ -73,7 +86,7 @@ def to_msk_dt(v) -> datetime | None:
 
 
 def extract_usernames(comment: str) -> list[str]:
-    return re.findall(r'@(\w+)', comment or "")
+    return re.findall(r"@(\w+)", comment or "")
 
 
 def _as_bool(v, default=False):
@@ -94,29 +107,49 @@ def _as_bool(v, default=False):
 
 def settings_keyboard(settings: dict) -> types.InlineKeyboardMarkup:
     b = _as_bool  # использовать тот же нормализатор (скопируй функцию сюда или импортни)
-    return types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(
-            text="🔔 О начале аукциона " + ("✅" if b(settings.get("notify_auction_start", True)) else "❌"),
-            callback_data="toggle_notify_auction_start")],
-        [types.InlineKeyboardButton(
-            text="⏰ За минуту до конца " + ("✅" if b(settings.get("notify_bid_reminder", True)) else "❌"),
-            callback_data="toggle_notify_bid_reminder")],
-        [types.InlineKeyboardButton(
-            text="🏁 О завершении " + ("✅" if b(settings.get("notify_auction_end", True)) else "❌"),
-            callback_data="toggle_notify_auction_end")],
-        [types.InlineKeyboardButton(
-            text="📅 Анонс дня в 00:00 " + ("✅" if b(settings.get("notify_daily_today", False)) else "❌"),
-            callback_data="toggle_notify_daily_today")],
-    ])
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="🔔 О начале аукциона "
+                    + ("✅" if b(settings.get("notify_auction_start", True)) else "❌"),
+                    callback_data="toggle_notify_auction_start",
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="⏰ За минуту до конца "
+                    + ("✅" if b(settings.get("notify_bid_reminder", True)) else "❌"),
+                    callback_data="toggle_notify_bid_reminder",
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="🏁 О завершении "
+                    + ("✅" if b(settings.get("notify_auction_end", True)) else "❌"),
+                    callback_data="toggle_notify_auction_end",
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="📅 Анонс дня в 00:00 "
+                    + ("✅" if b(settings.get("notify_daily_today", False)) else "❌"),
+                    callback_data="toggle_notify_daily_today",
+                )
+            ],
+        ]
+    )
 
 
-@router.message(F.text.in_(['/settings', 'Настройки уведомлений']))
+@router.message(F.text.in_(["/settings", "Настройки уведомлений"]))
 async def user_settings_menu(message: types.Message) -> None:
     user = message.from_user
     if user is None:
         return
     settings = await get_settings(user.id) or {}
-    await message.answer("Выберите, какие уведомления хотите получать:", reply_markup=settings_keyboard(settings))
+    await message.answer(
+        "Выберите, какие уведомления хотите получать:", reply_markup=settings_keyboard(settings)
+    )
 
 
 _ALLOWED_TOGGLE_FIELDS = {
@@ -183,8 +216,16 @@ async def morning_card_subscribe_notify_loop(bot):
 
             st = to_msk_dt(lot.get("start_time"))
             tstr = st.strftime("%H:%M") if st else "-"
-            url = f"https://t.me/YourChannelUsername/{lot.get('message_id')}" if lot.get('message_id') else ""
-            url_line = f"👉 <a href=\"{url}\">Перейти к лоту</a>" if url else "ℹ️ Лот ещё не опубликован в канале."
+            url = (
+                f"https://t.me/YourChannelUsername/{lot.get('message_id')}"
+                if lot.get("message_id")
+                else ""
+            )
+            url_line = (
+                f'👉 <a href="{url}">Перейти к лоту</a>'
+                if url
+                else "ℹ️ Лот ещё не опубликован в канале."
+            )
 
             text = (
                 f"🌅 <b>Сегодня в аукционе участвует твоя подписка!</b>\n"
@@ -197,7 +238,9 @@ async def morning_card_subscribe_notify_loop(bot):
             for uid in subs:
                 try:
                     if card.get("image_id"):
-                        await bot.send_photo(uid, photo=card["image_id"], caption=text, parse_mode="HTML")
+                        await bot.send_photo(
+                            uid, photo=card["image_id"], caption=text, parse_mode="HTML"
+                        )
                     else:
                         await bot.send_message(uid, text, parse_mode="HTML")
                 except TelegramAPIError:
@@ -214,9 +257,9 @@ def build_card_day_text(lot: dict, now: datetime) -> tuple[str, bool]:
     time_part = f" в {st.strftime('%H:%M')} МСК." if st is not None else "."
     hero = lot.get("hero_name") or ""
     text = (
-            f"🔔 Сегодня на канале будет карта <b>{html.escape(lot['card_name'])}</b>"
-            + (f" (герой: {html.escape(hero)})" if hero else "")
-            + time_part
+        f"🔔 Сегодня на канале будет карта <b>{html.escape(lot['card_name'])}</b>"
+        + (f" (герой: {html.escape(hero)})" if hero else "")
+        + time_part
     )
     return text, True
 
@@ -284,9 +327,7 @@ async def notify_new_subscriber_today(bot, user_id: int, card_id: int) -> None:
         if not ok:
             continue
 
-        await _enqueue_card_day_notification(
-            user_id=user_id, card_id=card_id, day=today, text=text
-        )
+        await _enqueue_card_day_notification(user_id=user_id, card_id=card_id, day=today, text=text)
         break
 
 
@@ -363,11 +404,11 @@ async def _build_card_info(auction: dict) -> str:
         deck_label = deck_name
 
     rarity = (
-            (auction.get("rarity") or "").strip()
-            or (card.get("rarity") or "").strip()
-            or (card.get("tier") or "").strip()
-            or (card.get("nominal") or "").strip()
-            or "-"
+        (auction.get("rarity") or "").strip()
+        or (card.get("rarity") or "").strip()
+        or (card.get("tier") or "").strip()
+        or (card.get("nominal") or "").strip()
+        or "-"
     )
     hero = (auction.get("hero_name") or card.get("hero_name") or "").strip() or "-"
 
@@ -390,20 +431,35 @@ async def _build_card_info(auction: dict) -> str:
 def _rarity_slug_local(r: Optional[str]) -> Optional[str]:
     r = (r or "").strip().lower()
     map_ = {
-        "бронзовая": "bronze", "бронза": "bronze", "bronze": "bronze",
-        "серебряная": "silver", "серебро": "silver", "silver": "silver",
-        "золотая": "gold", "золото": "gold", "gold": "gold",
-        "алмазная": "diamond", "алмазы": "diamond", "алмаз": "diamond",
-        "diamond": "diamond", "diamonds": "diamond",
+        "бронзовая": "bronze",
+        "бронза": "bronze",
+        "bronze": "bronze",
+        "серебряная": "silver",
+        "серебро": "silver",
+        "silver": "silver",
+        "золотая": "gold",
+        "золото": "gold",
+        "gold": "gold",
+        "алмазная": "diamond",
+        "алмазы": "diamond",
+        "алмаз": "diamond",
+        "diamond": "diamond",
+        "diamonds": "diamond",
     }
     return map_.get(r, r) if r else None
 
 
 def confirm_publish_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Да, опубликовать", callback_data=f"{CB_PREFIX}:confirm:yes")],
-        [InlineKeyboardButton(text="✖ Отмена", callback_data=f"{CB_PREFIX}:confirm:no")],
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Да, опубликовать", callback_data=f"{CB_PREFIX}:confirm:yes"
+                )
+            ],
+            [InlineKeyboardButton(text="✖ Отмена", callback_data=f"{CB_PREFIX}:confirm:no")],
+        ]
+    )
 
 
 def _format_price_line(cur: str, price: float, cash_code: str | None) -> str:
@@ -432,8 +488,8 @@ def fiat_flag(code: str | None) -> str:
 
 
 def _normalize_cash_map(
-        cash: dict | tuple | list | str | None,
-        price_map: dict[str, float] | None = None,
+    cash: dict | tuple | list | str | None,
+    price_map: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """
     Приводим фиат к единому виду { 'BYN': 26.0, 'RUB': 100.0 }.
@@ -477,7 +533,9 @@ def _normalize_cash_map(
     return res
 
 
-def _build_price_lines(price_map: dict[str, float] | None, cash: dict | tuple | list | str | None) -> str:
+def _build_price_lines(
+    price_map: dict[str, float] | None, cash: dict | tuple | list | str | None
+) -> str:
     """
     Готовим строковый блок:
       • ☕ 2
@@ -612,10 +670,10 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
             card_for_meta = card_for_meta or {}
 
             rarity_raw = (
-                    (auction.get("rarity") or "").strip()
-                    or (card_for_meta.get("rarity") or "").strip()
-                    or (card_for_meta.get("tier") or "").strip()
-                    or (card_for_meta.get("nominal") or "").strip()
+                (auction.get("rarity") or "").strip()
+                or (card_for_meta.get("rarity") or "").strip()
+                or (card_for_meta.get("tier") or "").strip()
+                or (card_for_meta.get("nominal") or "").strip()
             )
             rarity_slug = _rarity_slug_local(rarity_raw)
             if rarity_slug:
@@ -632,7 +690,9 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                     uids_deck = await subscribers_for_deck(deck_id, deck_name)
                     recipients.update(int(u) for u in (uids_deck or []) if _to_int(u) is not None)
                 except DBError as err:
-                    logger.warning("subscribers_for_deck(%r,%r) failed: %s", deck_id, deck_name, err)
+                    logger.warning(
+                        "subscribers_for_deck(%r,%r) failed: %s", deck_id, deck_name, err
+                    )
 
             async def pref(name: str) -> Set[int]:
                 try:
@@ -761,7 +821,9 @@ async def send_daily_announce(bot: Bot):
         for a in lots:
             st = to_msk_dt(a.get("start_time"))
             t = st.strftime("%H:%M") if st else "—"
-            items.append(f"• {html.escape(a.get('card_name', '-'))} ({html.escape(a.get('hero_name', '-'))}) в {t}")
+            items.append(
+                f"• {html.escape(a.get('card_name', '-'))} ({html.escape(a.get('hero_name', '-'))}) в {t}"
+            )
         msg = "📅 <b>Анонс на сегодня</b>\n" + "\n".join(items)
 
     for chunk_index, chunk in enumerate(_telegram_text_chunks(msg), start=1):
@@ -827,10 +889,7 @@ async def collect_recipients_for_auction(auction: Dict[str, Any]) -> Set[int]:
 
     # Заголовок лота (карточный или кастомный)
     lot_title = _to_str(
-        auction.get("card_name")
-        or auction.get("lot_name")
-        or auction.get("title")
-        or ""
+        auction.get("card_name") or auction.get("lot_name") or auction.get("title") or ""
     ).strip()
 
     # 1) Подписчики на конкретный заголовок
@@ -843,18 +902,15 @@ async def collect_recipients_for_auction(auction: Dict[str, Any]) -> Set[int]:
                     if uid is not None:
                         recipients.add(uid)
         except DBError as err:
-            logger.warning(
-                "subscribers_for_lot_title(%r) failed: %s", lot_title, err
-            )
+            logger.warning("subscribers_for_lot_title(%r) failed: %s", lot_title, err)
 
     # 2) Подписчики на редкость.
     # Пытаемся взять slug из полей аукциона, если есть
-    rarity_slug: str = _to_str(
-        auction.get("rarity")
-        or auction.get("tier")
-        or auction.get("nominal")
-        or ""
-    ).lower().strip()
+    rarity_slug: str = (
+        _to_str(auction.get("rarity") or auction.get("tier") or auction.get("nominal") or "")
+        .lower()
+        .strip()
+    )
 
     # Нормализуем: допускаем и английские, и русские формы
     if rarity_slug and rarity_slug not in {"bronze", "silver", "gold", "diamond"}:
@@ -866,10 +922,15 @@ async def collect_recipients_for_auction(auction: Dict[str, Any]) -> Set[int]:
         # Ловим формы 'любой/любая/любое/любые'
         if "любо" in t:
             for key in (
-                    "бронза", "бронзовая",
-                    "серебро", "серебряная",
-                    "золото", "золотая",
-                    "алмаз", "алмазы", "алмазная",
+                "бронза",
+                "бронзовая",
+                "серебро",
+                "серебряная",
+                "золото",
+                "золотая",
+                "алмаз",
+                "алмазы",
+                "алмазная",
             ):
                 if key in t:
                     rarity_slug = _rarity_slug_local(key) or ""
@@ -884,15 +945,12 @@ async def collect_recipients_for_auction(auction: Dict[str, Any]) -> Set[int]:
                     if uid is not None:
                         recipients.add(uid)
         except DBError as err:
-            logger.warning(
-                "subscribers_for_rarity(%r) failed: %s", rarity_slug, err
-            )
+            logger.warning("subscribers_for_rarity(%r) failed: %s", rarity_slug, err)
 
     return recipients
 
 
-def _kb_equal(a: InlineKeyboardMarkup | None,
-              b: InlineKeyboardMarkup | None) -> bool:
+def _kb_equal(a: InlineKeyboardMarkup | None, b: InlineKeyboardMarkup | None) -> bool:
     """Безопасное сравнение инлайн-клавиатур."""
     if a is b:
         return True
