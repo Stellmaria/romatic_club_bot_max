@@ -11,7 +11,6 @@ class ExchangeCatalogService:
 
     CARDLIKE_MODES = ("card", "deck_split")
     WHOLE_DECK_MODES = ("deck", "whole_deck", "full_deck")
-    MAX_EXCHANGE_DECK_IDS = frozenset({22, 24, 26, 28})
 
     def __init__(self, repository: ExchangeCatalogRepository):
         self._repository = repository
@@ -21,15 +20,8 @@ class ExchangeCatalogService:
         return cls(ExchangeCatalogRepository(await get_db_pool()))
 
     async def approved_decks(self, deck_ids: Sequence[int]) -> list[dict[str, Any]]:
-        rows = await self._repository.approved_decks(deck_ids)
-        normalized: list[dict[str, Any]] = []
-        for row in rows:
-            item = dict(row)
-            deck_id = int(item.get("deck_id") or 0)
-            if deck_id in self.MAX_EXCHANGE_DECK_IDS:
-                item["deck_name"] = f"{deck_id} колода"
-            normalized.append(item)
-        return normalized
+        return await self._repository.approved_decks(deck_ids)
+
 
     async def approved_lots(self) -> list[dict[str, Any]]:
         return await self._repository.approved_lots()
@@ -118,7 +110,7 @@ class ExchangeCatalogQueries(ExchangeCatalogService):
         return cls(ExchangeCatalogRepository(await get_db_pool()))
 
     async def approved_deck_counts(self, deck_ids: Sequence[int]) -> list[dict[str, Any]]:
-        return await self.approved_decks([int(deck_id) for deck_id in deck_ids])
+        return await self._repository.approved_decks([int(deck_id) for deck_id in deck_ids])
 
     async def approved_batch_ids_by_card(
         self, *, status: str, deck_id: int, card_id: int, modes: Sequence[str]
