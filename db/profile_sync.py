@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from db.core import pool_proxy as db_pool, require_db_pool
+from db.core import pool_proxy as db_pool
+from db.core import require_db_pool
 from db.performance import track_database_query
 
 # Telegram usernames are globally unique. Serializing the tiny profile mutation
@@ -29,27 +30,29 @@ async def sync_user_profile(user_id: int, username: str, full_name: str) -> bool
     normalized_username = _normalize_profile_username(username)
     normalized_full_name = (full_name or "").strip()
 
-    async with db_pool.acquire() as conn:
-        async with track_database_query("users.profile.sync", pool=db_pool.pool):
-            async with conn.transaction():
-                await conn.execute(
-                    "SELECT pg_advisory_xact_lock($1)",
-                    _PROFILE_SYNC_LOCK_KEY,
-                )
-                if normalized_username:
-                    await conn.execute(
-                        """
+    async with (
+        db_pool.acquire() as conn,
+        track_database_query("users.profile.sync", pool=db_pool.pool),
+        conn.transaction(),
+    ):
+        await conn.execute(
+            "SELECT pg_advisory_xact_lock($1)",
+            _PROFILE_SYNC_LOCK_KEY,
+        )
+        if normalized_username:
+            await conn.execute(
+                """
                         UPDATE public.users
                         SET username = NULL
                         WHERE user_id <> $1
                           AND username IS NOT NULL
                           AND lower(username) = lower($2)
                         """,
-                        normalized_user_id,
-                        normalized_username,
-                    )
-                changed_user_id = await conn.fetchval(
-                    """
+                normalized_user_id,
+                normalized_username,
+            )
+        changed_user_id = await conn.fetchval(
+            """
                     INSERT INTO public.users (user_id, username, full_name)
                     VALUES ($1, $2, $3)
                     ON CONFLICT (user_id) DO UPDATE
@@ -59,10 +62,10 @@ async def sync_user_profile(user_id: int, username: str, full_name: str) -> bool
                        OR users.full_name IS DISTINCT FROM EXCLUDED.full_name
                     RETURNING user_id
                     """,
-                    normalized_user_id,
-                    normalized_username,
-                    normalized_full_name,
-                )
+            normalized_user_id,
+            normalized_username,
+            normalized_full_name,
+        )
 
     return changed_user_id is not None
 

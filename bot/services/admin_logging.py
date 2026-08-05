@@ -128,7 +128,7 @@ async def send_message_safe(
             ) as exc:
                 logging.warning("send_message_safe failed chat_id=%s: %s", chat_id, exc)
                 return False
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logging.exception(
                     "send_message_safe unexpected error chat_id=%s: %s",
                     chat_id,
@@ -261,7 +261,7 @@ async def log_delete_request(
 
     try:
         lot = await (await _repository()).get_lot(auction_id)
-    except Exception:  # noqa: BLE001 - snapshot remains a valid fallback
+    except Exception:
         logging.exception("Failed to load lot %s for deletion audit", auction_id)
         lot = None
     source: Mapping[str, Any] = lot if lot else snapshot

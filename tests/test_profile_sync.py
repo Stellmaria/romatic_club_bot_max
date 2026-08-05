@@ -13,7 +13,7 @@ class FakeTransaction:
         self.entered = False
         self.exited = False
 
-    async def __aenter__(self) -> "FakeTransaction":
+    async def __aenter__(self) -> FakeTransaction:
         self.entered = True
         return self
 

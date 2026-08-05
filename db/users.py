@@ -8,14 +8,16 @@ remain normal business results; unavailable PostgreSQL is never represented as
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, Optional
+from typing import Any
 
 from db.core import (
     execute,
     fetch,
     fetchrow,
-    pool_proxy as db_pool,
     require_db_pool,
+)
+from db.core import (
+    pool_proxy as db_pool,
 )
 from db.profile_sync import sync_user_profile
 
@@ -37,7 +39,7 @@ async def set_subscription(user_id: int, value: bool) -> None:
 
 
 @require_db_pool
-async def is_subscribed(user_id: int) -> Optional[bool]:
+async def is_subscribed(user_id: int) -> bool | None:
     async with db_pool.acquire() as conn:
         return await conn.fetchval(
             "SELECT is_subscribed FROM users WHERE user_id = $1",
@@ -46,7 +48,7 @@ async def is_subscribed(user_id: int) -> Optional[bool]:
 
 
 @require_db_pool
-async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
+async def get_user(user_id: int) -> dict[str, Any] | None:
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT user_id, username, full_name FROM users WHERE user_id = $1",
@@ -207,22 +209,22 @@ async def add_user_if_not_exists(
 
 
 __all__ = [
+    "_normalize_username",
     "add_user",
-    "set_subscription",
-    "is_subscribed",
-    "get_user",
-    "set_luxury_status",
-    "get_user_id_by_username",
-    "get_users_by_ids",
+    "add_user_if_not_exists",
     "count_new_users",
     "get_all_trusted_users",
-    "is_luxury_user",
-    "set_trusted_status",
     "get_all_users",
-    "has_pending_delete_request",
-    "sync_trusted_status",
+    "get_user",
     "get_user_by_username",
-    "_normalize_username",
-    "add_user_if_not_exists",
+    "get_user_id_by_username",
+    "get_users_by_ids",
+    "has_pending_delete_request",
+    "is_luxury_user",
+    "is_subscribed",
+    "set_luxury_status",
+    "set_subscription",
+    "set_trusted_status",
+    "sync_trusted_status",
     "sync_user_profile",
 ]
