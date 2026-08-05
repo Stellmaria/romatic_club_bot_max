@@ -1,0 +1,221 @@
+name: Privacy cleanup hardening
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: >-
+      github.ref == 'refs/heads/privacy/approved-temporary-cleanup' &&
+      github.event.head_commit.message == 'chore(ci): harden approved cleanup plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: '0.11.16'
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install pinned development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Harden inventory and plan validation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          service_path = Path('bot/services/privacy_cleanup.py')
+          text = service_path.read_text(encoding='utf-8')
+
+          import_marker = 'import hashlib\n'
+          if import_marker not in text:
+              raise SystemExit('hashlib import marker not found')
+          text = text.replace(import_marker, import_marker + 'import hmac\n', 1)
+
+          constants_marker = '_APPROVED_PLANNER_KEY = "schedule_setup_sessions"\n'
+          constants = (
+              constants_marker
+              + '\n_REQUIRED_DATASET_FIELDS = frozenset({\n'
+              + '    "id",\n    "tables",\n    "data_fields",\n    "purpose",\n'
+              + '    "sensitivity",\n    "access_roles",\n    "retention_class",\n'
+              + '    "backup_presence",\n    "deletion_action",\n    "exceptions",\n})\n'
+              + '_REQUIRED_STRING_LIST_FIELDS = ("data_fields", "access_roles", "exceptions")\n'
+              + '_ALLOWED_SENSITIVITY = frozenset({"moderate", "high", "restricted"})\n'
+              + '_ALLOWED_RETENTION_STATUS = frozenset({\n'
+              + '    "approved",\n    "proposed",\n    "owner-legal-decision-required",\n})\n'
+          )
+          if constants_marker not in text:
+              raise SystemExit('cleanup constants marker not found')
+          text = text.replace(constants_marker, constants, 1)
+
+          retention_marker = '        days = raw_policy.get("days")\n'
+          retention_checks = (
+              '        status = raw_policy.get("status")\n'
+              '        if status not in _ALLOWED_RETENTION_STATUS:\n'
+              '            raise InventoryError(f"retention class {name!r} has invalid status")\n'
+              '        _string(raw_policy.get("purpose"), field=f"retention class {name!r} purpose")\n'
+              '        days = raw_policy.get("days")\n'
+          )
+          if retention_marker not in text:
+              raise SystemExit('retention validation marker not found')
+          text = text.replace(retention_marker, retention_checks, 1)
+
+          seen_marker = '    seen_ids: set[str] = set()\n    seen_tables: set[str] = set()\n'
+          seen_replacement = seen_marker + '    seen_rule_ids: set[str] = set()\n'
+          if seen_marker not in text:
+              raise SystemExit('inventory seen marker not found')
+          text = text.replace(seen_marker, seen_replacement, 1)
+
+          dataset_marker = '        dataset_id = _string(raw_dataset.get("id"), field="dataset id")\n'
+          dataset_checks = (
+              '        missing = sorted(_REQUIRED_DATASET_FIELDS - raw_dataset.keys())\n'
+              '        if missing:\n'
+              '            raise InventoryError(\n'
+              '                f"dataset {raw_dataset.get(\'id\', \'<unknown>\')!r} misses fields: {missing}"\n'
+              '            )\n'
+              '        dataset_id = _string(raw_dataset.get("id"), field="dataset id")\n'
+              '        for field_name in _REQUIRED_STRING_LIST_FIELDS:\n'
+              '            values = raw_dataset.get(field_name)\n'
+              '            if not isinstance(values, list) or not all(\n'
+              '                isinstance(item, str) and item for item in values\n'
+              '            ):\n'
+              '                raise InventoryError(\n'
+              '                    f"dataset {dataset_id!r} {field_name} must contain strings"\n'
+              '                )\n'
+              '        _string(raw_dataset.get("purpose"), field=f"dataset {dataset_id!r} purpose")\n'
+              '        _string(\n'
+              '            raw_dataset.get("deletion_action"),\n'
+              '            field=f"dataset {dataset_id!r} deletion_action",\n'
+              '        )\n'
+              '        if raw_dataset.get("sensitivity") not in _ALLOWED_SENSITIVITY:\n'
+              '            raise InventoryError(f"dataset {dataset_id!r} has invalid sensitivity")\n'
+          )
+          if dataset_marker not in text:
+              raise SystemExit('dataset validation marker not found')
+          text = text.replace(dataset_marker, dataset_checks, 1)
+
+          rule_marker = (
+              '            if not isinstance(raw_rule, dict):\n'
+              '                raise InventoryError(f"dataset {dataset_id!r} cleanup rule must be an object")\n'
+              '            enabled = raw_rule.get("destructive_enabled")\n'
+          )
+          rule_checks = (
+              '            if not isinstance(raw_rule, dict):\n'
+              '                raise InventoryError(f"dataset {dataset_id!r} cleanup rule must be an object")\n'
+              '            rule_id = _string(raw_rule.get("id"), field="cleanup rule id")\n'
+              '            if rule_id in seen_rule_ids:\n'
+              '                raise InventoryError(f"duplicate cleanup rule id: {rule_id}")\n'
+              '            seen_rule_ids.add(rule_id)\n'
+              '            _string(raw_rule.get("planner_key"), field=f"cleanup rule {rule_id!r} planner_key")\n'
+              '            if raw_rule.get("status") != "approved":\n'
+              '                raise InventoryError(f"cleanup rule {rule_id!r} must be explicitly approved")\n'
+              '            enabled = raw_rule.get("destructive_enabled")\n'
+          )
+          if rule_marker not in text:
+              raise SystemExit('cleanup rule validation marker not found')
+          text = text.replace(rule_marker, rule_checks, 1)
+
+          class_marker = '\n\nclass PrivacyCleanupService:\n'
+          integrity_function = (
+              '\n\ndef _validate_plan_integrity(\n'
+              '    plan: PrivacyCleanupPlan,\n'
+              '    policy: PrivacyCleanupPolicy,\n'
+              ') -> None:\n'
+              '    if plan.schema_version != 1:\n'
+              '        raise PrivacyCleanupConfirmationError("cleanup plan schema is invalid")\n'
+              '    if (\n'
+              '        plan.dataset_id != policy.dataset_id\n'
+              '        or plan.rule_id != policy.rule_id\n'
+              '        or plan.retention_days != policy.retention_days\n'
+              '    ):\n'
+              '        raise PrivacyCleanupConfirmationError("cleanup plan is outside the allowlist")\n'
+              '    if not plan.run_id or plan.eligible_rows < 0:\n'
+              '        raise PrivacyCleanupConfirmationError("cleanup plan counters are invalid")\n'
+              '    if plan.delete_limit <= 0 or plan.delete_limit > 10_000:\n'
+              '        raise PrivacyCleanupConfirmationError("cleanup plan batch limit is invalid")\n'
+              '    if plan.generated_at.tzinfo is None or plan.cutoff.tzinfo is None:\n'
+              '        raise PrivacyCleanupConfirmationError("cleanup plan timestamps must be timezone-aware")\n'
+              '    expected_sha256 = _plan_sha256(\n'
+              '        policy=policy,\n'
+              '        cutoff=plan.cutoff,\n'
+              '        eligible_rows=plan.eligible_rows,\n'
+              '        delete_limit=plan.delete_limit,\n'
+              '    )\n'
+              '    if not hmac.compare_digest(plan.plan_sha256, expected_sha256):\n'
+              '        raise PrivacyCleanupConfirmationError("cleanup plan integrity check failed")\n'
+              + class_marker
+          )
+          if class_marker not in text:
+              raise SystemExit('service class marker not found')
+          text = text.replace(class_marker, integrity_function, 1)
+
+          policy_marker = (
+              '        if current_policy.policy_sha256 != plan.policy_sha256:\n'
+              '            raise PrivacyCleanupConfirmationError("privacy inventory changed after plan generation")\n'
+          )
+          policy_replacement = policy_marker + '        _validate_plan_integrity(plan, current_policy)\n'
+          if policy_marker not in text:
+              raise SystemExit('apply policy marker not found')
+          text = text.replace(policy_marker, policy_replacement, 1)
+          service_path.write_text(text, encoding='utf-8')
+
+          test_path = Path('tests/test_privacy_cleanup_service.py')
+          tests = test_path.read_text(encoding='utf-8')
+          tests = tests.replace(
+              'import json\nfrom datetime import UTC, datetime\n',
+              'import json\nfrom dataclasses import replace\nfrom datetime import UTC, datetime, timedelta\n',
+              1,
+          )
+          test_marker = '\n\ndef test_inventory_fails_closed_for_unapproved_destructive_policy(\n'
+          tamper_test = (
+              '\n\n@pytest.mark.asyncio\n'
+              'async def test_apply_rejects_tampered_plan(tmp_path: Path) -> None:\n'
+              '    inventory_path = _write_inventory(tmp_path, _inventory())\n'
+              '    repository = FakeRepository(3)\n'
+              '    service = PrivacyCleanupService(\n'
+              '        repository,  # type: ignore[arg-type]\n'
+              '        clock=FixedClock(datetime(2026, 8, 5, 1, tzinfo=UTC)),\n'
+              '        inventory_path=inventory_path,\n'
+              '    )\n'
+              '    plan = await service.build_plan(batch_limit=2)\n'
+              '    tampered = replace(plan, cutoff=plan.cutoff + timedelta(days=365))\n\n'
+              '    with pytest.raises(PrivacyCleanupConfirmationError, match="integrity"):\n'
+              '        await service.apply_plan(\n'
+              '            tampered,\n'
+              '            confirmation=tampered.confirmation_token,\n'
+              '        )\n'
+              '    assert repository.applied == []\n'
+              + test_marker
+          )
+          if test_marker not in tests:
+              raise SystemExit('privacy cleanup test insertion marker not found')
+          tests = tests.replace(test_marker, tamper_test, 1)
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+      - name: Format and validate hardening
+        env:
+          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          UID_HASH_KEY: ci-only-hmac-key
+          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: |
+          python -m black bot/services/privacy_cleanup.py tests/test_privacy_cleanup_service.py
+          python -m ruff check bot/services/privacy_cleanup.py tests/test_privacy_cleanup_service.py
+          python scripts/privacy_cleanup.py validate
+          python scripts/check_database_boundaries.py
+          python -m pytest -q tests/test_privacy_cleanup_service.py tests/test_privacy_request_inventory.py
+          python -m compileall -q bot/services/privacy_cleanup.py tests/test_privacy_cleanup_service.py
+          git diff --check
+      - name: Commit hardened product files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/privacy-cleanup-hardening.yml
+          git add bot/services/privacy_cleanup.py tests/test_privacy_cleanup_service.py
+          git commit -m 'fix(privacy): validate cleanup plan before apply'
+          git push origin HEAD:privacy/approved-temporary-cleanup
