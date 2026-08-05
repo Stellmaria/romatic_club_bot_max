@@ -22,7 +22,7 @@ from bot.handlers.helper.helpers_users import get_user_ids_from_usernames, forma
 from bot.services.outbox import TelegramOutboxService
 from bot.utils import currency_emoji
 from db.legacy import get_settings, set_settings, get_card_by_id, get_card_subscribers, get_auctions_by_date, \
-    list_auctions, get_auction_owner_id, get_users_with_pref, \
+    list_auctions, get_auction_owner_id, get_users_with_pref, list_broadcast_targets, \
     get_auction_winner, subscribers_for_lot_title, get_card_full_by_id, find_card_by_name_hero, subscribers_for_deck, \
     subscribers_for_rarity
 
@@ -544,6 +544,12 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
             logger.exception("list_auctions(['active']) failed: %s", err)
             auctions = []
 
+        try:
+            globally_enabled_users = set(await list_broadcast_targets())
+        except DBError as err:
+            logger.warning("list_broadcast_targets failed: %s", err)
+            globally_enabled_users = set()
+
         for auction in auctions:
             msg_id = _to_int(auction.get("message_id"))
             if not msg_id:
@@ -630,7 +636,7 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
 
             async def pref(name: str) -> Set[int]:
                 try:
-                    return set(await get_users_with_pref(name))
+                    return set(await get_users_with_pref(name)) & globally_enabled_users
                 except DBError as db_exc:
                     logger.warning("get_users_with_pref(%s) failed: %s", name, db_exc)
                     return set()
@@ -661,7 +667,7 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                         f"{card_info}\n"
                         f"Ссылка: <a href='{auction_url}'>Перейти к аукциону</a>"
                     )
-                    user_ids = list(users_start | recipients)
+                    user_ids = list(users_start & recipients)
                     if auction_id is not None:
                         await (await TelegramOutboxService.create()).enqueue_auction_notification(
                             auction_id=auction_id,
@@ -679,7 +685,7 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                         f"{card_info}\n"
                         f"Ссылка: <a href='{auction_url}'>Успей сделать ставку</a>"
                     )
-                    user_ids = list(users_1min | recipients)
+                    user_ids = list(users_1min & recipients)
                     if auction_id is not None:
                         await (await TelegramOutboxService.create()).enqueue_auction_notification(
                             auction_id=auction_id,
@@ -718,8 +724,8 @@ async def auction_notifications_loop(bot, channel_username: str) -> None:
                         f"{winner_line_public}\n"
                         f"Ссылка: <a href='{auction_url}'>Открыть аукцион</a>"
                     )
-                    messages = {int(user_id): text for user_id in (users_end | recipients)}
-                    if owner_id:
+                    messages = {int(user_id): text for user_id in (users_end & recipients)}
+                    if owner_id and owner_id in users_end:
                         messages[owner_id] = text.replace(winner_line_public, winner_line_owner)
                     await (await TelegramOutboxService.create()).enqueue_auction_notification(
                         auction_id=auction_id,
