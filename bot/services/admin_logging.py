@@ -113,7 +113,8 @@ async def send_message_safe(
             except TelegramRetryAfter as exc:
                 retry_after = max(0.0, float(exc.retry_after))
                 logging.warning(
-                    "send_message_safe rate limited chat_id=%s retry_after=%.3f attempt=%d/%d",
+                    "send_message_safe rate limited chat_id=%s retry_after=%.3f "
+                    "attempt=%d/%d",
                     chat_id,
                     retry_after,
                     attempt,
@@ -122,8 +123,14 @@ async def send_message_safe(
                 if attempt >= _MAX_SEND_ATTEMPTS:
                     return False
                 await asyncio.sleep(retry_after)
-            except (TelegramForbiddenError, TelegramBadRequest, TelegramNetworkError) as exc:
-                logging.warning("send_message_safe failed chat_id=%s: %s", chat_id, exc)
+            except (
+                TelegramForbiddenError,
+                TelegramBadRequest,
+                TelegramNetworkError,
+            ) as exc:
+                logging.warning(
+                    "send_message_safe failed chat_id=%s: %s", chat_id, exc
+                )
                 return False
             except Exception as exc:  # noqa: BLE001
                 logging.exception(

@@ -18,8 +18,12 @@ async def test_profile_sync_transfers_case_insensitive_username(
 ) -> None:
     install_pool_for_testing(postgres_pool)
     try:
-        assert await sync_user_profile(910_001, "Krsdtt", "Old Owner") is True
-        assert await sync_user_profile(910_002, "krsdtt", "Current Owner") is True
+        assert (
+            await sync_user_profile(910_001, "Krsdtt", "Old Owner")
+        ) is True
+        assert (
+            await sync_user_profile(910_002, "krsdtt", "Current Owner")
+        ) is True
 
         async with postgres_pool.acquire() as connection:
             rows = await connection.fetch(

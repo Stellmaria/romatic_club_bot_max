@@ -10,7 +10,13 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Dict, Optional
 
-from db.core import execute, fetch, fetchrow, pool_proxy as db_pool, require_db_pool
+from db.core import (
+    execute,
+    fetch,
+    fetchrow,
+    pool_proxy as db_pool,
+    require_db_pool,
+)
 from db.profile_sync import sync_user_profile
 
 
