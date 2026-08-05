@@ -107,9 +107,7 @@ async def test_approval_middleware_runs_handler_then_continues_queue(
         return "approved"
 
     async def continue_queue(message, received_state, *, processed_batch_id):
-        calls.append(
-            ("continue", message, received_state, processed_batch_id)
-        )
+        calls.append(("continue", message, received_state, processed_batch_id))
 
     monkeypatch.setattr(moderation_queue, "Message", FakeMessage)
     monkeypatch.setattr(moderation_queue, "FSMContext", FakeFsmContext)
@@ -132,12 +130,7 @@ async def test_approval_middleware_runs_handler_then_continues_queue(
 
 def test_exchange_router_registers_queue_continuation_middleware() -> None:
     source = (
-        Path(__file__).parents[1]
-        / "bot"
-        / "handlers"
-        / "auction"
-        / "exchange"
-        / "__init__.py"
+        Path(__file__).parents[1] / "bot" / "handlers" / "auction" / "exchange" / "__init__.py"
     ).read_text(encoding="utf-8")
 
     assert "ContinuePendingExchangeQueueMiddleware" in source
