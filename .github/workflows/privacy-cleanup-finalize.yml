@@ -25,7 +25,7 @@ jobs:
           cache-dependency-glob: requirements/*.lock
       - name: Install pinned development graph
         run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Patch composition and inventory
+      - name: Patch composition, CLI bootstrap, and inventory
         run: |
           python - <<'PY'
           import json
@@ -39,14 +39,46 @@ jobs:
               raise SystemExit('application worker marker not found')
           application.write_text(text.replace(marker, addition, 1), encoding='utf-8')
 
+          cleanup_script = Path('scripts/privacy_cleanup.py')
+          cleanup_text = cleanup_script.read_text(encoding='utf-8')
+          cleanup_marker = 'from typing import Mapping\n\nimport asyncpg\n'
+          cleanup_bootstrap = (
+              'from typing import Mapping\n\n'
+              'ROOT = Path(__file__).resolve().parents[1]\n'
+              'if str(ROOT) not in sys.path:\n'
+              '    sys.path.insert(0, str(ROOT))\n\n'
+              'import asyncpg  # noqa: E402\n'
+          )
+          if cleanup_marker not in cleanup_text:
+              raise SystemExit('privacy cleanup CLI import marker not found')
+          cleanup_script.write_text(
+              cleanup_text.replace(cleanup_marker, cleanup_bootstrap, 1),
+              encoding='utf-8',
+          )
+
           inventory_path = Path('docs/privacy/data_inventory.json')
           inventory = json.loads(inventory_path.read_text(encoding='utf-8'))
           inventory['retention_classes']['temporary_7d']['destructive_enabled'] = True
-          schedule = next(item for item in inventory['datasets'] if item['id'] == 'schedule_operator_state')
-          schedule['tables'] = [item for item in schedule['tables'] if item != 'schedule_setup_deck_scopes']
-          schedule['cleanup_rules'] = [item for item in schedule['cleanup_rules'] if item['id'] == 'expired_schedule_setup_sessions']
+          schedule = next(
+              item
+              for item in inventory['datasets']
+              if item['id'] == 'schedule_operator_state'
+          )
+          schedule['tables'] = [
+              item
+              for item in schedule['tables']
+              if item != 'schedule_setup_deck_scopes'
+          ]
+          schedule['cleanup_rules'] = [
+              item
+              for item in schedule['cleanup_rules']
+              if item['id'] == 'expired_schedule_setup_sessions'
+          ]
           schedule['cleanup_rules'][0]['destructive_enabled'] = True
-          inventory_path.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          inventory_path.write_text(
+              json.dumps(inventory, ensure_ascii=False, indent=2) + '\n',
+              encoding='utf-8',
+          )
           PY
       - name: Format and validate
         env:
