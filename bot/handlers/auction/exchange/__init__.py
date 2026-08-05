@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from aiogram import Router
 
 from . import common as _common
@@ -12,42 +14,41 @@ from . import common as _common
 _EXCHANGE_DECK_IDS = (22, 24, 26, 28)
 
 
-async def _fixed_exchange_deck_ids(_decks: list[dict] | None = None) -> list[int]:
+async def _fixed_exchange_deck_ids(
+    _decks: list[dict[str, Any]] | None = None,
+) -> list[int]:
     """Return the exact deck set supported by the MAX exchange."""
     return list(_EXCHANGE_DECK_IDS)
 
 
-async def _fixed_exchange_decks_for_menu() -> list[dict]:
-    """Build exchange deck rows with labels matching their real IDs."""
-    try:
-        decks_all = await _common.get_all_decks()
-    except Exception:
-        decks_all = []
+_common_module = cast(Any, _common)
+_common_module.EXCHANGE_RESOURCE_DECK_LIMIT = len(_EXCHANGE_DECK_IDS)
+_common_module.EX_DECKS = list(_EXCHANGE_DECK_IDS)
+_common_module._get_exchange_deck_ids = _fixed_exchange_deck_ids
+_common_module.get_exchange_deck_ids = _fixed_exchange_deck_ids
 
-    by_id = {
-        _common._deck_id_from_row(deck): dict(deck)
-        for deck in decks_all or []
-        if _common._deck_id_from_row(deck)
-    }
+from . import catalog as _catalog
 
-    result: list[dict] = []
+_original_q_exchange_approved_decks = _catalog.q_exchange_approved_decks
+
+
+async def _fixed_q_exchange_approved_decks() -> list[dict[str, Any]]:
+    """Return the four supported decks with ID-consistent labels."""
+    rows = await _original_q_exchange_approved_decks()
+    by_id = {int(row.get("deck_id") or 0): row for row in rows}
+    result: list[dict[str, Any]] = []
     for deck_id in _EXCHANGE_DECK_IDS:
-        row = by_id.get(deck_id, {})
+        row = dict(by_id.get(deck_id, {}))
         row["deck_id"] = deck_id
-        row["name"] = f"{deck_id} колода"
+        row["deck_name"] = f"{deck_id} колода"
+        row["cnt"] = int(row.get("cnt") or 0)
         result.append(row)
     return result
 
 
-# Keep every exchange entry point on the same fixed deck policy. This also
-# prevents a newer or incorrectly named DB row from replacing deck 22 or
-# displaying deck 29 under callback ID 28.
-_common.EXCHANGE_RESOURCE_DECK_LIMIT = len(_EXCHANGE_DECK_IDS)
-_common.EX_DECKS = list(_EXCHANGE_DECK_IDS)
-_common._get_exchange_deck_ids = _fixed_exchange_deck_ids
-_common.get_exchange_deck_ids = _fixed_exchange_deck_ids
-_common._get_exchange_decks_for_menu = _fixed_exchange_decks_for_menu
-_common.get_exchange_decks_for_menu = _fixed_exchange_decks_for_menu
+_catalog_module = cast(Any, _catalog)
+_catalog_module._q_exchange_approved_decks = _fixed_q_exchange_approved_decks
+_catalog_module.q_exchange_approved_decks = _fixed_q_exchange_approved_decks
 
 from .catalog import (
     format_exchange_approved_lot_caption,
