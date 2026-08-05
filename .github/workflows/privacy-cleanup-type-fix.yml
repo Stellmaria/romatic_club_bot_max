@@ -1,0 +1,121 @@
+name: Privacy cleanup strict typing fix
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: >-
+      github.ref == 'refs/heads/privacy/approved-temporary-cleanup' &&
+      github.event.head_commit.message == 'chore(ci): fix cleanup strict typing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: '0.11.16'
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install pinned development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Apply strict typing fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          service = Path('bot/services/privacy_cleanup.py')
+          text = service.read_text(encoding='utf-8')
+          marker = '''    tables = schedule_dataset.get("tables")
+    if _APPROVED_PLANNER_KEY not in tables:
+'''
+          replacement = '''    tables = schedule_dataset.get("tables")
+    if not isinstance(tables, list):
+        raise InventoryError("schedule_operator_state tables must be an array")
+    if _APPROVED_PLANNER_KEY not in tables:
+'''
+          if marker not in text:
+              raise SystemExit('service table validation marker not found')
+          service.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
+
+          workers = Path('bot/bootstrap/workers.py')
+          text = workers.read_text(encoding='utf-8')
+          import_marker = '''import asyncio
+import logging
+
+from aiogram import Bot
+'''
+          import_replacement = '''import asyncio
+import logging
+from collections.abc import Awaitable, Callable
+from typing import TypedDict, cast
+
+from aiogram import Bot
+'''
+          if import_marker not in text:
+              raise SystemExit('workers import marker not found')
+          text = text.replace(import_marker, import_replacement, 1)
+
+          logger_marker = 'logger = logging.getLogger("auction_bot.privacy_cleanup")\n'
+          definitions = '''logger = logging.getLogger("auction_bot.privacy_cleanup")
+
+
+type _LegacyBotLoop = Callable[[Bot], Awaitable[None]]
+
+
+class _WorkerOptions(TypedDict):
+    criticality: WorkerCriticality
+    restart_policy: RestartPolicy
+    initial_backoff: float
+    max_backoff: float
+    max_failures: int
+    shutdown_timeout: float
+'''
+          if logger_marker not in text:
+              raise SystemExit('workers logger marker not found')
+          text = text.replace(logger_marker, definitions, 1)
+          text = text.replace('    recoverable = {\n', '    recoverable: _WorkerOptions = {\n', 1)
+          text = text.replace('    critical = {\n', '    critical: _WorkerOptions = {\n', 1)
+          text = text.replace(
+              'lambda _context: card_subscriptions_watch_loop(bot),',
+              'lambda _context: cast(_LegacyBotLoop, card_subscriptions_watch_loop)(bot),',
+              1,
+          )
+          text = text.replace(
+              'lambda _context: daily_loop(bot),',
+              'lambda _context: cast(_LegacyBotLoop, daily_loop)(bot),',
+              1,
+          )
+          text = text.replace(
+              'lambda _context: luxury_status_sync_loop(bot),',
+              'lambda _context: cast(_LegacyBotLoop, luxury_status_sync_loop)(bot),',
+              1,
+          )
+          workers.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate strict changed-code gate
+        env:
+          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          UID_HASH_KEY: ci-only-hmac-key
+          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: |
+          python -m black bot/bootstrap/workers.py bot/services/privacy_cleanup.py
+          python -m ruff check --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --output-format=concise --ignore S101,S603,S607 bot/application.py bot/bootstrap/container.py bot/bootstrap/workers.py bot/repositories/privacy_cleanup.py bot/services/privacy_cleanup.py scripts/privacy_cleanup.py tests/integration/test_privacy_cleanup_postgres.py tests/test_privacy_cleanup_service.py
+          python -m mypy --strict --follow-imports=silent --no-error-summary --namespace-packages --explicit-package-bases bot/application.py bot/bootstrap/container.py bot/bootstrap/workers.py bot/repositories/privacy_cleanup.py bot/services/privacy_cleanup.py
+          python scripts/privacy_cleanup.py validate
+          python scripts/check_database_boundaries.py
+          python -m pytest -q tests/test_privacy_cleanup_service.py tests/test_privacy_request_inventory.py
+          git diff --check
+      - name: Commit typing fixes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/bootstrap/workers.py bot/services/privacy_cleanup.py
+          git commit -m 'fix(privacy): satisfy strict cleanup typing'
+          git push origin HEAD:privacy/approved-temporary-cleanup
