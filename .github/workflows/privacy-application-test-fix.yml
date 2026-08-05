@@ -33,38 +33,41 @@ jobs:
           path = Path('tests/test_application_observability_lifecycle.py')
           text = path.read_text(encoding='utf-8')
 
-          marker = '''    monkeypatch.setattr(
-        container_module.ApplicationContainer,
-        "build",
-        staticmethod(lambda **kwargs: state.update(container_kwargs=kwargs) or object()),
-    )
-'''
-          replacement = '''    def fake_build_container(**kwargs: object) -> SimpleNamespace:
-        container = SimpleNamespace(privacy_cleanup=object())
-        state["container_kwargs"] = kwargs
-        state["container"] = container
-        return container
-
-    monkeypatch.setattr(
-        container_module.ApplicationContainer,
-        "build",
-        staticmethod(fake_build_container),
-    )
-'''
+          marker = (
+              '    monkeypatch.setattr(\n'
+              '        container_module.ApplicationContainer,\n'
+              '        "build",\n'
+              '        staticmethod(lambda **kwargs: state.update(container_kwargs=kwargs) or object()),\n'
+              '    )\n'
+          )
+          replacement = (
+              '    def fake_build_container(**kwargs: object) -> SimpleNamespace:\n'
+              '        container = SimpleNamespace(privacy_cleanup=object())\n'
+              '        state["container_kwargs"] = kwargs\n'
+              '        state["container"] = container\n'
+              '        return container\n\n'
+              '    monkeypatch.setattr(\n'
+              '        container_module.ApplicationContainer,\n'
+              '        "build",\n'
+              '        staticmethod(fake_build_container),\n'
+              '    )\n'
+          )
           if marker not in text:
               raise SystemExit('application container fake marker not found')
           text = text.replace(marker, replacement, 1)
 
-          assertion_marker = '''    assert state["metric_calls"] == [("application_starts_total", {"process": "bot"})]
-    assert state["events"] == [
-'''
-          assertion_replacement = '''    assert state["metric_calls"] == [("application_starts_total", {"process": "bot"})]
-    task_args, task_kwargs = state["task_specs"]
-    assert task_args == (state["protected_bot"],)
-    assert task_kwargs["privacy_cleanup"] is state["container"].privacy_cleanup
-    assert task_kwargs["metrics"] is state["metrics"]
-    assert state["events"] == [
-'''
+          assertion_marker = (
+              '    assert state["metric_calls"] == [("application_starts_total", {"process": "bot"})]\n'
+              '    assert state["events"] == [\n'
+          )
+          assertion_replacement = (
+              '    assert state["metric_calls"] == [("application_starts_total", {"process": "bot"})]\n'
+              '    task_args, task_kwargs = state["task_specs"]\n'
+              '    assert task_args == (state["protected_bot"],)\n'
+              '    assert task_kwargs["privacy_cleanup"] is state["container"].privacy_cleanup\n'
+              '    assert task_kwargs["metrics"] is state["metrics"]\n'
+              '    assert state["events"] == [\n'
+          )
           if assertion_marker not in text:
               raise SystemExit('application lifecycle assertion marker not found')
           path.write_text(text.replace(assertion_marker, assertion_replacement, 1), encoding='utf-8')
