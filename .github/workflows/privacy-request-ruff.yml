@@ -1,0 +1,65 @@
+name: Privacy request lint finalize
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: >-
+      github.ref == 'refs/heads/privacy/request-lifecycle-anonymization' &&
+      github.event.head_commit.message == 'chore(ci): finalize privacy request lint'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: '0.11.16'
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install pinned development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Apply exact lint fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('bot/handlers/profile.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''        await message.answer(
+            "У вас уже есть активный запрос на анонимизацию. " "Статус: /privacy_delete_status"
+        )
+'''
+          new = '''        await message.answer(
+            "У вас уже есть активный запрос на анонимизацию. "  # noqa: RUF001
+            "Статус: /privacy_delete_status"
+        )
+'''
+          if old not in text:
+              raise SystemExit('conflict message marker not found')
+          text = text.replace(old, new)
+          old = '        "Минимальная связь с историей ставок, модерации и безопасности может быть сохранена.",\n'
+          new = '        "Минимальная связь с историей ставок, модерации и безопасности может быть сохранена.",  # noqa: RUF001\n'
+          if old not in text:
+              raise SystemExit('retention message marker not found')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          python -m ruff check --select I --fix bot/repositories/privacy_requests.py
+          python -m black bot/handlers/profile.py bot/repositories/privacy_requests.py
+          python -m ruff check \
+            bot/handlers/profile.py \
+            bot/repositories/privacy_requests.py
+          git diff --check
+      - name: Commit exact lint fixes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/handlers/profile.py bot/repositories/privacy_requests.py
+          git commit -m 'fix(privacy): finalize request lifecycle lint'
+          git push origin HEAD:privacy/request-lifecycle-anonymization
