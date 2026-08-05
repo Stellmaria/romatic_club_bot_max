@@ -1,0 +1,71 @@
+name: Privacy cleanup finalize
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: >-
+      github.ref == 'refs/heads/privacy/approved-temporary-cleanup' &&
+      github.event.head_commit.message == 'chore(ci): finalize approved cleanup slice'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: '0.11.16'
+          enable-cache: true
+          cache-dependency-glob: requirements/*.lock
+      - name: Install pinned development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Patch composition and inventory
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          application = Path('bot/application.py')
+          text = application.read_text(encoding='utf-8')
+          marker = '                auction_channel_username=bot_settings.auction_channel_username,\n'
+          addition = marker + '                privacy_cleanup=container.privacy_cleanup,\n                metrics=metrics,\n'
+          if marker not in text:
+              raise SystemExit('application worker marker not found')
+          application.write_text(text.replace(marker, addition, 1), encoding='utf-8')
+
+          inventory_path = Path('docs/privacy/data_inventory.json')
+          inventory = json.loads(inventory_path.read_text(encoding='utf-8'))
+          inventory['retention_classes']['temporary_7d']['destructive_enabled'] = True
+          schedule = next(item for item in inventory['datasets'] if item['id'] == 'schedule_operator_state')
+          schedule['tables'] = [item for item in schedule['tables'] if item != 'schedule_setup_deck_scopes']
+          schedule['cleanup_rules'] = [item for item in schedule['cleanup_rules'] if item['id'] == 'expired_schedule_setup_sessions']
+          schedule['cleanup_rules'][0]['destructive_enabled'] = True
+          inventory_path.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+      - name: Format and validate
+        env:
+          BOT_TOKEN: 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          UID_HASH_KEY: ci-only-hmac-key
+          UID_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: |
+          python -m black bot/application.py bot/bootstrap/container.py bot/bootstrap/workers.py bot/repositories/privacy_cleanup.py bot/services/privacy_cleanup.py scripts/privacy_cleanup.py tests/test_privacy_cleanup_service.py tests/integration/test_privacy_cleanup_postgres.py
+          python -m ruff check bot/application.py bot/bootstrap/container.py bot/bootstrap/workers.py bot/repositories/privacy_cleanup.py bot/services/privacy_cleanup.py scripts/privacy_cleanup.py tests/test_privacy_cleanup_service.py tests/integration/test_privacy_cleanup_postgres.py
+          python scripts/privacy_cleanup.py validate
+          python scripts/check_database_boundaries.py
+          python scripts/check_handler_import_boundaries.py
+          python -m pytest -q tests/test_privacy_cleanup_service.py tests/test_privacy_request_inventory.py
+          python -m compileall -q bot scripts tests/integration/test_privacy_cleanup_postgres.py
+          git diff --check
+      - name: Commit final product files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/application.py bot/bootstrap/container.py bot/bootstrap/workers.py bot/repositories/privacy_cleanup.py bot/services/privacy_cleanup.py scripts/privacy_cleanup.py tests/test_privacy_cleanup_service.py tests/integration/test_privacy_cleanup_postgres.py docs/privacy/data_inventory.json docs/privacy/cleanup_automation.md
+          git commit -m 'feat(privacy): automate approved temporary cleanup'
+          git push origin HEAD:privacy/approved-temporary-cleanup
