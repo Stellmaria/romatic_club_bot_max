@@ -606,7 +606,7 @@ async def save_revision_other(
             f"Пользователь: <code>{user.id}</code>\n\n"
             f"{html.escape(response)}",
         )
-    except Exception:  # noqa: BLE001 - logging must not break revision flow
+    except Exception:
         logger.exception(
             "Failed to send UID revision response to admin log",
             extra={"request_id": request_id, "user_id": user.id},
