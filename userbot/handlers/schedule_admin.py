@@ -15,11 +15,14 @@ from userbot.schedule_publication import (
     extract_custom_emoji_assignments,
     missing_required_emoji_keys,
     preview_schedule_announcement,
+    render_schedule_configuration_warning,
+    schedule_preview_issues,
     store_emoji_assignments,
 )
 from userbot.schedule_review_service import (
     decide_schedule_review,
     get_schedule_review,
+    get_schedule_review_target,
     schedule_review_snapshot,
 )
 
@@ -34,14 +37,42 @@ async def _is_authorized(event: object, config: UserbotSettings) -> bool:
     return bool(sender_id and int(sender_id) in allowed)
 
 
+def _event_thread_id(event: object) -> int | None:
+    message = getattr(event, "message", None)
+    reply_to = getattr(message, "reply_to", None)
+    top_id = getattr(reply_to, "reply_to_top_id", None)
+    if top_id:
+        return int(top_id)
+    if getattr(reply_to, "forum_topic", False):
+        reply_id = getattr(reply_to, "reply_to_msg_id", None)
+        if reply_id:
+            return int(reply_id)
+    return None
+
+
+async def _is_allowed_command_chat(event: object) -> bool:
+    if getattr(event, "is_private", False):
+        return True
+    target = await get_schedule_review_target()
+    if not target:
+        return False
+    chat_id = getattr(event, "chat_id", None)
+    if not chat_id or int(chat_id) != int(target["chat_id"]):
+        return False
+    configured_thread = target.get("thread_id")
+    if not configured_thread:
+        return True
+    return _event_thread_id(event) == int(configured_thread)
+
+
 async def on_schedule_admin_command(
     event: events.NewMessage.Event,
     *,
     config: UserbotSettings,
 ) -> None:
-    if not getattr(event, "is_private", False):
-        return
     if not await _is_authorized(event, config):
+        return
+    if not await _is_allowed_command_chat(event):
         return
 
     text = str(getattr(event.message, "message", None) or "").strip()
@@ -94,12 +125,22 @@ async def on_schedule_admin_command(
         if rendered is None:
             await event.reply(f"На {target_date:%d.%m.%Y} нет живых лотов.")
             return
+        reply_to = int(event.message.id) if not getattr(event, "is_private", False) else None
         await event.client.send_message(
             event.chat_id,
             rendered.text,
             formatting_entities=list(rendered.entities),
             link_preview=False,
+            reply_to=reply_to,
         )
+        issues = await schedule_preview_issues(target_date)
+        if issues:
+            await event.client.send_message(
+                event.chat_id,
+                render_schedule_configuration_warning(target_date, issues),
+                link_preview=False,
+                reply_to=reply_to,
+            )
         return
 
     if command == "/schedule_status":

@@ -12,12 +12,18 @@ from db.schedule_setup import (
 )
 
 
-async def schedule_review_snapshot(target_date: date) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+async def schedule_review_snapshot(
+    target_date: date,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     return await get_preview_target(), await get_publication_review(target_date)
 
 
 async def get_schedule_review(target_date: date) -> dict[str, Any] | None:
     return await get_publication_review(target_date)
+
+
+async def get_schedule_review_target() -> dict[str, Any] | None:
+    return await get_preview_target()
 
 
 async def decide_schedule_review(
@@ -36,5 +42,6 @@ async def decide_schedule_review(
 __all__ = [
     "decide_schedule_review",
     "get_schedule_review",
+    "get_schedule_review_target",
     "schedule_review_snapshot",
 ]
