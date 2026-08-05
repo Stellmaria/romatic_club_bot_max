@@ -102,14 +102,25 @@ jobs:
             --metadata-file "evidence/${SERVICE}-provenance.json" \
             --output "type=oci,dest=evidence/${SERVICE}.oci.tar" \
             .
+      - name: Extract OCI layout for Trivy
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          rm -rf "evidence/${SERVICE}.oci"
+          mkdir -p "evidence/${SERVICE}.oci"
+          tar -xf "evidence/${SERVICE}.oci.tar" -C "evidence/${SERVICE}.oci"
+          test -f "evidence/${SERVICE}.oci/index.json"
+          test -f "evidence/${SERVICE}.oci/oci-layout"
       - name: Generate CycloneDX image SBOM
         uses: aquasecurity/trivy-action@2736533278103862a861f4a35ebac3e97854d956
         with:
-          input: evidence/${{ matrix.service }}.oci.tar
+          input: evidence/${{ matrix.service }}.oci
           format: cyclonedx
           output: evidence/${{ matrix.service }}-image.cdx.json
       - name: Remove bulky OCI transport after evidence extraction
-        run: rm -f "evidence/${{ matrix.service }}.oci.tar"
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: rm -rf "evidence/${SERVICE}.oci.tar" "evidence/${SERVICE}.oci"
       - name: Upload image SBOM and provenance
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
