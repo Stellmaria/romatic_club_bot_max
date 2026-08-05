@@ -12,16 +12,14 @@ _PRIVACY_CLEANUP_LOCK_KEY = 4_504_501_021
 _COUNT_EXPIRED_SESSIONS = """
     SELECT count(*)::bigint
     FROM public.schedule_setup_sessions
-    WHERE active IS FALSE
-      AND updated_at < $1
+    WHERE updated_at < $1
 """
 
 _DELETE_EXPIRED_SESSIONS = """
     WITH candidates AS (
         SELECT ctid
         FROM public.schedule_setup_sessions
-        WHERE active IS FALSE
-      AND updated_at < $1
+        WHERE updated_at < $1
         ORDER BY updated_at, user_id
         LIMIT $2
         FOR UPDATE SKIP LOCKED
