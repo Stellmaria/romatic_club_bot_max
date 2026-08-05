@@ -1,7 +1,7 @@
 """Public composition package for the auction exchange feature."""
 
 # Public compatibility exports are intentionally grouped by feature module.
-# ruff: noqa: E402, I001, SLF001
+# ruff: noqa: E402, I001
 
 from __future__ import annotations
 
