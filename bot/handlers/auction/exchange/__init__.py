@@ -1,6 +1,9 @@
-from __future__ import annotations
-
 """Public composition package for the auction exchange feature."""
+
+# Public compatibility exports are intentionally grouped by feature module.
+# ruff: noqa: I001
+
+from __future__ import annotations
 
 from aiogram import Router
 
@@ -11,9 +14,9 @@ from .catalog import (
     kb_exchange_approved_root,
     q_exchange_approved_decks,
     q_exchange_whole_deck_batches,
+    router as catalog_router,
     safe_edit_text_or_caption,
 )
-from .catalog import router as catalog_router
 from .common import (
     EX_MODE_CARD,
     EX_MODE_CARDLIKE,
@@ -39,11 +42,14 @@ from .moderation import (
     format_pending_exchange_batch_card,
     media_kind_from_error,
     pending_exchange_kb,
+    router as moderation_router,
     show_pending_exchange_requests,
     show_pending_exchange_requests_all,
 )
-from .moderation import router as moderation_router
+from .moderation_queue import ContinuePendingExchangeQueueMiddleware
 from .submission import router as submission_router
+
+moderation_router.callback_query.middleware(ContinuePendingExchangeQueueMiddleware())
 
 router = Router(name="auction_exchange")
 router.include_router(submission_router)
@@ -58,7 +64,7 @@ _currency_emoji = currency_emoji
 _currency_label = currency_label
 _get_exchange_deck_ids = get_exchange_deck_ids
 
-__all__ = [
+__all__ = [  # noqa: RUF022
     "router",
     "EX_MODE_CARD",
     "EX_MODE_CARDLIKE",
