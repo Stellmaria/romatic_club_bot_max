@@ -6,6 +6,7 @@ from __future__ import annotations
 import html
 import logging
 import re
+import secrets
 from collections.abc import Iterable
 
 from aiogram import Bot, F, Router, types
@@ -14,10 +15,14 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.helper.new.wrapper import admin_only
+from bot.handlers.admin.logs_admin import send_admin_log
 from bot.handlers.admin.uid_verification_review import verif_approve as legacy_verif_approve
 from bot.repositories.uid_verification_recovery import (
     ensure_request_uid,
+    prepare_revision_profile,
+    replace_revision_profile,
     replace_revision_uid,
+    save_revision_other_response,
 )
 from bot.services import uid_verification as uid_verification_service
 from bot.telegram.callback_parser import split_callback_data
@@ -28,6 +33,8 @@ logger = logging.getLogger(__name__)
 router = Router(name=__name__)
 
 UID_RE = re.compile(r"^[0-9a-f]{24}$", re.IGNORECASE)
+CODE_RE = re.compile(r"^MX-[0-9]{5}$", re.IGNORECASE)
+MAX_OTHER_RESPONSE_LENGTH = 3000
 
 _REV_FLAG_TITLES: dict[str, str] = {
     "profile": "📷 Профиль + код",
@@ -47,14 +54,41 @@ _REV_FLAG_TITLES: dict[str, str] = {
 
 
 class UIDRevisionRecoveryFSM(StatesGroup):
-    """Temporary state used only when a legacy request lost encrypted UID data."""
+    """Temporary states used by legacy revision recovery and completion."""
 
     waiting_uid = State()
+    waiting_profile = State()
+    waiting_other = State()
 
 
 def _valid_uid(value: str | None) -> str | None:
     normalized = norm_uid(value or "")
     return normalized if UID_RE.fullmatch(normalized) else None
+
+
+def _new_revision_code() -> str:
+    return f"MX-{secrets.randbelow(90_000) + 10_000:05d}"
+
+
+def _pack_media(message: types.Message) -> str | None:
+    if message.photo:
+        return f"p:{message.photo[-1].file_id}"
+    if message.video:
+        return f"v:{message.video.file_id}"
+    if message.document:
+        return f"d:{message.document.file_id}"
+    return None
+
+
+def _normalize_other_response(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    if not text or len(text) > MAX_OTHER_RESPONSE_LENGTH:
+        return None
+    return text
+
+
+def _remaining_after_completion(remaining: Iterable[str], completed: str) -> list[str]:
+    return [str(flag) for flag in remaining if str(flag) != completed]
 
 
 def _revision_keyboard(
@@ -116,6 +150,21 @@ async def _show_revision_menu(
     )
 
 
+async def _active_revision_data(
+    state: FSMContext,
+    *,
+    request_id: int,
+    required_flag: str,
+) -> tuple[dict[str, object], list[str]] | None:
+    data = await state.get_data()
+    if int(data.get("uidv_fix_req_id") or 0) != int(request_id):
+        return None
+    remaining = [str(flag) for flag in (data.get("uidv_fix_remaining") or [])]
+    if required_flag not in remaining:
+        return None
+    return data, remaining
+
+
 @router.callback_query(F.data.startswith("uidv|approve|"))
 @admin_only
 async def approve_uid_with_legacy_recovery(
@@ -164,7 +213,6 @@ async def approve_uid_with_legacy_recovery(
         await call.answer("Заявка не найдена.", show_alert=True)
         return
 
-    # The original handler keeps notifications, logs and view refresh in one place.
     await legacy_verif_approve(call, bot)
 
 
@@ -322,10 +370,258 @@ async def save_missing_revision_uid(
     )
 
 
+@router.callback_query(
+    F.data.startswith("uidv_fix_item|"),
+    F.data.endswith("|profile"),
+)
+async def start_revision_profile(
+    call: types.CallbackQuery,
+    state: FSMContext,
+) -> None:
+    parts = split_callback_data(call.data or "", "|")
+    if len(parts) != 3:
+        await call.answer("Некорректная кнопка.", show_alert=True)
+        return
+
+    request_id = int(parts[1] or 0)
+    session = await _active_revision_data(
+        state,
+        request_id=request_id,
+        required_flag="profile",
+    )
+    if session is None:
+        await call.answer("Сначала открой доработку заново.", show_alert=True)
+        return
+
+    code = _new_revision_code()
+    try:
+        result = await prepare_revision_profile(
+            request_id,
+            user_id=call.from_user.id,
+            verification_code=code,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to prepare replacement profile proof",
+            extra={"request_id": request_id, "user_id": call.from_user.id},
+        )
+        await call.answer("Не удалось создать новый код. Повтори попытку позже.", show_alert=True)
+        return
+
+    if result != "ready":
+        await call.answer("Заявка уже изменила статус. Открой доработку заново.", show_alert=True)
+        return
+
+    await state.set_state(UIDRevisionRecoveryFSM.waiting_profile)
+    await state.update_data(uidv_fix_current="profile", uidv_fix_profile_code=code)
+    if isinstance(call.message, types.Message):
+        await call.message.answer(
+            "📷 <b>Исправление профиля</b>\n\n"
+            f"1. Временно добавь в ник новый код: <code>{code}</code>\n"
+            "2. Сделай свежий скрин профиля, где видны UID, код и дата регистрации.\n"
+            "3. Верни обычный ник и пришли скрин сюда как фото или файл.",
+            parse_mode="HTML",
+            protect_content=False,
+        )
+    await call.answer()
+
+
+@router.message(
+    UIDRevisionRecoveryFSM.waiting_profile,
+    F.chat.type == "private",
+)
+async def save_revision_profile(
+    message: types.Message,
+    state: FSMContext,
+) -> None:
+    user = message.from_user
+    if user is None:
+        await state.clear()
+        await message.answer("Не удалось определить пользователя. Открой доработку заново.")
+        return
+
+    packed = _pack_media(message)
+    if packed is None:
+        await message.answer("Нужно прислать свежий скрин профиля как фото, видео или файл.")
+        return
+
+    data = await state.get_data()
+    request_id = int(data.get("uidv_fix_req_id") or 0)
+    remaining = [str(flag) for flag in (data.get("uidv_fix_remaining") or [])]
+    reason = str(data.get("uidv_fix_reason") or "")
+    if request_id <= 0 or "profile" not in remaining:
+        await state.clear()
+        await message.answer("Сессия доработки устарела. Открой её заново.")
+        return
+
+    try:
+        result = await replace_revision_profile(
+            request_id,
+            user_id=user.id,
+            packed_file_id=packed,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to save replacement profile proof",
+            extra={"request_id": request_id, "user_id": user.id},
+        )
+        await message.answer("Не удалось сохранить скрин. Повтори попытку позже.")
+        return
+
+    if result != "ready":
+        await state.clear()
+        await message.answer("Заявка уже изменила статус. Открой раздел верификации заново.")
+        return
+
+    remaining = _remaining_after_completion(remaining, "profile")
+    await state.set_state(UIDVerificationFixFSM.choosing_item)
+    await state.update_data(
+        uidv_fix_remaining=remaining,
+        uidv_fix_current=None,
+        uidv_fix_profile_code=None,
+    )
+    await message.answer(
+        f"✅ Новый профиль и код сохранены. Осталось пунктов: <b>{len(remaining)}</b>",
+        parse_mode="HTML",
+        protect_content=False,
+    )
+    await _show_revision_menu(
+        message,
+        request_id=request_id,
+        flags=remaining,
+        reason=reason,
+    )
+
+
+@router.callback_query(
+    F.data.startswith("uidv_fix_item|"),
+    F.data.endswith("|other"),
+)
+async def start_revision_other(
+    call: types.CallbackQuery,
+    state: FSMContext,
+) -> None:
+    parts = split_callback_data(call.data or "", "|")
+    if len(parts) != 3:
+        await call.answer("Некорректная кнопка.", show_alert=True)
+        return
+
+    request_id = int(parts[1] or 0)
+    session = await _active_revision_data(
+        state,
+        request_id=request_id,
+        required_flag="other",
+    )
+    if session is None:
+        await call.answer("Сначала открой доработку заново.", show_alert=True)
+        return
+
+    data, _ = session
+    reason = str(data.get("uidv_fix_reason") or "").strip()
+    await state.set_state(UIDRevisionRecoveryFSM.waiting_other)
+    await state.update_data(uidv_fix_current="other")
+    if isinstance(call.message, types.Message):
+        reason_block = f"\n\nКомментарий модератора:\n{html.escape(reason)}" if reason else ""
+        await call.message.answer(
+            "📝 <b>Ответ по пункту «Другое»</b>\n\n"
+            "Напиши одним сообщением, что исправлено или что нужно добавить к заявке. "
+            f"Текст будет сохранён в истории заявки.{reason_block}",
+            parse_mode="HTML",
+            protect_content=False,
+        )
+    await call.answer()
+
+
+@router.message(
+    UIDRevisionRecoveryFSM.waiting_other,
+    F.chat.type == "private",
+)
+async def save_revision_other(
+    message: types.Message,
+    state: FSMContext,
+    bot: Bot,
+) -> None:
+    user = message.from_user
+    if user is None:
+        await state.clear()
+        await message.answer("Не удалось определить пользователя. Открой доработку заново.")
+        return
+
+    response = _normalize_other_response(message.text)
+    if response is None:
+        await message.answer(
+            f"Нужен непустой текст длиной не более {MAX_OTHER_RESPONSE_LENGTH} символов."
+        )
+        return
+
+    data = await state.get_data()
+    request_id = int(data.get("uidv_fix_req_id") or 0)
+    remaining = [str(flag) for flag in (data.get("uidv_fix_remaining") or [])]
+    reason = str(data.get("uidv_fix_reason") or "")
+    if request_id <= 0 or "other" not in remaining:
+        await state.clear()
+        await message.answer("Сессия доработки устарела. Открой её заново.")
+        return
+
+    try:
+        result = await save_revision_other_response(
+            request_id,
+            user_id=user.id,
+            response=response,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist free-form UID revision response",
+            extra={"request_id": request_id, "user_id": user.id},
+        )
+        await message.answer("Не удалось сохранить комментарий. Повтори попытку позже.")
+        return
+
+    if result != "ready":
+        await state.clear()
+        await message.answer("Заявка уже изменила статус. Открой раздел верификации заново.")
+        return
+
+    remaining = _remaining_after_completion(remaining, "other")
+    await state.set_state(UIDVerificationFixFSM.choosing_item)
+    await state.update_data(uidv_fix_remaining=remaining, uidv_fix_current=None)
+
+    await message.answer(
+        f"✅ Комментарий сохранён в истории заявки. Осталось пунктов: <b>{len(remaining)}</b>",
+        parse_mode="HTML",
+        protect_content=False,
+    )
+    await _show_revision_menu(
+        message,
+        request_id=request_id,
+        flags=remaining,
+        reason=reason,
+    )
+
+    try:
+        await send_admin_log(
+            bot,
+            "📝 <b>UID-верификация: ответ пользователя по доработке</b>\n"
+            f"Заявка: <code>#{request_id}</code>\n"
+            f"Пользователь: <code>{user.id}</code>\n\n"
+            f"{html.escape(response)}",
+        )
+    except Exception:  # noqa: BLE001 - logging must not break revision flow
+        logger.exception(
+            "Failed to send UID revision response to admin log",
+            extra={"request_id": request_id, "user_id": user.id},
+        )
+
+
 __all__ = [
+    "MAX_OTHER_RESPONSE_LENGTH",
     "UIDRevisionRecoveryFSM",
     "approve_uid_with_legacy_recovery",
     "router",
     "save_missing_revision_uid",
+    "save_revision_other",
+    "save_revision_profile",
+    "start_revision_other",
+    "start_revision_profile",
     "start_uid_revision_recovery",
 ]
