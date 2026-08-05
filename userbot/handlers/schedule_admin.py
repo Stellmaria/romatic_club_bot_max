@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 
 from telethon import events
 
-from bot.core.legacy_config import legacy_config
+from bot.core.settings import UserbotSettings
 from bot.core.time import MOSCOW
 from userbot.schedule_publication import (
     extract_custom_emoji_assignments,
@@ -26,20 +26,22 @@ from userbot.schedule_review_service import (
 logger = logging.getLogger("userbot.schedule_admin")
 
 
-async def _is_authorized(event: object) -> bool:
+async def _is_authorized(event: object, config: UserbotSettings) -> bool:
     if getattr(event, "out", False):
         return True
     sender_id = getattr(event, "sender_id", None)
-    owners = legacy_config.ADMINS_OWNERS or ()
-    admins = legacy_config.ADMINS or ()
-    allowed = {int(admin_id) for admin_id in (*owners, *admins)}
+    allowed = {*config.admin_owners, *config.admins}
     return bool(sender_id and int(sender_id) in allowed)
 
 
-async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
+async def on_schedule_admin_command(
+    event: events.NewMessage.Event,
+    *,
+    config: UserbotSettings,
+) -> None:
     if not getattr(event, "is_private", False):
         return
-    if not await _is_authorized(event):
+    if not await _is_authorized(event, config):
         return
 
     text = str(getattr(event.message, "message", None) or "").strip()
@@ -61,7 +63,7 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
             await event.reply("В сообщении не найдено ни одного кастомного эмодзи.")
             return
 
-        stored_keys = await store_emoji_assignments(assignments, config=legacy_config)
+        stored_keys = await store_emoji_assignments(assignments, config=config)
         missing = missing_required_emoji_keys({key: assignments.get(key, 1) for key in stored_keys})
         suffix = (
             "\n\nСтарый обязательный набор готов."
@@ -78,7 +80,7 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
         try:
             rendered = await preview_schedule_announcement(
                 target_date,
-                config=legacy_config,
+                config=config,
             )
         except Exception:
             logger.exception(
@@ -111,19 +113,23 @@ async def on_schedule_admin_command(event: events.NewMessage.Event) -> None:
         review_text = str(review.get("status")) if review else "превью ещё не создано"
         await event.reply(
             "Автопубликация расписания: "
-            + ("включена" if legacy_config.SCHEDULE_ANNOUNCEMENTS_ENABLED else "выключена")
+            + ("включена" if config.schedule_announcements_enabled else "выключена")
             + "\nПревью: 22:30 МСК"
             + "\nПубликация: после завершения последнего аукциона дня"
-            + f"\nЕсли аукционов нет: {legacy_config.SCHEDULE_ANNOUNCEMENTS_HOUR:02d}:"
-            f"{legacy_config.SCHEDULE_ANNOUNCEMENTS_MINUTE:02d} МСК"
+            + f"\nЕсли аукционов нет: {config.schedule_announcements_hour:02d}:"
+            f"{config.schedule_announcements_minute:02d} МСК"
             + "\nПосле публикации: закрепление нового анонса и открепление предыдущего"
             + f"\nАдминская ветка: {target_text}"
             + f"\nСтатус на {target_date:%d.%m.%Y}: {review_text}"
         )
 
 
-async def on_schedule_review_callback(event: events.CallbackQuery.Event) -> None:
-    if not await _is_authorized(event):
+async def on_schedule_review_callback(
+    event: events.CallbackQuery.Event,
+    *,
+    config: UserbotSettings,
+) -> None:
+    if not await _is_authorized(event, config):
         await event.answer("Нет доступа", alert=True)
         return
 
