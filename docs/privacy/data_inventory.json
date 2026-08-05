@@ -17,7 +17,7 @@
       "days": 7,
       "status": "approved",
       "purpose": "ephemeral operator workflow state",
-      "destructive_enabled": false
+      "destructive_enabled": true
     },
     "operational_30d": {
       "days": 30,
@@ -350,7 +350,6 @@
       "id": "schedule_operator_state",
       "tables": [
         "schedule_setup_sessions",
-        "schedule_setup_deck_scopes",
         "schedule_preview_target",
         "schedule_publication_reviews"
       ],
@@ -378,13 +377,7 @@
           "id": "expired_schedule_setup_sessions",
           "planner_key": "schedule_setup_sessions",
           "status": "approved",
-          "destructive_enabled": false
-        },
-        {
-          "id": "expired_schedule_setup_deck_scopes",
-          "planner_key": "schedule_setup_deck_scopes",
-          "status": "approved",
-          "destructive_enabled": false
+          "destructive_enabled": true
         }
       ]
     },

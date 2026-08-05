@@ -151,6 +151,8 @@ async def run_bot(config: BotProcessSettings) -> None:  # noqa: C901
                 telegram_bot,
                 auction_channel_id=bot_settings.auction_channel_id,
                 auction_channel_username=bot_settings.auction_channel_username,
+                privacy_cleanup=container.privacy_cleanup,
+                metrics=metrics,
             )
         )
 

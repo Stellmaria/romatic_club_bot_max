@@ -10,6 +10,7 @@ from bot.application_ports import Clock, FileStoragePort, LocalFileStorage
 from bot.core.time import SystemClock
 from bot.repositories.auction_workflows import AuctionWorkflowRepository
 from bot.repositories.exchanges import ExchangeRepository
+from bot.repositories.privacy_cleanup import PrivacyCleanupRepository
 from bot.repositories.privacy_exports import PrivacyExportRepository
 from bot.repositories.privacy_requests import PrivacyRequestRepository
 from bot.services.auction_workflows import (
@@ -20,6 +21,7 @@ from bot.services.auction_workflows import (
     AuctionPublicationService,
 )
 from bot.services.exchanges import ExchangeService
+from bot.services.privacy_cleanup import PrivacyCleanupService
 from bot.services.privacy_exports import PrivacyExportService
 from bot.services.privacy_requests import PrivacyRequestService
 
@@ -34,6 +36,7 @@ class ApplicationContainer:
 
     auction_repository: AuctionWorkflowRepository
     exchange_repository: ExchangeRepository
+    privacy_cleanup_repository: PrivacyCleanupRepository
     privacy_export_repository: PrivacyExportRepository
     privacy_request_repository: PrivacyRequestRepository
     auction_creation: AuctionCreationService
@@ -42,6 +45,7 @@ class ApplicationContainer:
     auction_lifecycle: AuctionLifecycleService
     auction_publication: AuctionPublicationService
     exchange: ExchangeService
+    privacy_cleanup: PrivacyCleanupService
     privacy_export: PrivacyExportService
     privacy_request: PrivacyRequestService
     clock: Clock
@@ -61,11 +65,13 @@ class ApplicationContainer:
         effective_clock = clock or SystemClock()
         auction_repository = AuctionWorkflowRepository(pool)
         exchange_repository = ExchangeRepository(pool)
+        privacy_cleanup_repository = PrivacyCleanupRepository(pool)
         privacy_export_repository = PrivacyExportRepository(pool)
         privacy_request_repository = PrivacyRequestRepository(pool)
         return cls(
             auction_repository=auction_repository,
             exchange_repository=exchange_repository,
+            privacy_cleanup_repository=privacy_cleanup_repository,
             privacy_export_repository=privacy_export_repository,
             privacy_request_repository=privacy_request_repository,
             auction_creation=AuctionCreationService(auction_repository),
@@ -74,6 +80,10 @@ class ApplicationContainer:
             auction_lifecycle=AuctionLifecycleService(auction_repository),
             auction_publication=AuctionPublicationService(auction_repository),
             exchange=ExchangeService(exchange_repository),
+            privacy_cleanup=PrivacyCleanupService(
+                privacy_cleanup_repository,
+                clock=effective_clock,
+            ),
             privacy_export=PrivacyExportService(
                 privacy_export_repository,
                 clock=effective_clock,

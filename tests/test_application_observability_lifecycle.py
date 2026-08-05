@@ -277,10 +277,17 @@ def _install_run_bot_fakes(  # noqa: C901
             router_kwargs=kwargs,
         ),
     )
+
+    def fake_build_container(**kwargs: object) -> SimpleNamespace:
+        container = SimpleNamespace(privacy_cleanup=object())
+        state["container_kwargs"] = kwargs
+        state["container"] = container
+        return container
+
     monkeypatch.setattr(
         container_module.ApplicationContainer,
         "build",
-        staticmethod(lambda **kwargs: state.update(container_kwargs=kwargs) or object()),
+        staticmethod(fake_build_container),
     )
     monkeypatch.setattr(observability, "MetricsRegistry", FakeMetricsRegistry)
     monkeypatch.setattr(observability, "HealthProbeServer", FakeHealthProbeServer)
@@ -316,6 +323,10 @@ async def test_run_bot_starts_observability_and_closes_every_resource(
         "database_pool_max_size": 12.0,
     }
     assert state["metric_calls"] == [("application_starts_total", {"process": "bot"})]
+    task_args, task_kwargs = state["task_specs"]
+    assert task_args == (state["protected_bot"],)
+    assert task_kwargs["privacy_cleanup"] is state["container"].privacy_cleanup
+    assert task_kwargs["metrics"] is state["metrics"]
     assert state["events"] == [
         "database.start",
         "supervisor.start",
