@@ -95,7 +95,9 @@ async def test_approved_cleanup_deletes_only_stale_rows_in_bounded_batch(
     async with postgres_pool.acquire() as connection:
         remaining = {
             int(row["user_id"])
-            for row in await connection.fetch("SELECT user_id FROM public.schedule_setup_sessions")
+            for row in await connection.fetch(
+                "SELECT user_id FROM public.schedule_setup_sessions"
+            )
         }
         assert oldest_user not in remaining
         assert stale_user in remaining
