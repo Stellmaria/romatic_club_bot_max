@@ -39,6 +39,4 @@ async def test_outgoing_schedule_admin_command_is_authorized(monkeypatch) -> Non
         SimpleNamespace(ADMINS_OWNERS=(), ADMINS=()),
     )
 
-    assert await schedule_admin._is_authorized(
-        SimpleNamespace(out=True, sender_id=None)
-    )
+    assert await schedule_admin._is_authorized(SimpleNamespace(out=True, sender_id=None))
