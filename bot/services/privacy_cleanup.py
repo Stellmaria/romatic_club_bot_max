@@ -123,25 +123,17 @@ def _validate_retention_classes(value: object) -> Mapping[str, Mapping[str, obje
         if not isinstance(raw_policy, dict):
             raise InventoryError(f"retention class {name!r} must be an object")
         days = raw_policy.get("days")
-        if days is not None and (
-            not isinstance(days, int) or isinstance(days, bool) or days <= 0
-        ):
+        if days is not None and (not isinstance(days, int) or isinstance(days, bool) or days <= 0):
             raise InventoryError(f"retention class {name!r} days must be positive")
         enabled = raw_policy.get("destructive_enabled")
         if not isinstance(enabled, bool):
-            raise InventoryError(
-                f"retention class {name!r} must declare destructive_enabled"
-            )
+            raise InventoryError(f"retention class {name!r} must declare destructive_enabled")
         if enabled and name != _APPROVED_RETENTION_CLASS:
             raise InventoryError(
                 f"retention class {name!r} is not allowlisted for destructive cleanup"
             )
-        if enabled and (
-            raw_policy.get("status") != "approved" or not isinstance(days, int)
-        ):
-            raise InventoryError(
-                f"retention class {name!r} requires approved finite retention"
-            )
+        if enabled and (raw_policy.get("status") != "approved" or not isinstance(days, int)):
+            raise InventoryError(f"retention class {name!r} requires approved finite retention")
         result[name] = raw_policy
     return result
 
@@ -166,8 +158,10 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
         seen_ids.add(dataset_id)
 
         tables = raw_dataset.get("tables")
-        if not isinstance(tables, list) or not tables or not all(
-            isinstance(table, str) and table for table in tables
+        if (
+            not isinstance(tables, list)
+            or not tables
+            or not all(isinstance(table, str) and table for table in tables)
         ):
             raise InventoryError(f"dataset {dataset_id!r} tables are invalid")
         overlap = seen_tables.intersection(tables)
@@ -177,22 +171,16 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
 
         retention_class = raw_dataset.get("retention_class")
         if retention_class not in retention_classes:
-            raise InventoryError(
-                f"dataset {dataset_id!r} references unknown retention class"
-            )
+            raise InventoryError(f"dataset {dataset_id!r} references unknown retention class")
         if raw_dataset.get("backup_presence") is not True:
-            raise InventoryError(
-                f"dataset {dataset_id!r} must acknowledge backup presence"
-            )
+            raise InventoryError(f"dataset {dataset_id!r} must acknowledge backup presence")
 
         rules = raw_dataset.get("cleanup_rules", [])
         if not isinstance(rules, list):
             raise InventoryError(f"dataset {dataset_id!r} cleanup_rules must be an array")
         for raw_rule in rules:
             if not isinstance(raw_rule, dict):
-                raise InventoryError(
-                    f"dataset {dataset_id!r} cleanup rule must be an object"
-                )
+                raise InventoryError(f"dataset {dataset_id!r} cleanup rule must be an object")
             enabled = raw_rule.get("destructive_enabled")
             if not isinstance(enabled, bool):
                 raise InventoryError(
@@ -225,8 +213,7 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
         (
             dataset
             for dataset in datasets
-            if isinstance(dataset, dict)
-            and dataset.get("id") == _APPROVED_DATASET_ID
+            if isinstance(dataset, dict) and dataset.get("id") == _APPROVED_DATASET_ID
         ),
         None,
     )
@@ -236,9 +223,7 @@ def validate_inventory(inventory: Mapping[str, Any]) -> None:
     if _APPROVED_PLANNER_KEY not in tables:
         raise InventoryError("approved cleanup table is absent from its dataset")
     if "schedule_setup_deck_scopes" in tables:
-        raise InventoryError(
-            "inventory references nonexistent table schedule_setup_deck_scopes"
-        )
+        raise InventoryError("inventory references nonexistent table schedule_setup_deck_scopes")
 
 
 def load_cleanup_policy(
@@ -303,9 +288,7 @@ class PrivacyCleanupService:
         generated_at = self._clock.now().astimezone(UTC)
         day_start = generated_at.replace(hour=0, minute=0, second=0, microsecond=0)
         cutoff = day_start - timedelta(days=policy.retention_days)
-        eligible_rows = await self._repository.count_expired_schedule_sessions(
-            cutoff=cutoff
-        )
+        eligible_rows = await self._repository.count_expired_schedule_sessions(cutoff=cutoff)
         plan_sha256 = _plan_sha256(
             policy=policy,
             cutoff=cutoff,
@@ -335,9 +318,7 @@ class PrivacyCleanupService:
     ) -> PrivacyCleanupResult:
         current_policy = load_cleanup_policy(self._inventory_path)
         if current_policy.policy_sha256 != plan.policy_sha256:
-            raise PrivacyCleanupConfirmationError(
-                "privacy inventory changed after plan generation"
-            )
+            raise PrivacyCleanupConfirmationError("privacy inventory changed after plan generation")
         if not automated and confirmation != plan.confirmation_token:
             raise PrivacyCleanupConfirmationError(
                 "confirmation must exactly match the current plan token"
@@ -350,15 +331,13 @@ class PrivacyCleanupService:
                 audit_id=None,
             )
 
-        execution: PrivacyCleanupExecution = (
-            await self._repository.apply_expired_schedule_sessions(
-                cutoff=plan.cutoff,
-                expected_eligible_rows=plan.eligible_rows,
-                delete_limit=plan.delete_limit,
-                policy_sha256=plan.policy_sha256,
-                plan_sha256=plan.plan_sha256,
-                run_id=plan.run_id,
-            )
+        execution: PrivacyCleanupExecution = await self._repository.apply_expired_schedule_sessions(
+            cutoff=plan.cutoff,
+            expected_eligible_rows=plan.eligible_rows,
+            delete_limit=plan.delete_limit,
+            policy_sha256=plan.policy_sha256,
+            plan_sha256=plan.plan_sha256,
+            run_id=plan.run_id,
         )
         return PrivacyCleanupResult(
             status="applied",

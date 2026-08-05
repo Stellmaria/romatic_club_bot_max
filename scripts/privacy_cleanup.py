@@ -9,7 +9,11 @@ import sys
 from pathlib import Path
 from typing import Mapping
 
-import asyncpg
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import asyncpg  # noqa: E402
 
 from bot.core.settings import DatabaseSettings
 from bot.core.time import SystemClock
@@ -108,9 +112,7 @@ async def _run_plan(args: argparse.Namespace) -> int:
 async def _run_apply(args: argparse.Namespace) -> int:
     runtime, service = await _with_service(args)
     try:
-        plan: PrivacyCleanupPlan = await service.build_plan(
-            batch_limit=args.batch_limit
-        )
+        plan: PrivacyCleanupPlan = await service.build_plan(batch_limit=args.batch_limit)
         result = await service.apply_plan(
             plan,
             confirmation=args.confirm,

@@ -81,9 +81,7 @@ class PrivacyCleanupRepository:
                         "another privacy cleanup execution owns the advisory lock"
                     )
 
-                current_count = int(
-                    await connection.fetchval(_COUNT_EXPIRED_SESSIONS, cutoff) or 0
-                )
+                current_count = int(await connection.fetchval(_COUNT_EXPIRED_SESSIONS, cutoff) or 0)
                 if current_count != expected_eligible_rows:
                     raise PrivacyCleanupConflict(
                         "eligible row count changed after the cleanup plan was generated"

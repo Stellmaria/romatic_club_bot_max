@@ -99,9 +99,7 @@ async def test_approved_cleanup_deletes_only_old_inactive_rows_in_bounded_batch(
     async with postgres_pool.acquire() as connection:
         remaining = {
             int(row["user_id"])
-            for row in await connection.fetch(
-                "SELECT user_id FROM public.schedule_setup_sessions"
-            )
+            for row in await connection.fetch("SELECT user_id FROM public.schedule_setup_sessions")
         }
         assert oldest_user not in remaining
         assert stale_user in remaining
@@ -186,13 +184,8 @@ async def test_cleanup_plan_drift_rolls_back_without_deleting_rows(
             )
             == 2
         )
-        assert (
-            await connection.fetchval(
-                """
+        assert await connection.fetchval("""
                 SELECT count(*)::bigint
                 FROM public.audit_logs
                 WHERE action_type = 'privacy.cleanup.applied'
-                """
-            )
-            == 0
-        )
+                """) == 0
