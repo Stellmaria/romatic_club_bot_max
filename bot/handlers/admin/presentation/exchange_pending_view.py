@@ -31,9 +31,7 @@ def pending_exchange_mode_kb() -> InlineKeyboardMarkup:
             callback_data="expend_mode|all",
         ),
     )
-    builder.row(
-        InlineKeyboardButton(text="⬅️ Назад", callback_data="admreq_back")
-    )
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="admreq_back"))
     return builder.as_markup()
 
 
@@ -281,20 +279,14 @@ async def continue_pending_exchange_request_one(
     moderation = await ExchangeModerationService.create()
     rows = await moderation.pending_batches(include_luxury=True)
 
-    if any(
-        int(row.get("batch_id") or 0) == int(processed_batch_id)
-        for row in rows
-    ):
+    if any(int(row.get("batch_id") or 0) == int(processed_batch_id) for row in rows):
         return
 
     if not rows:
         await _edit_header_or_answer(
             message,
             header_message_id=int(raw_header_message_id),
-            text=(
-                "🛒 <b>Заявки на биржу</b>\n\n"
-                "✅ Все заявки на модерацию обработаны."
-            ),
+            text=("🛒 <b>Заявки на биржу</b>\n\n" "✅ Все заявки на модерацию обработаны."),
             reply_markup=pending_exchange_mode_kb(),
         )
         await state.update_data(
