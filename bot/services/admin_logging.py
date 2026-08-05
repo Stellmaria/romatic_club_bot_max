@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from typing import Any
@@ -11,6 +12,7 @@ from aiogram.exceptions import (
     TelegramBadRequest,
     TelegramForbiddenError,
     TelegramNetworkError,
+    TelegramRetryAfter,
 )
 
 from bot.core.legacy_config import legacy_config
@@ -23,6 +25,10 @@ from bot.presentation.admin import (
 from bot.repositories.admin_logs import AdminLogsRepository
 from bot.services.admin_owners import get_lot_owners_text
 from db.pool import get_db_pool
+
+
+_MESSAGE_LOCKS: dict[int, asyncio.Lock] = {}
+_MAX_SEND_ATTEMPTS = 2
 
 
 async def _repository() -> AdminLogsRepository:
@@ -68,6 +74,14 @@ def _iter_admin_log_chats() -> list[int]:
     return chats
 
 
+def _message_lock(chat_id: int) -> asyncio.Lock:
+    lock = _MESSAGE_LOCKS.get(chat_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _MESSAGE_LOCKS[chat_id] = lock
+    return lock
+
+
 async def send_message_safe(
     bot: Bot,
     chat_id: int,
@@ -77,22 +91,48 @@ async def send_message_safe(
     disable_web_page_preview: bool = True,
     reply_markup: Any = None,
 ) -> bool:
-    """Send a message without letting an audit failure break its caller."""
-    try:
-        await bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode=parse_mode,
-            disable_web_page_preview=disable_web_page_preview,
-            reply_markup=reply_markup,
-        )
-        return True
-    except (TelegramForbiddenError, TelegramBadRequest, TelegramNetworkError) as exc:
-        logging.warning("send_message_safe failed chat_id=%s: %s", chat_id, exc)
-        return False
-    except Exception as exc:  # noqa: BLE001
-        logging.exception("send_message_safe unexpected error chat_id=%s: %s", chat_id, exc)
-        return False
+    """Send a message without letting an audit failure break its caller.
+
+    Telegram flood-control responses are expected operational backpressure, not
+    unexpected application errors. Deliveries to the same chat are serialized,
+    wait for Telegram's requested delay and retry once without creating a retry
+    stampede from concurrent admin actions.
+    """
+
+    async with _message_lock(chat_id):
+        for attempt in range(1, _MAX_SEND_ATTEMPTS + 1):
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    parse_mode=parse_mode,
+                    disable_web_page_preview=disable_web_page_preview,
+                    reply_markup=reply_markup,
+                )
+                return True
+            except TelegramRetryAfter as exc:
+                retry_after = max(0.0, float(exc.retry_after))
+                logging.warning(
+                    "send_message_safe rate limited chat_id=%s retry_after=%.3f attempt=%d/%d",
+                    chat_id,
+                    retry_after,
+                    attempt,
+                    _MAX_SEND_ATTEMPTS,
+                )
+                if attempt >= _MAX_SEND_ATTEMPTS:
+                    return False
+                await asyncio.sleep(retry_after)
+            except (TelegramForbiddenError, TelegramBadRequest, TelegramNetworkError) as exc:
+                logging.warning("send_message_safe failed chat_id=%s: %s", chat_id, exc)
+                return False
+            except Exception as exc:  # noqa: BLE001
+                logging.exception(
+                    "send_message_safe unexpected error chat_id=%s: %s",
+                    chat_id,
+                    exc,
+                )
+                return False
+    return False
 
 
 async def send_admin_log(
