@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# ruff: noqa: RUF001
+
 from dataclasses import dataclass
 from typing import Any
 
