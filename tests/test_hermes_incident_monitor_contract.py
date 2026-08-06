@@ -18,7 +18,10 @@ spec.loader.exec_module(monitor_mod)
 def _monitor(previous: dict[str, object] | None = None):
     monitor = monitor_mod.Monitor.__new__(monitor_mod.Monitor)
     monitor._state = {"probes": previous or {}}
+    monitor._not_running_counts = {}
+    monitor._initial_not_running = set()
     monitor._unhealthy_counts = {}
+    monitor.not_running_polls = 2
     monitor.unhealthy_polls = 2
     monitor.cooldown_seconds = 600
     monitor._active_status = "idle"
@@ -55,6 +58,48 @@ def test_healthy_container_recreation_is_not_an_incident() -> None:
     )
     probe = monitor_mod.Probe("bot", "new", True, "running", "healthy", 0, 0)
     assert monitor.reason(probe) is None
+
+
+def test_not_running_requires_consecutive_polls() -> None:
+    monitor = _monitor(
+        {
+            "bot": {
+                "container_id": "old",
+                "running": True,
+                "health": "healthy",
+                "restart_count": 0,
+            }
+        }
+    )
+    probe = monitor_mod.Probe("bot", None, False, "missing", None, 0, None)
+    assert monitor.reason(probe) is None
+    assert monitor.reason(probe) == "container-not-running"
+
+
+def test_transient_not_running_probe_is_cleared_by_recovery() -> None:
+    monitor = _monitor(
+        {
+            "bot": {
+                "container_id": "old",
+                "running": True,
+                "health": "healthy",
+                "restart_count": 0,
+            }
+        }
+    )
+    missing = monitor_mod.Probe("bot", None, False, "missing", None, 0, None)
+    healthy = monitor_mod.Probe("bot", "new", True, "running", "healthy", 0, 0)
+
+    assert monitor.reason(missing) is None
+    assert monitor.reason(healthy) is None
+    assert monitor.reason(missing) is None
+
+
+def test_initial_not_running_requires_consecutive_polls() -> None:
+    monitor = _monitor()
+    probe = monitor_mod.Probe("bot", None, False, "missing", None, 0, None)
+    assert monitor.reason(probe) is None
+    assert monitor.reason(probe) == "initial-not-running"
 
 
 def test_unhealthy_requires_consecutive_polls() -> None:
