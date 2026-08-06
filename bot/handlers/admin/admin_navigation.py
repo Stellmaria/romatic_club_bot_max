@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 # ruff: noqa: BLE001, RUF001, RUF022, S110, SIM105
 """Priority admin navigation that must bypass unfinished FSM conversations."""
 

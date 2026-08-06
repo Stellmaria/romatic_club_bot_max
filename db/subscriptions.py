@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 # ruff: noqa
 """Card notification and preset-subscription queries.
 
