@@ -299,9 +299,18 @@ async def preorder_submission_confirmed(
     message: types.Message,
     state: FSMContext,
 ) -> None:
+    user = message.from_user
+    bot = message.bot
+    if user is None or bot is None:
+        await message.answer(
+            "Не удалось определить пользователя или подключение к боту.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
     data = await state.get_data()
-    user_id = message.from_user.id
-    luxury_level = await get_user_luxury_level(message.bot, user_id)
+    user_id = user.id
+    luxury_level = await get_user_luxury_level(bot, user_id)
     request_key = str(data.get("preorder_request_key") or "").strip()
     if not request_key:
         request_key = f"preorder:{user_id}:{secrets.token_hex(16)}"
@@ -347,7 +356,7 @@ async def preorder_submission_confirmed(
 
     action = "уже существовала" if submitted.was_existing else "создана"
     await send_admin_log(
-        message.bot,
+        bot,
         "🗓 <b>Заявка предзаказа "
         f"№{submitted.auction_id} {action}</b>\n"
         f"Пользователь: <code>{user_id}</code>\n"
