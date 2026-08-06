@@ -13,7 +13,7 @@ class AuctionSubmissionCatalogService:
         self._repository = repository
 
     @classmethod
-    async def create(cls) -> "AuctionSubmissionCatalogService":
+    async def create(cls) -> AuctionSubmissionCatalogService:
         return cls(AuctionSubmissionRepository(await get_db_pool()))
 
     async def card(self, card_id: int) -> dict[str, Any] | None:
@@ -21,6 +21,12 @@ class AuctionSubmissionCatalogService:
 
     async def cards_for_deck(self, deck_id: int) -> list[dict[str, Any]]:
         return await self._repository.cards_for_deck(int(deck_id))
+
+    async def future_empty_decks(self) -> list[dict[str, Any]]:
+        return await self._repository.future_empty_decks()
+
+    async def future_empty_deck(self, deck_id: int) -> dict[str, Any] | None:
+        return await self._repository.future_empty_deck(int(deck_id))
 
     async def obtain_type(self, card_id: int) -> str | None:
         return await self._repository.obtain_type(int(card_id))

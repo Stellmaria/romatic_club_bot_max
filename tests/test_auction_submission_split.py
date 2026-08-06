@@ -6,11 +6,16 @@ from pathlib import Path
 import pytest
 
 from bot.handlers import auctions
-from bot.handlers.auction import guides, luxury_admin, submission, submission_support
+from bot.handlers.auction import (
+    guides,
+    luxury_admin,
+    preorder,
+    submission,
+    submission_support,
+)
 from bot.services.auction_submission import AuctionSubmissionCatalogService
 from bot.services.guides import GuideThanksService
 from bot.services.luxury_admin import LuxuryAdminService
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,8 +30,9 @@ def _decorated_handlers(relative: str) -> tuple[str, ...]:
     )
 
 
-def test_legacy_router_composes_features_in_original_registration_order() -> None:
+def test_legacy_router_composes_features_in_registration_order() -> None:
     assert auctions.router.sub_routers == [
+        preorder.router,
         submission.router,
         guides.router,
         luxury_admin.router,
