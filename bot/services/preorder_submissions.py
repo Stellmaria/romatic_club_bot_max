@@ -12,7 +12,7 @@ from bot.domain.preorders import (
     validate_preorder_start_price,
 )
 from bot.repositories.preorder_submissions import PreorderSubmissionRepository
-from db.core import get_db_pool
+from db.pool import get_db_pool
 
 
 class PreorderSubmissionError(RuntimeError):
