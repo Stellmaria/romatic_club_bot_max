@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +46,13 @@ def _integer(name: str, default: int, minimum: int, maximum: int) -> int:
         raise RuntimeError(f"{name} must be an integer") from error
     if not minimum <= value <= maximum:
         raise RuntimeError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def _http_url(value: str, name: str) -> str:
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError(f"{name} must be an HTTP(S) URL")
     return value
 
 
@@ -102,7 +110,10 @@ class Monitor:
         self.state_path = self.state_dir / "hermes-incident-monitor.json"
         self.log_path = self.state_dir / "hermes-incident-monitor.log"
         self.state_dir.mkdir(parents=True, exist_ok=True)
-        self.hermes_url = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642").rstrip("/")
+        self.hermes_url = _http_url(
+            os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642").rstrip("/"),
+            "HERMES_BASE_URL",
+        )
         self.hermes_key = os.getenv("HERMES_API_KEY", "").strip()
         if len(self.hermes_key) < 24:
             raise RuntimeError("HERMES_API_KEY is missing or too short")
@@ -238,11 +249,13 @@ class Monitor:
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310 - base URL is validated as HTTP(S)
             self.hermes_url + path, data=data, headers=headers, method=method
         )
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with urllib.request.urlopen(  # noqa: S310 - request URL is validated above
+                request, timeout=30
+            ) as response:
                 raw = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as error:
             details = error.read().decode("utf-8", errors="replace")[:1000]
@@ -269,9 +282,11 @@ class Monitor:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with urllib.request.urlopen(  # noqa: S310 - fixed HTTPS Telegram endpoint
+                request, timeout=15
+            ) as response:
                 response.read()
-        except Exception as error:
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
             logger.warning("Could not send Telegram notification (%s)", type(error).__name__)
 
     @staticmethod
@@ -296,7 +311,7 @@ class Monitor:
         ):
             return
         prompt = (
-            "Разбери аварийный инцидент Romatic Club Max. Не выполняй merge, deployment, "
+            "Разбери аварийный инцидент Romatic Club Max. Не выполняй merge, deployment, "  # noqa: RUF001
             "restart, update, rollback, изменение production БД или секретов. Если это "
             "вероятный дефект кода, поставь задачу через `python /opt/data/tools/coderctl.py "
             "submit max --source automatic-incident --task <очищенная задача>`, дождись "
@@ -349,7 +364,7 @@ class Monitor:
                 if time.monotonic() >= deadline:
                     raise RuntimeError(f"Hermes run {run_id} timed out")
                 self._stop.wait(5)
-        except Exception as error:
+        except (RuntimeError, json.JSONDecodeError) as error:
             self._active_status = "failed"
             self._notify(
                 "Hermes не завершил разбор инцидента Max",
@@ -368,7 +383,12 @@ class Monitor:
                 if reason:
                     try:
                         self.submit(probe, reason)
-                    except Exception as error:
+                    except (
+                        RuntimeError,
+                        json.JSONDecodeError,
+                        OSError,
+                        subprocess.TimeoutExpired,
+                    ) as error:
                         logger.warning("Could not submit Max incident (%s)", type(error).__name__)
             self._save(probes)
             self._stop.wait(self.poll_seconds)
