@@ -144,8 +144,7 @@ def validate_policy(policy_path: Path = DEFAULT_POLICY_PATH) -> list[str]:
         forbidden_locked = sorted(forbidden & locked)
         if forbidden_direct:
             errors.append(
-                f"{service_name}: forbidden direct dependencies: "
-                + ", ".join(forbidden_direct)
+                f"{service_name}: forbidden direct dependencies: " + ", ".join(forbidden_direct)
             )
         if forbidden_locked:
             errors.append(
