@@ -59,7 +59,7 @@ async def start_preorder_auction_kind(
     luxury_level = int(data.get("luxury_level") or 0)
     if luxury_level < preorder_kind.minimum_luxury_level:
         await call.answer(
-            f"Этот тип доступен с уровня Лакшери {preorder_kind.minimum_luxury_level}.",
+            f"Этот тип доступен с уровня Лакшери {preorder_kind.minimum_luxury_level}.",  # noqa: RUF001
             show_alert=True,
         )
         return
