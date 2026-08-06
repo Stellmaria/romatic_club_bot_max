@@ -1,4 +1,4 @@
-name: Source Export
+name: Finalize user menu fixes
 
 on:
   push:
@@ -6,22 +6,415 @@ on:
       - fix/user-menu-notifications-presets
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  finalize:
+    if: github.event.head_commit.message == 'Run branch cleanup'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          persist-credentials: false
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: source-export
-          path: |
-            bot/handlers/user_menu_impl.py
-            db/subscriptions_impl.py
-            tests/test_user_menu_contract.py
-            tests/test_user_menu_notification_preset_regressions.py
-            .github/workflows/ci.yml
-          retention-days: 1
+          fetch-depth: 0
+      - name: Apply direct-file implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp bot/handlers/user_menu_impl.py bot/handlers/user_menu.py
+          cp db/subscriptions_impl.py db/subscriptions.py
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path('.')
+          path = root / 'bot/handlers/user_menu.py'
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'from bot.handlers.auction.exchange.common import (\n'
+              '    exchange_deck_keyboard,\n'
+              '    get_exchange_deck_ids,\n'
+              '    get_exchange_decks_for_menu,\n'
+              ')\n',
+              '',
+          )
+          text = text.replace(
+              'from bot.legacy_fsm import ExchangeFSM, LuxScheduleFSM, UIDVerificationFSM\n',
+              'from bot.legacy_fsm import LuxScheduleFSM, UIDVerificationFSM\n',
+          )
+          text = text.replace('from bot.services.exchange_catalog import ExchangeCatalogService\n', '')
+          text = text.replace(
+              '''    parts.extend(
+              [
+                  "",
+                  "Здесь всё работает через кнопки. Выберите нужный раздел ниже.",
+                  "Кнопка «🏠 Меню» в любой момент отменит текущий сценарий и вернёт на главный экран.",
+              ]
+          )
+          ''',
+              '''    parts.extend(
+              [
+                  "",
+                  "Здесь всё работает через кнопки. Выберите нужный раздел ниже.",
+              ]
+          )
+          ''',
+          )
+          start = text.index('def build_exchange_keyboard()')
+          end = text.index('\ndef build_notifications_keyboard', start)
+          replacement = '''def build_exchange_keyboard() -> InlineKeyboardMarkup:
+              """Compatibility keyboard for already-sent exchange messages."""
+
+              builder = InlineKeyboardBuilder()
+              builder.row(_home_inline_button())
+              return builder.as_markup()
+
+
+          async def show_exchange_menu(message: Message) -> None:
+              """Explain the current entry point to users of stale exchange keyboards."""
+
+              await message.answer(
+                  "🛍 <b>Биржевые лоты</b> теперь подаются через общую кнопку "
+                  "«🎴 Подать лот». Просмотр предложений доступен только администраторам.",
+                  parse_mode="HTML",
+                  reply_markup=build_user_main_keyboard(),
+              )
+
+
+          async def show_exchange_browser(message: Message) -> None:
+              await message.answer(
+                  "Просмотр предложений биржи доступен только администраторам.",
+                  reply_markup=build_user_main_keyboard(),
+              )
+
+
+          '''
+          text = text[:start] + replacement + text[end + 1:]
+          old = '''async def show_notifications_menu(message: Message, *, user_id: int) -> None:
+              settings = await get_settings(user_id) or {}
+              subscribed = await is_subscribed(user_id)
+              await _edit_or_answer(
+                  message,
+                  text=(
+                      "🔔 <b>Уведомления</b>\\n\\n"
+                      f"Общие уведомления: <b>{'включены' if subscribed else 'выключены'}</b>\\n"
+                      "Нажимайте на пункты, чтобы изменить настройки."
+                  ),
+                  reply_markup=build_notifications_keyboard(settings, subscribed=subscribed),
+              )
+          '''
+          new = '''async def show_notifications_menu(message: Message, *, user_id: int) -> None:
+              settings = await get_settings(user_id) or {}
+              subscribed = await is_subscribed(user_id)
+              await _edit_or_answer(
+                  message,
+                  text=(
+                      "🔔 <b>Уведомления</b>\\n\\n"
+                      "Выберите, какие сообщения бот должен присылать:\\n\\n"
+                      "📨 <b>Общие уведомления</b> — главный переключатель. "
+                      "Когда он выключен, остальные уведомления не отправляются.\\n"
+                      "🔔 <b>О начале аукциона</b> — сообщение при старте подходящего аукциона.\\n"
+                      "⏰ <b>За минуту до конца</b> — напоминание перед завершением аукциона.\\n"
+                      "🏁 <b>О завершении</b> — результат после окончания аукциона.\\n"
+                      "📅 <b>Анонс дня в 00:00</b> — список аукционов на новый день.\\n\\n"
+                      "✅ — включено, ❌ — выключено.\\n"
+                      f"Сейчас общие уведомления: <b>{'включены' if subscribed else 'выключены'}</b>."
+                  ),
+                  reply_markup=build_notifications_keyboard(settings, subscribed=subscribed),
+              )
+          '''
+          if old not in text:
+              raise RuntimeError('notification block not found')
+          text = text.replace(old, new)
+          old = '''def help_text() -> str:
+              return (
+                  "ℹ️ <b>Как пользоваться ботом</b>\\n\\n"
+                  "🎴 <b>Подать лот</b> — запускает пошаговое оформление заявки.\\n"
+                  "📦 <b>Мои лоты</b> — актуальные, завершённые, выплаты и архив.\\n"
+                  "📅 <b>Расписание</b> — выбор дня кнопками.\\n"
+                  "🛍 <b>Биржа</b> — выставление и просмотр предложений.\\n"
+                  "🔔 <b>Уведомления</b> — все переключатели в одном месте.\\n"
+                  "🃏 <b>Подписки</b> — подписки на карты, колоды и пресеты.\\n"
+                  "👤 <b>Профиль</b> — статус уведомлений и UID-верификация.\\n"
+                  "👑 <b>Лакшери</b> — расширенное расписание и поиск.\\n"
+                  "🆘 <b>Поддержка</b> — обращение администрации с вложениями.\\n\\n"
+                  "Кнопка «🏠 Меню» отменяет текущий ввод и возвращает на главный экран."
+              )
+          '''
+          new = '''def help_text() -> str:
+              return (
+                  "ℹ️ <b>Как пользоваться ботом</b>\\n\\n"
+                  "🎴 <b>Подать лот</b> — оформление аукционного или биржевого лота.\\n"
+                  "📦 <b>Мои лоты</b> — актуальные, завершённые, выплаты и архив.\\n"
+                  "📅 <b>Сегодня</b> — аукционы на текущий день.\\n"
+                  "🔔 <b>Уведомления</b> — переключатели и пояснения к ним.\\n"
+                  "🃏 <b>Подписки</b> — подписки на карты, колоды и пресеты.\\n"
+                  "👤 <b>Профиль</b> — статус уведомлений и UID-верификация.\\n"
+                  "👑 <b>Лакшери</b> — расширенное расписание и поиск.\\n"
+                  "🆘 <b>Поддержка</b> — обращение администрации с вложениями."
+              )
+          '''
+          if old not in text:
+              raise RuntimeError('help block not found')
+          text = text.replace(old, new)
+          text = text.replace(
+              '''@router.message(F.text == USER_MENU_EXCHANGE, F.chat.type == "private")
+          async def user_exchange(message: Message, state: FSMContext) -> None:
+              await state.clear()
+              await show_exchange_menu(message)
+          ''',
+              '''@router.message(F.text == USER_MENU_EXCHANGE, F.chat.type == "private")
+          async def user_exchange(message: Message, state: FSMContext, bot: Bot) -> None:
+              await launch_add_lot(message, state, bot)
+          ''',
+          )
+          text = text.replace(
+              '''@router.callback_query(F.data == "user_exchange|root")
+          async def user_exchange_root(call: CallbackQuery) -> None:
+              await call.answer()
+              await show_exchange_menu(call.message)
+
+
+          @router.callback_query(F.data == "user_exchange|create")
+          async def user_exchange_create(call: CallbackQuery, state: FSMContext) -> None:
+              await call.answer("Открываю оформление")
+              await start_exchange_submission(call.message, state)
+          ''',
+              '''@router.callback_query(F.data == "user_exchange|root")
+          async def user_exchange_root(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+              await call.answer("Открываю подачу лота")
+              await launch_add_lot(call.message, state, bot)
+
+
+          @router.callback_query(F.data == "user_exchange|create")
+          async def user_exchange_create(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+              await call.answer("Открываю подачу лота")
+              await launch_add_lot(call.message, state, bot)
+          ''',
+          )
+          path.write_text(text, encoding='utf-8')
+
+          path = root / 'db/subscriptions.py'
+          text = path.read_text(encoding='utf-8')
+          old = '''@require_db_pool
+          async def get_users_with_pref(pref: str) -> List[int]:
+              col = ALLOWED_PREFS.get(pref)
+              if not col:
+                  return []
+              q = f"SELECT user_id FROM settings WHERE COALESCE({col}, TRUE) = TRUE"
+              async with db_pool.acquire() as conn:
+                  rows = await conn.fetch(q)
+              return [int(r["user_id"]) for r in rows]
+          '''
+          new = '''@require_db_pool
+          async def get_users_with_pref(pref: str) -> List[int]:
+              col = ALLOWED_PREFS.get(pref)
+              if not col:
+                  return []
+              q = f"""
+                  SELECT s.user_id
+                  FROM settings AS s
+                  JOIN users AS u ON u.user_id = s.user_id
+                  LEFT JOIN unreachable_users AS uu ON uu.user_id = s.user_id
+                  WHERE COALESCE(s.{col}, TRUE) = TRUE
+                    AND COALESCE(u.is_subscribed, TRUE) = TRUE
+                    AND COALESCE(u.pm_opened, FALSE) = TRUE
+                    AND uu.user_id IS NULL
+              """
+              async with db_pool.acquire() as conn:
+                  rows = await conn.fetch(q)
+              return [int(r["user_id"]) for r in rows]
+          '''
+          if old not in text:
+              raise RuntimeError('subscription preference block not found')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+
+          path = root / 'tests/test_user_menu_contract.py'
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '    assert "USER_MENU_EXCHANGE" in layout\n',
+              '    assert "USER_MENU_EXCHANGE" not in layout\n'
+              '    assert "USER_MENU_HOME" not in layout\n',
+          )
+          text = text.replace(
+              'def test_exchange_entry_points_are_public() -> None:',
+              'def test_exchange_entry_points_do_not_expose_catalog_to_users() -> None:',
+          )
+          text = text.replace(
+              '''    assert 'F.data == "user_exchange|create"' in menu
+              assert 'F.data == "ex_view:decks"' in menu
+              assert "start_exchange_submission(call.message, state)" in menu
+          ''',
+              '''    assert 'F.data == "user_exchange|create"' in menu
+              assert 'F.data == "ex_view:decks"' in menu
+              assert "launch_add_lot(call.message, state, bot)" in menu
+              assert "Просмотр предложений биржи доступен только администраторам" in menu
+          ''',
+          )
+          old = '''def test_user_menu_has_universal_home_and_corrected_button_help() -> None:
+              menu = _source("bot/handlers/user_menu.py")
+              access = _source("bot/handlers/user_access_control.py")
+
+              assert 'callback_data="user_menu|home"' in menu
+              assert "await state.clear()" in menu
+              assert "user=call.from_user" in menu
+              assert "Здесь всё работает через кнопки" in menu
+              assert "Как пользоваться ботом" in access
+              assert "📅 <b>Сегодня</b> — аукционы, которые идут в течение текущего дня." in access
+              assert "🛍 <b>Биржа</b> — выставление карт и просмотр принятых предложений." in access
+              assert "Расписание по другим дням доступно администраторам и Лакшери-пользователям" in access
+              assert "Биржа является административной функцией" not in access
+              assert "Кнопка «🏠 Меню»" in access
+          '''
+          new = '''def test_user_menu_keeps_inline_home_without_redundant_reply_button() -> None:
+              menu = _source("bot/handlers/user_menu.py")
+
+              assert 'callback_data="user_menu|home"' in menu
+              assert "await state.clear()" in menu
+              assert "user=call.from_user" in menu
+              assert "Здесь всё работает через кнопки" in menu
+              assert "Как пользоваться ботом" in menu
+              assert "🎴 <b>Подать лот</b> — оформление аукционного или биржевого лота." in menu
+              main_text = menu[
+                  menu.index("def user_main_text") : menu.index("async def send_user_main_menu")
+              ]
+              assert "Кнопка «🏠 Меню»" not in main_text
+          '''
+          if old not in text:
+              raise RuntimeError('menu contract block not found')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+
+          path = root / '.github/workflows/ci.yml'
+          text = path.read_text(encoding='utf-8').replace(
+              "items[-1].filename == '021_privacy_request_lifecycle.sql'",
+              "items[-1].filename == '022_deck_subscription_presets.sql'",
+          )
+          path.write_text(text, encoding='utf-8')
+
+          path = root / 'tests/test_user_menu_notification_preset_regressions.py'
+          path.write_text('''from __future__ import annotations
+
+          import inspect
+          from pathlib import Path
+
+          import pytest
+
+          from bot.handlers import user_menu
+          from bot.keyboards.keyboards import (
+              USER_MENU_ADD_LOT,
+              USER_MENU_EXCHANGE,
+              USER_MENU_HOME,
+              USER_MENU_LAYOUT,
+          )
+          from db import subscriptions
+
+
+          def _menu_labels() -> list[str]:
+              return [label for row in USER_MENU_LAYOUT for label in row]
+
+
+          def test_user_menu_keeps_add_lot_but_hides_exchange_and_self_menu() -> None:
+              labels = _menu_labels()
+              assert USER_MENU_ADD_LOT in labels
+              assert USER_MENU_EXCHANGE not in labels
+              assert USER_MENU_HOME not in labels
+
+
+          @pytest.mark.asyncio
+          async def test_notification_screen_explains_every_toggle(monkeypatch) -> None:
+              captured: dict[str, object] = {}
+
+              async def fake_get_settings(user_id: int) -> dict[str, bool]:
+                  assert user_id == 42
+                  return {}
+
+              async def fake_is_subscribed(user_id: int) -> bool:
+                  assert user_id == 42
+                  return False
+
+              async def fake_edit_or_answer(message, *, text, reply_markup) -> None:
+                  captured["message"] = message
+                  captured["text"] = text
+                  captured["reply_markup"] = reply_markup
+
+              monkeypatch.setattr(user_menu, "get_settings", fake_get_settings)
+              monkeypatch.setattr(user_menu, "is_subscribed", fake_is_subscribed)
+              monkeypatch.setattr(user_menu, "_edit_or_answer", fake_edit_or_answer)
+
+              marker = object()
+              await user_menu.show_notifications_menu(marker, user_id=42)
+
+              text = str(captured["text"])
+              for expected in (
+                  "главный переключатель",
+                  "О начале аукциона",
+                  "За минуту до конца",
+                  "О завершении",
+                  "Анонс дня в 00:00",
+                  "✅ — включено, ❌ — выключено",
+              ):
+                  assert expected in text
+              assert "выключены" in text
+
+
+          @pytest.mark.asyncio
+          async def test_user_exchange_browser_never_reveals_offers() -> None:
+              answers: list[str] = []
+
+              class FakeMessage:
+                  async def answer(self, text: str, **kwargs) -> None:
+                      answers.append(text)
+
+              await user_menu.show_exchange_browser(FakeMessage())
+              assert answers == ["Просмотр предложений биржи доступен только администраторам."]
+
+
+          def test_notification_preferences_respect_global_delivery_switch() -> None:
+              source = inspect.getsource(subscriptions.get_users_with_pref)
+              assert "COALESCE(u.is_subscribed, TRUE) = TRUE" in source
+              assert "COALESCE(u.pm_opened, FALSE) = TRUE" in source
+              assert "uu.user_id IS NULL" in source
+
+
+          def test_support_cancel_has_user_menu_escape_for_staff() -> None:
+              source = Path("bot/handlers/admin/admin_navigation.py").read_text(
+                  encoding="utf-8"
+              )
+              assert "current_state in _USER_APPEAL_STATES" in source
+              assert "Обращение отменено." in source
+              assert "build_user_main_keyboard()" in source
+
+
+          def test_deck_preset_migration_backfills_and_tracks_new_decks() -> None:
+              migration = Path("db/migrations/022_deck_subscription_presets.sql").read_text(
+                  encoding="utf-8"
+              )
+              assert "'deck_all_' || d.id::text" in migration
+              assert "ON CONFLICT (key) DO UPDATE" in migration
+              assert "AFTER INSERT OR UPDATE OF name ON public.decks" in migration
+              assert "sync_deck_subscription_preset" in migration
+          ''', encoding='utf-8')
+
+          path = root / 'db/migrations/022_deck_subscription_presets.sql'
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              "'Вся колода ' || d.id::text || ' — ' || d.name",
+              "'Вся колода ' || d.id::text || ' — ' || COALESCE(d.name, d.id::text || ' колода')",
+          )
+          text = text.replace(
+              "'Вся колода ' || NEW.id::text || ' — ' || NEW.name",
+              "'Вся колода ' || NEW.id::text || ' — ' || COALESCE(NEW.name, NEW.id::text || ' колода')",
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+          rm -f bot/handlers/user_menu_impl.py db/subscriptions_impl.py
+          rm -f .github/workflows/source-export.yml
+          python -m compileall -q bot/handlers/user_menu.py db/subscriptions.py tests/test_user_menu_contract.py tests/test_user_menu_notification_preset_regressions.py
+          git diff --check
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize direct user menu and notification fixes"
+          git push origin HEAD:fix/user-menu-notifications-presets
