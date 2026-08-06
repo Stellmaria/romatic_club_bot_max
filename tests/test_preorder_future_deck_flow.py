@@ -7,6 +7,8 @@ import pytest
 
 from bot.domain.preorders import (
     MAX_PREORDER_QUANTITY,
+    PREORDER_MAX_START_PRICE,
+    PREORDER_MIN_START_PRICE,
     PREORDER_MODE_ITEMS,
     PREORDER_MODE_WHOLE_DECK,
     build_preorder_title,
@@ -16,7 +18,10 @@ from bot.domain.preorders import (
     normalize_preorder_mode,
     preorder_total,
     validate_preorder_selection,
+    validate_preorder_start_price,
 )
+from bot.handlers import auctions
+from bot.handlers.auction import preorder, preorder_submission, submission
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -109,6 +114,15 @@ def test_preorder_rejects_unsupported_rarities(rarity: str) -> None:
         change_preorder_quantity({}, rarity, 1)
 
 
+def test_preorder_price_range_is_fixed_for_every_composition() -> None:
+    assert validate_preorder_start_price(PREORDER_MIN_START_PRICE) == 1_000
+    assert validate_preorder_start_price(PREORDER_MAX_START_PRICE) == 6_000
+    with pytest.raises(ValueError):
+        validate_preorder_start_price(999)
+    with pytest.raises(ValueError):
+        validate_preorder_start_price(6_001)
+
+
 def test_repository_filters_and_revalidates_empty_decks() -> None:
     repository_path = ROOT / "bot/repositories/auction_submission.py"
     source = repository_path.read_text(encoding="utf-8")
@@ -120,10 +134,11 @@ def test_repository_filters_and_revalidates_empty_decks() -> None:
     assert "WHERE c.deck_id = d.id" in source
 
 
-def test_preorder_router_has_priority_over_legacy_submission() -> None:
-    source = (ROOT / "bot/handlers/auctions.py").read_text(encoding="utf-8")
+def test_preorder_submission_router_has_priority_over_legacy_flow() -> None:
+    routers = auctions.router.sub_routers
 
-    assert "router.include_routers(preorder.router, submission.router" in source
+    assert routers.index(preorder_submission.router) < routers.index(preorder.router)
+    assert routers.index(preorder.router) < routers.index(submission.router)
 
 
 def test_preorder_whole_deck_requires_explicit_clear_confirmation() -> None:

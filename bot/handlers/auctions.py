@@ -4,11 +4,13 @@ from aiogram import F, Router, types
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 
+from bot.core.legacy_config import legacy_config
 from bot.domain.auctions import AuctionKind
 from bot.handlers.auction import (
     guides,
     luxury_admin,
     preorder,
+    preorder_submission,
     submission,
     submission_support,
 )
@@ -57,7 +59,8 @@ async def start_preorder_auction_kind(
     preorder_kind = AuctionKind.PREORDER
     data = await state.get_data()
     luxury_level = int(data.get("luxury_level") or 0)
-    if luxury_level < preorder_kind.minimum_luxury_level:
+    is_admin = call.from_user.id in legacy_config.ADMINS
+    if not is_admin and luxury_level < preorder_kind.minimum_luxury_level:
         await call.answer(
             f"Этот тип доступен с уровня Лакшери {preorder_kind.minimum_luxury_level}.",  # noqa: RUF001
             show_alert=True,
@@ -70,7 +73,13 @@ async def start_preorder_auction_kind(
     await call.answer()
 
 
-router.include_routers(preorder.router, submission.router, guides.router, luxury_admin.router)
+router.include_routers(
+    preorder_submission.router,
+    preorder.router,
+    submission.router,
+    guides.router,
+    luxury_admin.router,
+)
 
 
 async def _ask_for_currency(message: types.Message, state: FSMContext) -> None:

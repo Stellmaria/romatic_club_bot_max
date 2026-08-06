@@ -9,7 +9,7 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     versions = [migration.version for migration in migrations]
 
     assert len(versions) == len(set(versions))
-    assert filenames[-1] == "022_deck_subscription_presets.sql"
+    assert filenames[-1] == "023_preorder_submissions.sql"
 
     schedule_migration = next(
         migration
@@ -73,3 +73,12 @@ def test_runtime_migration_catalog_contains_schedule_and_bid_contracts() -> None
     assert "ix_users_trusted_username_ci" in performance_contract.sql
     assert "ix_exchange_batches_status_created" in performance_contract.sql
     assert "ix_telegram_outbox_pending" in performance_contract.sql
+
+    preorder_contract = next(
+        migration
+        for migration in migrations
+        if migration.filename == "023_preorder_submissions.sql"
+    )
+    assert "auction_preorders" in preorder_contract.sql
+    assert "auction_preorder_items" in preorder_contract.sql
+    assert "'preorder'" in preorder_contract.sql

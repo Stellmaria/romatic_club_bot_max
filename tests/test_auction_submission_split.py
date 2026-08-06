@@ -10,6 +10,7 @@ from bot.handlers.auction import (
     guides,
     luxury_admin,
     preorder,
+    preorder_submission,
     submission,
     submission_support,
 )
@@ -32,6 +33,7 @@ def _decorated_handlers(relative: str) -> tuple[str, ...]:
 
 def test_legacy_router_composes_features_in_registration_order() -> None:
     assert auctions.router.sub_routers == [
+        preorder_submission.router,
         preorder.router,
         submission.router,
         guides.router,

@@ -4,12 +4,15 @@ Feature implementations live in focused modules; this module keeps the historic
 ``admin_panel`` import path and the router registration contract stable.
 """
 
+# ruff: noqa: F401,I001
+
 from aiogram import Router
 from bot.domain.auctions import AuctionSlotConflict, InvalidAuctionTransition
 from bot.services.auction_workflows import AuctionModerationService
 
 from bot.handlers.admin import (
     admin_panel_exchange,
+    admin_panel_preorders,
     admin_panel_requests,
     admin_panel_schedule,
     admin_panel_sections,
@@ -34,6 +37,7 @@ from bot.handlers.admin.admin_panel_exchange import (
     ex1_reject_start,
     ex1_reject_reason,
 )
+from bot.handlers.admin.admin_panel_preorders import show_pending_preorders
 from bot.handlers.admin.admin_panel_requests import (
     admreq_back,
     cmd_ex_owners,
@@ -128,6 +132,7 @@ from bot.services.admin_auction_notifications import notify_owners_lot_changed
 # broad legacy/FSM routers, so it must not also be nested under this facade.
 FEATURE_ROUTERS = (
     admin_panel_system.router,
+    admin_panel_preorders.router,
     admin_panel_requests.router,
     admin_panel_schedule.router,
     admin_panel_sections.router,
@@ -138,10 +143,16 @@ router = Router(name=__name__)
 router.include_routers(*FEATURE_ROUTERS[1:])
 
 __all__ = [
-    "router", "FEATURE_ROUTERS", "notify_owners_lot_changed",
-    *admin_panel_system.__all__, *admin_panel_requests.__all__,
-    *admin_panel_schedule.__all__, *admin_panel_sections.__all__,
-    *admin_user_lists.__all__, *admin_panel_exchange.__all__,
+    "router",
+    "FEATURE_ROUTERS",
+    "notify_owners_lot_changed",
+    *admin_panel_system.__all__,
+    *admin_panel_preorders.__all__,
+    *admin_panel_requests.__all__,
+    *admin_panel_schedule.__all__,
+    *admin_panel_sections.__all__,
+    *admin_user_lists.__all__,
+    *admin_panel_exchange.__all__,
 ]
 
 # Historical regression anchors; implementations are in admin_panel_schedule.
