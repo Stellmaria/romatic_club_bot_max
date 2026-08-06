@@ -68,9 +68,7 @@ def _preorder_details(row: Mapping[str, object]) -> str:
         )
 
     deck_id = html.escape(str(row.get("preorder_deck_id") or "—"))
-    deck_name = html.escape(
-        str(row.get("preorder_deck_name") or "Будущая колода")
-    )
+    deck_name = html.escape(str(row.get("preorder_deck_name") or "Будущая колода"))
     return (
         "\n\n🗓 <b>Данные предзаказа</b>\n"
         f"🗂 <b>Будущая колода:</b> №{deck_id} — {deck_name}\n"
