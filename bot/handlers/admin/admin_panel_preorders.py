@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import html
+import json
 from collections.abc import Mapping
+from contextlib import suppress
 
 from aiogram import F, Router, types
 from aiogram.exceptions import TelegramBadRequest
@@ -40,6 +42,11 @@ _register_preorder_kind()
 
 def _items_from_row(row: Mapping[str, object]) -> dict[str, int]:
     raw = row.get("preorder_items")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            raw = {}
     return normalize_preorder_items(raw if isinstance(raw, Mapping) else {})
 
 
@@ -81,10 +88,8 @@ async def show_pending_preorders(call: CallbackQuery) -> None:
     if not isinstance(message, types.Message):
         return
 
-    try:
+    with suppress(TelegramBadRequest):
         await message.delete()
-    except TelegramBadRequest:
-        pass
 
     rows = await (await PreorderSubmissionService.create()).list_pending(limit=50)
     if not rows:
