@@ -34,10 +34,7 @@ def test_preorder_uses_epic_label_and_stable_order() -> None:
         items={"epic": 1, "silver": 2, "bronze": 1},
     )
 
-    assert title == (
-        "Предзаказ: Колода №31 «Новая история», "
-        "1× бронза + 2× серебро + 1× эпик"
-    )
+    assert title == "Предзаказ: Колода №31 «Новая история», 1× бронза + 2× серебро + 1× эпик"
 
 
 def test_preorder_normalization_drops_invalid_and_zero_values() -> None:
