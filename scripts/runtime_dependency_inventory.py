@@ -139,9 +139,7 @@ def validate_policy(policy_path: Path = DEFAULT_POLICY_PATH) -> list[str]:
                 + ", ".join(missing_from_lock)
             )
 
-        forbidden = {
-            normalize_distribution(item) for item in service["forbidden_distributions"]
-        }
+        forbidden = {normalize_distribution(item) for item in service["forbidden_distributions"]}
         forbidden_direct = sorted(forbidden & set(declared))
         forbidden_locked = sorted(forbidden & locked)
         if forbidden_direct:
@@ -160,9 +158,7 @@ def validate_policy(policy_path: Path = DEFAULT_POLICY_PATH) -> list[str]:
                 errors.append(f"{service_name}: source root not found: {raw_root}")
 
         for marker in service["build_markers"]:
-            errors.extend(
-                f"{service_name}: {error}" for error in _marker_errors(marker)
-            )
+            errors.extend(f"{service_name}: {error}" for error in _marker_errors(marker))
     return errors
 
 
@@ -179,9 +175,7 @@ def build_report(policy_path: Path = DEFAULT_POLICY_PATH) -> dict[str, object]:
         observed_modules = set(imports)
         direct_set = set(direct)
         not_observed: list[str] = []
-        for distribution, module_names in sorted(
-            service["distribution_imports"].items()
-        ):
+        for distribution, module_names in sorted(service["distribution_imports"].items()):
             if normalize_distribution(distribution) not in direct_set:
                 continue
             if not observed_modules.intersection(module_names):
@@ -190,12 +184,8 @@ def build_report(policy_path: Path = DEFAULT_POLICY_PATH) -> dict[str, object]:
         services[service_name] = {
             "requirements_input": service["requirements_input"],
             "requirements_lock": service["requirements_lock"],
-            "requirements_input_sha256": hashlib.sha256(
-                input_path.read_bytes()
-            ).hexdigest(),
-            "requirements_lock_sha256": hashlib.sha256(
-                lock_path.read_bytes()
-            ).hexdigest(),
+            "requirements_input_sha256": hashlib.sha256(input_path.read_bytes()).hexdigest(),
+            "requirements_lock_sha256": hashlib.sha256(lock_path.read_bytes()).hexdigest(),
             "direct_distributions": direct,
             "locked_distributions": locked,
             "locked_distribution_count": len(locked),
