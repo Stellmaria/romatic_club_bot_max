@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from bot.features import auction_submission as _implementation
-from bot.features.auction_submission import auction_currency_kb, compute_start_price_limits
 
 
 for _name in dir(_implementation):
