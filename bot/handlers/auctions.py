@@ -1,6 +1,7 @@
 """Compatibility facade for the split auction submission handlers."""
 
-from aiogram import Router, types
+from aiogram import F, Router, types
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 
 from bot.domain.auctions import AuctionKind
@@ -36,6 +37,39 @@ __all__ = [
 ]
 
 router = Router(name=__name__)
+
+
+@router.callback_query(
+    StateFilter(UserAddLotFSM.waiting_for_auction_kind),
+    F.data == f"auk_kind:{AuctionKind.PREORDER.value}",
+)
+async def start_preorder_auction_kind(
+    call: types.CallbackQuery,
+    state: FSMContext,
+) -> None:
+    """Route the preorder auction kind directly into the future-deck cart."""
+
+    message = call.message
+    if not isinstance(message, types.Message):
+        await call.answer("Сообщение недоступно. Откройте меню заново.", show_alert=True)
+        return
+
+    preorder_kind = AuctionKind.PREORDER
+    data = await state.get_data()
+    luxury_level = int(data.get("luxury_level") or 0)
+    if luxury_level < preorder_kind.minimum_luxury_level:
+        await call.answer(
+            f"Этот тип доступен с уровня Лакшери {preorder_kind.minimum_luxury_level}.",
+            show_alert=True,
+        )
+        return
+
+    await state.update_data(auction_kind=preorder_kind.value)
+    await state.set_state(UserAddLotFSM.waiting_for_own_variant)
+    await preorder._show_future_decks(message, state)
+    await call.answer()
+
+
 router.include_routers(preorder.router, submission.router, guides.router, luxury_admin.router)
 
 
