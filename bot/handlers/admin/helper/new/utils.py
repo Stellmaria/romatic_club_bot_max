@@ -32,6 +32,7 @@ async def is_luxury_member(bot: Bot, user_id: int, chat_id: int) -> bool:
 
 AUCTION_KIND_LABELS: dict[str, str] = {
     "standard": "⭐ Стандартный",
+    "preorder": "🗓 Предзаказ",
     "reverse": "✨ Обратный",
     "fast": "⚡ Быстрый",
     "free": "🪶 Свободный",
