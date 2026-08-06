@@ -46,6 +46,47 @@ class AuctionSubmissionRepository:
             )
         return [dict(row) for row in rows]
 
+    async def future_empty_decks(self) -> list[dict[str, Any]]:
+        """Return decks that do not contain cards yet and are valid for preorder."""
+
+        async with self._pool.acquire() as connection:
+            rows = await connection.fetch(
+                """
+                SELECT d.id AS deck_id,
+                       d.name AS deck_name,
+                       d.deck_type::text AS deck_type
+                FROM public.decks d
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM public.cards c
+                    WHERE c.deck_id = d.id
+                )
+                ORDER BY d.id ASC
+                """
+            )
+        return [dict(row) for row in rows]
+
+    async def future_empty_deck(self, deck_id: int) -> dict[str, Any] | None:
+        """Revalidate one preorder deck immediately before advancing or submitting."""
+
+        async with self._pool.acquire() as connection:
+            row = await connection.fetchrow(
+                """
+                SELECT d.id AS deck_id,
+                       d.name AS deck_name,
+                       d.deck_type::text AS deck_type
+                FROM public.decks d
+                WHERE d.id = $1
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM public.cards c
+                      WHERE c.deck_id = d.id
+                  )
+                """,
+                int(deck_id),
+            )
+        return dict(row) if row else None
+
     async def obtain_type(self, card_id: int) -> str | None:
         async with self._pool.acquire() as connection:
             value = await connection.fetchval(
