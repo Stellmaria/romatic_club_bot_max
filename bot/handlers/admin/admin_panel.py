@@ -4,6 +4,8 @@ Feature implementations live in focused modules; this module keeps the historic
 ``admin_panel`` import path and the router registration contract stable.
 """
 
+# ruff: noqa: F401,I001
+
 from aiogram import Router
 from bot.domain.auctions import AuctionSlotConflict, InvalidAuctionTransition
 from bot.services.auction_workflows import AuctionModerationService
