@@ -1,0 +1,70 @@
+name: Finalize user fixes
+
+on:
+  push:
+    branches:
+      - fix/user-menu-notifications-presets
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.event.head_commit.message == 'Apply CI formatting and callback parser fixes'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/user-menu-notifications-presets
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - name: Patch callback parsing and format changed Python files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('bot/handlers/user_menu.py')
+          text = path.read_text(encoding='utf-8')
+          anchor = 'from bot.telegram.boundary import escape_html\n'
+          replacement = anchor + 'from bot.telegram.callback_parser import split_callback_data\n'
+          if 'from bot.telegram.callback_parser import split_callback_data\n' not in text:
+              if anchor not in text:
+                  raise RuntimeError('Telegram boundary import anchor not found')
+              text = text.replace(anchor, replacement, 1)
+          text = text.replace(
+              'page = int((call.data or "").split("|", 1)[1])',
+              '_, raw_page = split_callback_data(call.data or "", "|", 1)\n        page = int(raw_page)',
+          )
+          text = text.replace(
+              'target_day = date.fromisoformat((call.data or "").split("|", 1)[1])',
+              '_, raw_day = split_callback_data(call.data or "", "|", 1)\n        target_day = date.fromisoformat(raw_day)',
+          )
+          if '.split("|", 1)' in text:
+              raise RuntimeError('Unsafe callback split remains')
+          path.write_text(text, encoding='utf-8')
+          PY
+          python -m pip install --disable-pip-version-check black==26.5.1
+          python -m black \
+            bot/handlers/user_menu.py \
+            db/subscriptions.py \
+            tests/test_user_menu_contract.py \
+            tests/test_user_menu_notification_preset_regressions.py
+          python -m compileall -q \
+            bot/handlers/user_menu.py \
+            db/subscriptions.py \
+            tests/test_user_menu_contract.py \
+            tests/test_user_menu_notification_preset_regressions.py
+          git diff --check
+      - name: Commit source fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot/handlers/user_menu.py db/subscriptions.py tests/test_user_menu_contract.py tests/test_user_menu_notification_preset_regressions.py
+          git commit -m "Fix callback parsing and format changed files"
+          git push origin HEAD:fix/user-menu-notifications-presets
