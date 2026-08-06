@@ -10,6 +10,7 @@ from bot.services.auction_workflows import AuctionModerationService
 
 from bot.handlers.admin import (
     admin_panel_exchange,
+    admin_panel_preorders,
     admin_panel_requests,
     admin_panel_schedule,
     admin_panel_sections,
@@ -128,6 +129,7 @@ from bot.services.admin_auction_notifications import notify_owners_lot_changed
 # broad legacy/FSM routers, so it must not also be nested under this facade.
 FEATURE_ROUTERS = (
     admin_panel_system.router,
+    admin_panel_preorders.router,
     admin_panel_requests.router,
     admin_panel_schedule.router,
     admin_panel_sections.router,
@@ -139,9 +141,10 @@ router.include_routers(*FEATURE_ROUTERS[1:])
 
 __all__ = [
     "router", "FEATURE_ROUTERS", "notify_owners_lot_changed",
-    *admin_panel_system.__all__, *admin_panel_requests.__all__,
-    *admin_panel_schedule.__all__, *admin_panel_sections.__all__,
-    *admin_user_lists.__all__, *admin_panel_exchange.__all__,
+    *admin_panel_system.__all__, *admin_panel_preorders.__all__,
+    *admin_panel_requests.__all__, *admin_panel_schedule.__all__,
+    *admin_panel_sections.__all__, *admin_user_lists.__all__,
+    *admin_panel_exchange.__all__,
 ]
 
 # Historical regression anchors; implementations are in admin_panel_schedule.
