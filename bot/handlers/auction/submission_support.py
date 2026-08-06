@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from bot.features import auction_submission as _implementation
 
+auction_currency_kb = _implementation.auction_currency_kb
+compute_start_price_limits = _implementation.compute_start_price_limits
+
 
 for _name in dir(_implementation):
     if not _name.startswith("__"):
