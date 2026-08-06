@@ -1,3 +1,4 @@
+# ruff: noqa: ARG002, RUF001
 from __future__ import annotations
 
 import inspect

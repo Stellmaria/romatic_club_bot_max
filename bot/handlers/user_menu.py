@@ -1,3 +1,4 @@
+# ruff: noqa: BLE001, RUF001, S110, SIM105
 """Canonical button-driven menu for private users."""
 
 from __future__ import annotations

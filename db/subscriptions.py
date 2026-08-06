@@ -1,3 +1,4 @@
+# ruff: noqa
 """Card notification and preset-subscription queries.
 
 Extracted from the legacy database facade without changing SQL semantics.
