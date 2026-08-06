@@ -1,4 +1,3 @@
-# fmt: off
 from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -6,6 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.domain.auctions import AuctionKind
 
+# fmt: off
 
 AUCTION_KIND_TITLES = {
     AuctionKind.STANDARD: "⭐️ Стандартный",
@@ -41,4 +41,5 @@ def auction_kind_keyboard(luxury_level: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🏆 Рейтинг спасибо", callback_data="auk_guide_menu:thanks_top"),
     )
     return keyboard.as_markup()
+
 # fmt: on
