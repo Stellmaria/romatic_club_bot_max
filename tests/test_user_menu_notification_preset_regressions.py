@@ -83,18 +83,14 @@ def test_notification_preferences_respect_global_delivery_switch() -> None:
 
 
 def test_support_cancel_has_user_menu_escape_for_staff() -> None:
-    source = Path("bot/handlers/admin/admin_navigation.py").read_text(
-        encoding="utf-8"
-    )
+    source = Path("bot/handlers/admin/admin_navigation.py").read_text(encoding="utf-8")
     assert "current_state in _USER_APPEAL_STATES" in source
     assert "Обращение отменено." in source
     assert "build_user_main_keyboard()" in source
 
 
 def test_deck_preset_migration_backfills_and_tracks_new_decks() -> None:
-    migration = Path("db/migrations/022_deck_subscription_presets.sql").read_text(
-        encoding="utf-8"
-    )
+    migration = Path("db/migrations/022_deck_subscription_presets.sql").read_text(encoding="utf-8")
     assert "'deck_all_' || d.id::text" in migration
     assert "ON CONFLICT (key) DO UPDATE" in migration
     assert "AFTER INSERT OR UPDATE OF name ON public.decks" in migration

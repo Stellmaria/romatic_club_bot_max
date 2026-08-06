@@ -105,9 +105,7 @@ def test_user_menu_keeps_inline_home_without_redundant_reply_button() -> None:
     assert "Здесь всё работает через кнопки" in menu
     assert "Как пользоваться ботом" in menu
     assert "🎴 <b>Подать лот</b> — оформление аукционного или биржевого лота." in menu
-    main_text = menu[
-        menu.index("def user_main_text") : menu.index("async def send_user_main_menu")
-    ]
+    main_text = menu[menu.index("def user_main_text") : menu.index("async def send_user_main_menu")]
     assert "Кнопка «🏠 Меню»" not in main_text
 
 

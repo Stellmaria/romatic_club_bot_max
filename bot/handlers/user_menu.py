@@ -58,6 +58,7 @@ from bot.services.handler_persistence import (
     sync_trusted_status,
 )
 from bot.telegram.boundary import escape_html
+from bot.telegram.callback_parser import split_callback_data
 from bot.telegram.user_entrypoints import launch_add_lot, launch_card_subscription
 from db.legacy import (
     get_auctions_by_card_ref,
@@ -688,7 +689,8 @@ async def user_home_callback(call: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("user_schedule|"))
 async def user_schedule_page(call: CallbackQuery) -> None:
     try:
-        page = int((call.data or "").split("|", 1)[1])
+        _, raw_page = split_callback_data(call.data or "", "|", 1)
+        page = int(raw_page)
     except (TypeError, ValueError, IndexError):
         await call.answer("Некорректная страница.", show_alert=True)
         return
@@ -699,7 +701,8 @@ async def user_schedule_page(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("user_day|"))
 async def user_schedule_day(call: CallbackQuery) -> None:
     try:
-        target_day = date.fromisoformat((call.data or "").split("|", 1)[1])
+        _, raw_day = split_callback_data(call.data or "", "|", 1)
+        target_day = date.fromisoformat(raw_day)
     except (TypeError, ValueError, IndexError):
         await call.answer("Некорректная дата.", show_alert=True)
         return
@@ -745,9 +748,7 @@ async def user_toggle_global_notifications(call: CallbackQuery) -> None:
         )
     except Exception:
         pass
-    await call.answer(
-        "Общие уведомления включены" if new_value else "Общие уведомления выключены"
-    )
+    await call.answer("Общие уведомления включены" if new_value else "Общие уведомления выключены")
     await show_notifications_menu(call.message, user_id=call.from_user.id)
 
 
@@ -832,7 +833,8 @@ async def user_luxury_gaps(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("user_gaps_page|"))
 async def user_luxury_gaps_page(call: CallbackQuery) -> None:
     try:
-        page = int((call.data or "").split("|", 1)[1])
+        _, raw_page = split_callback_data(call.data or "", "|", 1)
+        page = int(raw_page)
     except (TypeError, ValueError, IndexError):
         await call.answer("Некорректная страница.", show_alert=True)
         return
@@ -843,7 +845,8 @@ async def user_luxury_gaps_page(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("user_gap_day|"))
 async def user_luxury_gap_day(call: CallbackQuery) -> None:
     try:
-        target_day = date.fromisoformat((call.data or "").split("|", 1)[1])
+        _, raw_day = split_callback_data(call.data or "", "|", 1)
+        target_day = date.fromisoformat(raw_day)
     except (TypeError, ValueError, IndexError):
         await call.answer("Некорректная дата.", show_alert=True)
         return
@@ -860,8 +863,7 @@ async def user_luxury_when(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(UserMenuFSM.waiting_for_card_search)
     await call.answer()
     await call.message.answer(
-        "🔎 Напишите название карты, имя героя или ID карты.\n"
-        "Кнопка «🏠 Меню» отменит поиск."
+        "🔎 Напишите название карты, имя героя или ID карты.\n" "Кнопка «🏠 Меню» отменит поиск."
     )
 
 
