@@ -9,6 +9,7 @@ from bot.handlers.auction import (
     guides,
     luxury_admin,
     preorder,
+    preorder_submission,
     submission,
     submission_support,
 )
@@ -70,7 +71,13 @@ async def start_preorder_auction_kind(
     await call.answer()
 
 
-router.include_routers(preorder.router, submission.router, guides.router, luxury_admin.router)
+router.include_routers(
+    preorder_submission.router,
+    preorder.router,
+    submission.router,
+    guides.router,
+    luxury_admin.router,
+)
 
 
 async def _ask_for_currency(message: types.Message, state: FSMContext) -> None:
