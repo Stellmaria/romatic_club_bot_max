@@ -85,6 +85,10 @@ async def show_pending_preorders(call: CallbackQuery) -> None:
     message = call.message
     if not isinstance(message, types.Message):
         return
+    bot = message.bot
+    if bot is None:
+        await message.answer("Не удалось открыть очередь предзаказов.")
+        return
 
     with suppress(TelegramBadRequest):
         await message.delete()
@@ -98,7 +102,7 @@ async def show_pending_preorders(call: CallbackQuery) -> None:
         lot = dict(source)
         lot.setdefault("status", "pending")
         auction_id = int(lot.get("auction_id") or 0)
-        owners = await get_lot_owners_with_levels(message.bot, auction_id)
+        owners = await get_lot_owners_with_levels(bot, auction_id)
         text = format_pending_lot(lot, owners) + _preorder_details(lot)
         keyboard = build_lot_keyboard(lot, role="admin", show_proof=True)
         await send_lot_card_safe(message, lot, text, keyboard)
