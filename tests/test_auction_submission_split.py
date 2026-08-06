@@ -17,7 +17,6 @@ from bot.services.auction_submission import AuctionSubmissionCatalogService
 from bot.services.guides import GuideThanksService
 from bot.services.luxury_admin import LuxuryAdminService
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
