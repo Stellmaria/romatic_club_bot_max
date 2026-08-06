@@ -85,6 +85,10 @@ known-first-party = ["bot", "database", "db", "userbot"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
 "scripts/**/*.py" = ["S603", "S607"]
+# Preorder labels are intentional Russian UI text; multiplication signs improve readability.
+"bot/domain/preorders.py" = ["RUF001"]
+"bot/handlers/auction/preorder.py" = ["RUF001", "RUF100"]
+"tests/test_preorder_future_deck_flow.py" = ["RUF001"]
 # Russian operator documentation intentionally uses Cyrillic characters.
 # Existing operational log and SQL literals are kept readable as atomic text.
 "bot/tools/refresh_users.py" = ["RUF002", "RUF003", "E501"]
