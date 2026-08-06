@@ -18,6 +18,8 @@ PREORDER_MODES: tuple[str, ...] = (
     PREORDER_MODE_WHOLE_DECK,
 )
 MAX_PREORDER_QUANTITY = 99
+PREORDER_MIN_START_PRICE = 1_000
+PREORDER_MAX_START_PRICE = 6_000
 
 
 def _quantity(value: object) -> int:
@@ -107,6 +109,21 @@ def validate_preorder_selection(
     if not normalized_items:
         raise ValueError("item preorder must contain at least one item")
     return normalized_mode, normalized_items
+
+
+def validate_preorder_start_price(value: object) -> int:
+    """Validate the single start-price range used by every preorder composition."""
+
+    try:
+        price = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("preorder start price must be an integer") from exc
+    if not PREORDER_MIN_START_PRICE <= price <= PREORDER_MAX_START_PRICE:
+        raise ValueError(
+            "preorder start price must be between "
+            f"{PREORDER_MIN_START_PRICE} and {PREORDER_MAX_START_PRICE}"
+        )
+    return price
 
 
 def build_preorder_title(
