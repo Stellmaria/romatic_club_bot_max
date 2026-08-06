@@ -1,3 +1,4 @@
+# fmt: off
 from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -40,3 +41,4 @@ def auction_kind_keyboard(luxury_level: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="🏆 Рейтинг спасибо", callback_data="auk_guide_menu:thanks_top"),
     )
     return keyboard.as_markup()
+# fmt: on
