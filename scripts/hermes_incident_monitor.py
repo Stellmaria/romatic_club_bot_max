@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,9 +21,7 @@ ACTIVE_STATUSES = frozenset({"queued", "submitted", "running", "started", "stopp
 SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization\s*:\s*bearer\s+)[^\s,;]+"),
     re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{8,}"),
-    re.compile(
-        r"(?i)([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)[^\s,;]+"
-    ),
+    re.compile(r"(?i)([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)[^\s,;]+"),
     re.compile(r"(?i)(postgres(?:ql)?://[^:\s/]+:)[^@\s]+(@)"),
     re.compile(r"\b\d{8,12}:[A-Za-z0-9_-]{20,}\b"),
 )
@@ -47,6 +46,13 @@ def _integer(name: str, default: int, minimum: int, maximum: int) -> int:
         raise RuntimeError(f"{name} must be an integer") from error
     if not minimum <= value <= maximum:
         raise RuntimeError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def _http_url(value: str, name: str) -> str:
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError(f"{name} must be an HTTP(S) URL")
     return value
 
 
@@ -104,20 +110,24 @@ class Monitor:
         self.state_path = self.state_dir / "hermes-incident-monitor.json"
         self.log_path = self.state_dir / "hermes-incident-monitor.log"
         self.state_dir.mkdir(parents=True, exist_ok=True)
-        self.hermes_url = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642").rstrip("/")
+        self.hermes_url = _http_url(
+            os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642").rstrip("/"),
+            "HERMES_BASE_URL",
+        )
         self.hermes_key = os.getenv("HERMES_API_KEY", "").strip()
         if len(self.hermes_key) < 24:
             raise RuntimeError("HERMES_API_KEY is missing or too short")
         self.poll_seconds = _integer("HERMES_INCIDENT_POLL_SECONDS", 30, 5, 3600)
+        self.not_running_polls = _integer("HERMES_INCIDENT_NOT_RUNNING_POLLS", 2, 1, 20)
         self.unhealthy_polls = _integer("HERMES_INCIDENT_UNHEALTHY_POLLS", 2, 1, 20)
         self.cooldown_seconds = _integer("HERMES_INCIDENT_COOLDOWN_SECONDS", 600, 30, 86400)
-        self.run_timeout_seconds = _integer(
-            "HERMES_INCIDENT_RUN_TIMEOUT_SECONDS", 3600, 60, 14400
-        )
+        self.run_timeout_seconds = _integer("HERMES_INCIDENT_RUN_TIMEOUT_SECONDS", 3600, 60, 14400)
         self.log_lines = _integer("HERMES_INCIDENT_LOG_LINES", 200, 20, 2000)
         self.services = ("bot", "userbot")
         self._stop = threading.Event()
         self._state = self._load_state()
+        self._not_running_counts: dict[str, int] = {}
+        self._initial_not_running: set[str] = set()
         self._unhealthy_counts: dict[str, int] = {}
         active_run = self._state.get("active_run")
         self._active_run = active_run if isinstance(active_run, str) and active_run else None
@@ -184,12 +194,22 @@ class Monitor:
 
     def reason(self, probe: Probe) -> str | None:
         previous = self._previous(probe.service)
-        if not previous:
-            return "initial-not-running" if not probe.running else None
+        if not probe.running:
+            count = self._not_running_counts.get(probe.service, 0) + 1
+            self._not_running_counts[probe.service] = count
+            self._unhealthy_counts[probe.service] = 0
+            if count == 1 and not previous:
+                self._initial_not_running.add(probe.service)
+            if count < self.not_running_polls:
+                return None
+            if probe.service in self._initial_not_running:
+                return "initial-not-running"
+            return "container-not-running"
+
+        self._not_running_counts[probe.service] = 0
+        self._initial_not_running.discard(probe.service)
         if probe.restart_count > max(0, int(previous.get("restart_count", 0) or 0)):
             return "container-auto-restarted"
-        if not probe.running:
-            return "container-not-running"
         if probe.health == "unhealthy":
             count = self._unhealthy_counts.get(probe.service, 0) + 1
             self._unhealthy_counts[probe.service] = count
@@ -229,11 +249,13 @@ class Monitor:
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310 - base URL is validated as HTTP(S)
             self.hermes_url + path, data=data, headers=headers, method=method
         )
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with urllib.request.urlopen(  # noqa: S310 - request URL is validated above
+                request, timeout=30
+            ) as response:
                 raw = response.read().decode("utf-8", errors="replace")
         except urllib.error.HTTPError as error:
             details = error.read().decode("utf-8", errors="replace")[:1000]
@@ -260,9 +282,11 @@ class Monitor:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=15) as response:
+            with urllib.request.urlopen(  # noqa: S310 - fixed HTTPS Telegram endpoint
+                request, timeout=15
+            ) as response:
                 response.read()
-        except Exception as error:
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
             logger.warning("Could not send Telegram notification (%s)", type(error).__name__)
 
     @staticmethod
@@ -281,10 +305,13 @@ class Monitor:
         event_key = self._event_key(probe, reason)
         if self._active_status in ACTIVE_STATUSES:
             return
-        if event_key == self._last_event_key and time.time() - self._last_event_at < self.cooldown_seconds:
+        if (
+            event_key == self._last_event_key
+            and time.time() - self._last_event_at < self.cooldown_seconds
+        ):
             return
         prompt = (
-            "Разбери аварийный инцидент Romatic Club Max. Не выполняй merge, deployment, "
+            "Разбери аварийный инцидент Romatic Club Max. Не выполняй merge, deployment, "  # noqa: RUF001
             "restart, update, rollback, изменение production БД или секретов. Если это "
             "вероятный дефект кода, поставь задачу через `python /opt/data/tools/coderctl.py "
             "submit max --source automatic-incident --task <очищенная задача>`, дождись "
@@ -337,7 +364,7 @@ class Monitor:
                 if time.monotonic() >= deadline:
                     raise RuntimeError(f"Hermes run {run_id} timed out")
                 self._stop.wait(5)
-        except Exception as error:
+        except (RuntimeError, json.JSONDecodeError) as error:
             self._active_status = "failed"
             self._notify(
                 "Hermes не завершил разбор инцидента Max",
@@ -356,7 +383,12 @@ class Monitor:
                 if reason:
                     try:
                         self.submit(probe, reason)
-                    except Exception as error:
+                    except (
+                        RuntimeError,
+                        json.JSONDecodeError,
+                        OSError,
+                        subprocess.TimeoutExpired,
+                    ) as error:
                         logger.warning("Could not submit Max incident (%s)", type(error).__name__)
             self._save(probes)
             self._stop.wait(self.poll_seconds)
