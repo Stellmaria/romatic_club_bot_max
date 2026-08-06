@@ -1,3 +1,4 @@
+# fmt: off
 from pathlib import Path
 
 from bot.domain.auctions import AuctionKind
@@ -52,3 +53,4 @@ def test_deck_name_migration_sets_canonical_names() -> None:
     assert "WHEN 29 THEN '29 колода'" in sql
     assert "WHERE id IN (28, 29)" in sql
     assert "IS DISTINCT FROM" in sql
+# fmt: on
