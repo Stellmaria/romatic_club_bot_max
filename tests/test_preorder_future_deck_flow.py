@@ -20,6 +20,8 @@ from bot.domain.preorders import (
     validate_preorder_selection,
     validate_preorder_start_price,
 )
+from bot.handlers import auctions
+from bot.handlers.auction import preorder, preorder_submission, submission
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -133,11 +135,10 @@ def test_repository_filters_and_revalidates_empty_decks() -> None:
 
 
 def test_preorder_submission_router_has_priority_over_legacy_flow() -> None:
-    source = (ROOT / "bot/handlers/auctions.py").read_text(encoding="utf-8")
+    routers = auctions.router.sub_routers
 
-    assert "preorder_submission.router" in source
-    assert source.index("preorder_submission.router") < source.index("preorder.router")
-    assert source.index("preorder.router") < source.index("submission.router")
+    assert routers.index(preorder_submission.router) < routers.index(preorder.router)
+    assert routers.index(preorder.router) < routers.index(submission.router)
 
 
 def test_preorder_whole_deck_requires_explicit_clear_confirmation() -> None:
