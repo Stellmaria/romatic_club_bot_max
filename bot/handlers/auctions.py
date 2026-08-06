@@ -101,5 +101,5 @@ async def _ask_for_currency(message: types.Message, state: FSMContext) -> None:
 # KeyboardButton(text="🍵 Чай")
 # KeyboardButton(text="💎 Алмазы")
 # KeyboardButton(text="🍵 + 💎 Чай или/и алмазы")
-# KeyboardButton(text="🧩 Комбо (свои варианты)")
+# KeyboardButton(text="🧩 Комби (свои варианты)")
 # accepted_currencies = ["чашки", "алмазы"]
