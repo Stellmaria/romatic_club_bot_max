@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# fmt: off
 from typing import Any
 
 import asyncpg
@@ -216,3 +217,4 @@ class PreorderSubmissionRepository:
                 int(limit),
             )
         return [dict(row) for row in rows]
+# fmt: on
