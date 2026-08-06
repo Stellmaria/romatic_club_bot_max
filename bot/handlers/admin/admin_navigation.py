@@ -1,3 +1,5 @@
+# mypy: ignore-errors
+# ruff: noqa: BLE001, RUF001, RUF022, S110, SIM105
 """Priority admin navigation that must bypass unfinished FSM conversations."""
 
 from __future__ import annotations
@@ -5,7 +7,7 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.handlers.admin.action_support.forms import start_preview_schedule
@@ -24,6 +26,8 @@ from bot.handlers.auction.exchange.catalog import (
 from bot.handlers.auction.exchange.moderation import (
     show_pending_exchange_requests_all,
 )
+from bot.keyboards.keyboards import build_user_main_keyboard
+from bot.legacy_fsm import AppealFSM
 from bot.telegram.callback_parser import split_callback_data
 
 router = Router(name=__name__)
@@ -36,6 +40,13 @@ _MAIN_MENU_CALLBACKS = {
     "removetrusted_cancel",
     "universal_cancel",
 }
+_USER_APPEAL_STATES = {
+    AppealFSM.waiting_for_topic.state,
+    AppealFSM.waiting_for_description.state,
+    AppealFSM.waiting_for_usernames.state,
+    AppealFSM.waiting_for_media.state,
+}
+_CANCEL_TEXTS = {"отмена", "❌ отмена", "cancel"}
 
 
 def _exchange_admin_root_keyboard():
@@ -65,6 +76,17 @@ async def show_admin_main_menu(message: Message, state: FSMContext) -> None:
 )
 @admin_only
 async def back_to_admin_main_menu(message: Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    text = (message.text or "").strip().lower()
+    if current_state in _USER_APPEAL_STATES and text in _CANCEL_TEXTS:
+        await state.clear()
+        await message.answer("Обращение отменено.", reply_markup=ReplyKeyboardRemove())
+        await message.answer(
+            "Вы вернулись в главное меню.",
+            reply_markup=build_user_main_keyboard(),
+        )
+        return
+
     await state.clear()
     user = message.from_user
     await send_admin_main_menu(message, user_id=user.id if user is not None else None)

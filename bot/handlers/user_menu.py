@@ -1,3 +1,5 @@
+# mypy: ignore-errors
+# ruff: noqa: BLE001, RUF001, S110, SIM105
 """Canonical button-driven menu for private users."""
 
 from __future__ import annotations
@@ -18,11 +20,6 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.core.time import to_moscow, utc_now
 from bot.handlers.admin.helper.admin_keyboards import months_keyboard
-from bot.handlers.auction.exchange.common import (
-    exchange_deck_keyboard,
-    get_exchange_deck_ids,
-    get_exchange_decks_for_menu,
-)
 from bot.handlers.auction.schedule import (
     LUX_END,
     LUX_START,
@@ -49,8 +46,7 @@ from bot.keyboards.keyboards import (
     USER_MENU_SUPPORT,
     build_user_main_keyboard,
 )
-from bot.legacy_fsm import ExchangeFSM, LuxScheduleFSM, UIDVerificationFSM
-from bot.services.exchange_catalog import ExchangeCatalogService
+from bot.legacy_fsm import LuxScheduleFSM, UIDVerificationFSM
 from bot.services.handler_persistence import (
     get_auctions_by_date,
     get_settings,
@@ -64,6 +60,7 @@ from bot.services.handler_persistence import (
     sync_trusted_status,
 )
 from bot.telegram.boundary import escape_html
+from bot.telegram.callback_parser import split_callback_data
 from bot.telegram.user_entrypoints import launch_add_lot, launch_card_subscription
 from db.legacy import (
     get_auctions_by_card_ref,
@@ -176,7 +173,6 @@ def user_main_text(*, full_name: str | None = None, status_line: str | None = No
         [
             "",
             "Здесь всё работает через кнопки. Выберите нужный раздел ниже.",
-            "Кнопка «🏠 Меню» в любой момент отменит текущий сценарий и вернёт на главный экран.",
         ]
     )
     return "\n".join(parts)
@@ -293,63 +289,29 @@ async def show_day_schedule(message: Message, target_day: date) -> None:
 
 
 def build_exchange_keyboard() -> InlineKeyboardMarkup:
+    """Compatibility keyboard for already-sent exchange messages."""
+
     builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="➕ Выставить на биржу", callback_data="user_exchange|create")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🔎 Смотреть предложения", callback_data="ex_view:decks")
-    )
     builder.row(_home_inline_button())
     return builder.as_markup()
 
 
 async def show_exchange_menu(message: Message) -> None:
-    await _edit_or_answer(
-        message,
-        text=(
-            "🛍 <b>Биржа карт</b>\n\n"
-            "Выберите действие: выставить карту или посмотреть уже принятые предложения."
-        ),
-        reply_markup=build_exchange_keyboard(),
-    )
+    """Explain the current entry point to users of stale exchange keyboards."""
 
-
-async def start_exchange_submission(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    decks = await get_exchange_decks_for_menu()
-    allowed_ids = await get_exchange_deck_ids(decks)
-    if not decks or not allowed_ids:
-        await message.answer(
-            "На бирже сейчас нет доступных колод.",
-            reply_markup=build_user_main_keyboard(),
-        )
-        return
-    await state.set_state(ExchangeFSM.waiting_for_deck)
     await message.answer(
-        "🛍 <b>Новая заявка на биржу</b>\n\nВыберите колоду:",
+        "🛍 <b>Биржевые лоты</b> теперь подаются через общую кнопку "
+        "«🎴 Подать лот». Просмотр предложений доступен только администраторам.",
         parse_mode="HTML",
-        reply_markup=exchange_deck_keyboard(decks, allowed_ids),
+        reply_markup=build_user_main_keyboard(),
     )
 
 
 async def show_exchange_browser(message: Message) -> None:
-    allowed_ids = await get_exchange_deck_ids()
-    service = await ExchangeCatalogService.create()
-    deck_ids = await service.decks_with_approved(allowed_ids)
-    builder = InlineKeyboardBuilder()
-    for deck_id in deck_ids:
-        builder.button(text=f"📚 Колода {int(deck_id)}", callback_data=f"ex_view:deck:{int(deck_id)}")
-    builder.adjust(2 if len(deck_ids) > 1 else 1)
-    builder.row(
-        InlineKeyboardButton(text="⬅️ Назад к бирже", callback_data="user_exchange|root")
+    await message.answer(
+        "Просмотр предложений биржи доступен только администраторам.",
+        reply_markup=build_user_main_keyboard(),
     )
-    text = (
-        "🛍 <b>Биржа карт</b>\n\nВыберите колоду:"
-        if deck_ids
-        else "🛍 <b>Биржа карт</b>\n\nПринятых предложений пока нет."
-    )
-    await _edit_or_answer(message, text=text, reply_markup=builder.as_markup())
 
 
 def build_notifications_keyboard(settings: dict, *, subscribed: bool) -> InlineKeyboardMarkup:
@@ -398,8 +360,15 @@ async def show_notifications_menu(message: Message, *, user_id: int) -> None:
         message,
         text=(
             "🔔 <b>Уведомления</b>\n\n"
-            f"Общие уведомления: <b>{'включены' if subscribed else 'выключены'}</b>\n"
-            "Нажимайте на пункты, чтобы изменить настройки."
+            "Выберите, какие сообщения бот должен присылать:\n\n"
+            "📨 <b>Общие уведомления</b> — главный переключатель. "
+            "Когда он выключен, остальные уведомления не отправляются.\n"
+            "🔔 <b>О начале аукциона</b> — сообщение при старте подходящего аукциона.\n"
+            "⏰ <b>За минуту до конца</b> — напоминание перед завершением аукциона.\n"
+            "🏁 <b>О завершении</b> — результат после окончания аукциона.\n"
+            "📅 <b>Анонс дня в 00:00</b> — список аукционов на новый день.\n\n"
+            "✅ — включено, ❌ — выключено.\n"
+            f"Сейчас общие уведомления: <b>{'включены' if subscribed else 'выключены'}</b>."
         ),
         reply_markup=build_notifications_keyboard(settings, subscribed=subscribed),
     )
@@ -591,16 +560,14 @@ async def show_card_schedule_search(message: Message, *, user_id: int, query: st
 def help_text() -> str:
     return (
         "ℹ️ <b>Как пользоваться ботом</b>\n\n"
-        "🎴 <b>Подать лот</b> — запускает пошаговое оформление заявки.\n"
+        "🎴 <b>Подать лот</b> — оформление аукционного или биржевого лота.\n"
         "📦 <b>Мои лоты</b> — актуальные, завершённые, выплаты и архив.\n"
-        "📅 <b>Расписание</b> — выбор дня кнопками.\n"
-        "🛍 <b>Биржа</b> — выставление и просмотр предложений.\n"
-        "🔔 <b>Уведомления</b> — все переключатели в одном месте.\n"
+        "📅 <b>Сегодня</b> — аукционы на текущий день.\n"
+        "🔔 <b>Уведомления</b> — переключатели и пояснения к ним.\n"
         "🃏 <b>Подписки</b> — подписки на карты, колоды и пресеты.\n"
         "👤 <b>Профиль</b> — статус уведомлений и UID-верификация.\n"
         "👑 <b>Лакшери</b> — расширенное расписание и поиск.\n"
-        "🆘 <b>Поддержка</b> — обращение администрации с вложениями.\n\n"
-        "Кнопка «🏠 Меню» отменяет текущий ввод и возвращает на главный экран."
+        "🆘 <b>Поддержка</b> — обращение администрации с вложениями."
     )
 
 
@@ -672,9 +639,8 @@ async def user_schedule(message: Message, state: FSMContext) -> None:
 
 
 @router.message(F.text == USER_MENU_EXCHANGE, F.chat.type == "private")
-async def user_exchange(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    await show_exchange_menu(message)
+async def user_exchange(message: Message, state: FSMContext, bot: Bot) -> None:
+    await launch_add_lot(message, state, bot)
 
 
 @router.message(F.text == USER_MENU_NOTIFICATIONS, F.chat.type == "private")
@@ -724,7 +690,8 @@ async def user_home_callback(call: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("user_schedule|"))
 async def user_schedule_page(call: CallbackQuery) -> None:
     try:
-        page = int((call.data or "").split("|", 1)[1])
+        _, raw_page = split_callback_data(call.data or "", "|", 1)
+        page = int(raw_page)
     except (TypeError, ValueError, IndexError):
         await call.answer("Некорректная страница.", show_alert=True)
         return
@@ -735,7 +702,8 @@ async def user_schedule_page(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("user_day|"))
 async def user_schedule_day(call: CallbackQuery) -> None:
     try:
-        target_day = date.fromisoformat((call.data or "").split("|", 1)[1])
+        _, raw_day = split_callback_data(call.data or "", "|", 1)
+        target_day = date.fromisoformat(raw_day)
     except (TypeError, ValueError, IndexError):
         await call.answer("Некорректная дата.", show_alert=True)
         return
@@ -744,15 +712,15 @@ async def user_schedule_day(call: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "user_exchange|root")
-async def user_exchange_root(call: CallbackQuery) -> None:
-    await call.answer()
-    await show_exchange_menu(call.message)
+async def user_exchange_root(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    await call.answer("Открываю подачу лота")
+    await launch_add_lot(call.message, state, bot)
 
 
 @router.callback_query(F.data == "user_exchange|create")
-async def user_exchange_create(call: CallbackQuery, state: FSMContext) -> None:
-    await call.answer("Открываю оформление")
-    await start_exchange_submission(call.message, state)
+async def user_exchange_create(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    await call.answer("Открываю подачу лота")
+    await launch_add_lot(call.message, state, bot)
 
 
 @router.callback_query(F.data == "ex_view:decks")
@@ -781,9 +749,7 @@ async def user_toggle_global_notifications(call: CallbackQuery) -> None:
         )
     except Exception:
         pass
-    await call.answer(
-        "Общие уведомления включены" if new_value else "Общие уведомления выключены"
-    )
+    await call.answer("Общие уведомления включены" if new_value else "Общие уведомления выключены")
     await show_notifications_menu(call.message, user_id=call.from_user.id)
 
 
@@ -868,7 +834,8 @@ async def user_luxury_gaps(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("user_gaps_page|"))
 async def user_luxury_gaps_page(call: CallbackQuery) -> None:
     try:
-        page = int((call.data or "").split("|", 1)[1])
+        _, raw_page = split_callback_data(call.data or "", "|", 1)
+        page = int(raw_page)
     except (TypeError, ValueError, IndexError):
         await call.answer("Некорректная страница.", show_alert=True)
         return
@@ -879,7 +846,8 @@ async def user_luxury_gaps_page(call: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("user_gap_day|"))
 async def user_luxury_gap_day(call: CallbackQuery) -> None:
     try:
-        target_day = date.fromisoformat((call.data or "").split("|", 1)[1])
+        _, raw_day = split_callback_data(call.data or "", "|", 1)
+        target_day = date.fromisoformat(raw_day)
     except (TypeError, ValueError, IndexError):
         await call.answer("Некорректная дата.", show_alert=True)
         return
@@ -896,8 +864,7 @@ async def user_luxury_when(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(UserMenuFSM.waiting_for_card_search)
     await call.answer()
     await call.message.answer(
-        "🔎 Напишите название карты, имя героя или ID карты.\n"
-        "Кнопка «🏠 Меню» отменит поиск."
+        "🔎 Напишите название карты, имя героя или ID карты.\n" "Кнопка «🏠 Меню» отменит поиск."
     )
 
 

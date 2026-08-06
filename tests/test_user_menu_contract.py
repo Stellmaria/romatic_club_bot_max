@@ -30,7 +30,8 @@ def test_user_keyboard_exposes_public_sections_only() -> None:
 
     layout = source[source.index("USER_MENU_LAYOUT") : source.index("def build_user_main_keyboard")]
     assert "USER_MENU_TODAY" in layout
-    assert "USER_MENU_EXCHANGE" in layout
+    assert "USER_MENU_EXCHANGE" not in layout
+    assert "USER_MENU_HOME" not in layout
     assert "USER_MENU_SCHEDULE" not in layout
 
     # The schedule constant remains so stale Telegram keyboards can be rejected safely.
@@ -68,7 +69,7 @@ def test_today_is_public_while_other_schedule_entries_are_guarded() -> None:
     assert 'F.data.startswith("user_day|")' in source
 
 
-def test_exchange_entry_points_are_public() -> None:
+def test_exchange_entry_points_do_not_expose_catalog_to_users() -> None:
     access = _source("bot/handlers/user_access_control.py")
     menu = _source("bot/handlers/user_menu.py")
 
@@ -80,7 +81,8 @@ def test_exchange_entry_points_are_public() -> None:
     assert 'F.data == "user_exchange|root"' in menu
     assert 'F.data == "user_exchange|create"' in menu
     assert 'F.data == "ex_view:decks"' in menu
-    assert "start_exchange_submission(call.message, state)" in menu
+    assert "launch_add_lot(call.message, state, bot)" in menu
+    assert "Просмотр предложений биржи доступен только администраторам" in menu
 
 
 def test_luxury_schedule_access_remains_available() -> None:
@@ -94,20 +96,17 @@ def test_luxury_schedule_access_remains_available() -> None:
     assert "👑 <b>Лакшери</b> — расписание, свободные слоты и поиск карт." in access
 
 
-def test_user_menu_has_universal_home_and_corrected_button_help() -> None:
+def test_user_menu_keeps_inline_home_without_redundant_reply_button() -> None:
     menu = _source("bot/handlers/user_menu.py")
-    access = _source("bot/handlers/user_access_control.py")
 
     assert 'callback_data="user_menu|home"' in menu
     assert "await state.clear()" in menu
     assert "user=call.from_user" in menu
     assert "Здесь всё работает через кнопки" in menu
-    assert "Как пользоваться ботом" in access
-    assert "📅 <b>Сегодня</b> — аукционы, которые идут в течение текущего дня." in access
-    assert "🛍 <b>Биржа</b> — выставление карт и просмотр принятых предложений." in access
-    assert "Расписание по другим дням доступно администраторам и Лакшери-пользователям" in access
-    assert "Биржа является административной функцией" not in access
-    assert "Кнопка «🏠 Меню»" in access
+    assert "Как пользоваться ботом" in menu
+    assert "🎴 <b>Подать лот</b> — оформление аукционного или биржевого лота." in menu
+    main_text = menu[menu.index("def user_main_text") : menu.index("async def send_user_main_menu")]
+    assert "Кнопка «🏠 Меню»" not in main_text
 
 
 def test_user_schedule_label_does_not_collide_with_priority_admin_router() -> None:
