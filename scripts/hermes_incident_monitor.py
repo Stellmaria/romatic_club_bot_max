@@ -20,9 +20,7 @@ ACTIVE_STATUSES = frozenset({"queued", "submitted", "running", "started", "stopp
 SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization\s*:\s*bearer\s+)[^\s,;]+"),
     re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{8,}"),
-    re.compile(
-        r"(?i)([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)[^\s,;]+"
-    ),
+    re.compile(r"(?i)([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)[A-Z0-9_]*\s*[=:]\s*)[^\s,;]+"),
     re.compile(r"(?i)(postgres(?:ql)?://[^:\s/]+:)[^@\s]+(@)"),
     re.compile(r"\b\d{8,12}:[A-Za-z0-9_-]{20,}\b"),
 )
@@ -112,9 +110,7 @@ class Monitor:
         self.not_running_polls = _integer("HERMES_INCIDENT_NOT_RUNNING_POLLS", 2, 1, 20)
         self.unhealthy_polls = _integer("HERMES_INCIDENT_UNHEALTHY_POLLS", 2, 1, 20)
         self.cooldown_seconds = _integer("HERMES_INCIDENT_COOLDOWN_SECONDS", 600, 30, 86400)
-        self.run_timeout_seconds = _integer(
-            "HERMES_INCIDENT_RUN_TIMEOUT_SECONDS", 3600, 60, 14400
-        )
+        self.run_timeout_seconds = _integer("HERMES_INCIDENT_RUN_TIMEOUT_SECONDS", 3600, 60, 14400)
         self.log_lines = _integer("HERMES_INCIDENT_LOG_LINES", 200, 20, 2000)
         self.services = ("bot", "userbot")
         self._stop = threading.Event()
