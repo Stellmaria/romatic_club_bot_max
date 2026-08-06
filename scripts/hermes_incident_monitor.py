@@ -109,6 +109,7 @@ class Monitor:
         if len(self.hermes_key) < 24:
             raise RuntimeError("HERMES_API_KEY is missing or too short")
         self.poll_seconds = _integer("HERMES_INCIDENT_POLL_SECONDS", 30, 5, 3600)
+        self.not_running_polls = _integer("HERMES_INCIDENT_NOT_RUNNING_POLLS", 2, 1, 20)
         self.unhealthy_polls = _integer("HERMES_INCIDENT_UNHEALTHY_POLLS", 2, 1, 20)
         self.cooldown_seconds = _integer("HERMES_INCIDENT_COOLDOWN_SECONDS", 600, 30, 86400)
         self.run_timeout_seconds = _integer(
@@ -118,6 +119,8 @@ class Monitor:
         self.services = ("bot", "userbot")
         self._stop = threading.Event()
         self._state = self._load_state()
+        self._not_running_counts: dict[str, int] = {}
+        self._initial_not_running: set[str] = set()
         self._unhealthy_counts: dict[str, int] = {}
         active_run = self._state.get("active_run")
         self._active_run = active_run if isinstance(active_run, str) and active_run else None
@@ -184,12 +187,22 @@ class Monitor:
 
     def reason(self, probe: Probe) -> str | None:
         previous = self._previous(probe.service)
-        if not previous:
-            return "initial-not-running" if not probe.running else None
+        if not probe.running:
+            count = self._not_running_counts.get(probe.service, 0) + 1
+            self._not_running_counts[probe.service] = count
+            self._unhealthy_counts[probe.service] = 0
+            if count == 1 and not previous:
+                self._initial_not_running.add(probe.service)
+            if count < self.not_running_polls:
+                return None
+            if probe.service in self._initial_not_running:
+                return "initial-not-running"
+            return "container-not-running"
+
+        self._not_running_counts[probe.service] = 0
+        self._initial_not_running.discard(probe.service)
         if probe.restart_count > max(0, int(previous.get("restart_count", 0) or 0)):
             return "container-auto-restarted"
-        if not probe.running:
-            return "container-not-running"
         if probe.health == "unhealthy":
             count = self._unhealthy_counts.get(probe.service, 0) + 1
             self._unhealthy_counts[probe.service] = count
@@ -281,7 +294,10 @@ class Monitor:
         event_key = self._event_key(probe, reason)
         if self._active_status in ACTIVE_STATUSES:
             return
-        if event_key == self._last_event_key and time.time() - self._last_event_at < self.cooldown_seconds:
+        if (
+            event_key == self._last_event_key
+            and time.time() - self._last_event_at < self.cooldown_seconds
+        ):
             return
         prompt = (
             "Разбери аварийный инцидент Romatic Club Max. Не выполняй merge, deployment, "
