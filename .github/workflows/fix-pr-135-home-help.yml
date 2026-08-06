@@ -1,0 +1,45 @@
+name: Fix PR 135 home help
+
+on:
+  push:
+    branches:
+      - fix/user-menu-notifications-presets
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.head_commit.message == 'Prepare PR 135 home help fix'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/user-menu-notifications-presets
+          fetch-depth: 0
+      - name: Remove obsolete reply-menu hint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("bot/handlers/user_menu.py")
+          text = path.read_text(encoding="utf-8")
+          old = '            "Кнопка «🏠 Меню» в любой момент отменит текущий сценарий и вернёт на главный экран.",\n'
+          if old not in text:
+              raise RuntimeError("obsolete home-menu hint not found")
+          path.write_text(text.replace(old, "", 1), encoding="utf-8")
+          PY
+          python -m pip install --disable-pip-version-check black==26.5.1
+          python -m black bot/handlers/user_menu.py
+          git diff --check
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot/handlers/user_menu.py
+          git commit -m "Remove obsolete home-menu hint"
+          git push origin HEAD:fix/user-menu-notifications-presets
