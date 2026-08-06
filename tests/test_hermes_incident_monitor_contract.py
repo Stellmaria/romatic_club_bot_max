@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import difflib
 import importlib.util
+
+import black
 import sys
 import time
 from pathlib import Path
@@ -171,3 +174,23 @@ def test_systemd_unit_is_sandboxed() -> None:
     assert "PrivateTmp=true" in unit
     assert "EnvironmentFile=/srv/hermes-operator-control/incident.env" in unit
     assert "User=root" not in unit
+
+
+def test_black_diagnostic_exposes_exact_hermes_diff() -> None:
+    differences: list[str] = []
+    for path in (MODULE_PATH, Path(__file__)):
+        source = path.read_text(encoding="utf-8")
+        formatted = black.format_str(source, mode=black.Mode(line_length=100))
+        if source == formatted:
+            continue
+        differences.append(
+            "".join(
+                difflib.unified_diff(
+                    source.splitlines(keepends=True),
+                    formatted.splitlines(keepends=True),
+                    fromfile=f"{path}:current",
+                    tofile=f"{path}:black",
+                )
+            )
+        )
+    assert not differences, "\n" + "\n".join(differences)
