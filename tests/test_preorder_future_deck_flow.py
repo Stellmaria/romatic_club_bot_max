@@ -1,3 +1,4 @@
+# fmt: off
 from __future__ import annotations
 
 from pathlib import Path
@@ -133,3 +134,4 @@ def test_preorder_whole_deck_requires_explicit_clear_confirmation() -> None:
     assert 'callback_data="preorder:whole:confirm"' in source
     assert 'callback_data="preorder:whole:cancel"' in source
     assert "При переходе на целую колоду этот состав будет очищен" in source
+# fmt: on
