@@ -44,6 +44,7 @@ class AuctionKind(str, Enum):
     """Supported auction workflows and their access/winner policies."""
 
     STANDARD = "standard"
+    PREORDER = "preorder"
     REVERSE = "reverse"
     FAST = "fast"
     FREE = "free"
@@ -59,6 +60,9 @@ class AuctionKind(str, Enum):
             "default": cls.STANDARD,
             "regular": cls.STANDARD,
             "normal": cls.STANDARD,
+            "pre-order": cls.PREORDER,
+            "pre_order": cls.PREORDER,
+            "предзаказ": cls.PREORDER,
             "freeform": cls.FREE,
         }
         if normalized in aliases:
@@ -72,6 +76,7 @@ class AuctionKind(str, Enum):
     def minimum_luxury_level(self) -> int:
         return {
             AuctionKind.STANDARD: 0,
+            AuctionKind.PREORDER: 1,
             AuctionKind.REVERSE: 1,
             AuctionKind.FAST: 2,
             AuctionKind.FREE: 2,
@@ -93,7 +98,12 @@ class AuctionKind(str, Enum):
 
     @property
     def supports_autobid(self) -> bool:
-        return self in {AuctionKind.STANDARD, AuctionKind.FAST, AuctionKind.BLACK}
+        return self in {
+            AuctionKind.STANDARD,
+            AuctionKind.PREORDER,
+            AuctionKind.FAST,
+            AuctionKind.BLACK,
+        }
 
 
 class ExchangeStatus(str, Enum):
