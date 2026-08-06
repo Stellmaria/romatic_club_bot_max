@@ -8,7 +8,6 @@ from bot.domain.auctions import AuctionKind
 
 AUCTION_KIND_TITLES = {
     AuctionKind.STANDARD: "⭐️ Стандартный",
-    AuctionKind.PREORDER: "📦 Предзаказ",
     AuctionKind.REVERSE: "✨ Обратный",
     AuctionKind.FAST: "⚡️ Быстрый",
     AuctionKind.FREE: "🪶 Свободный",
@@ -33,16 +32,11 @@ def auction_kind_keyboard(luxury_level: int) -> InlineKeyboardMarkup:
 
     keyboard.adjust(2)
     keyboard.row(
-        InlineKeyboardButton(
-            text="📚 Гайды от Давида", callback_data="auk_guide_menu:root"
-        ),
-        InlineKeyboardButton(
-            text="💬 Ответы от Давида", callback_data="auk_guide_menu:david"
-        ),
+        InlineKeyboardButton(text="📚 Гайды от Давида", callback_data="auk_guide_menu:root"),
+        InlineKeyboardButton(text="💬 Ответы от Давида", callback_data="auk_guide_menu:david"),
     )
     keyboard.row(
-        InlineKeyboardButton(
-            text="🏆 Рейтинг спасибо", callback_data="auk_guide_menu:thanks_top"
-        ),
+        InlineKeyboardButton(text="🏆 Рейтинг спасибо", callback_data="auk_guide_menu:thanks_top"),
     )
     return keyboard.as_markup()
+
