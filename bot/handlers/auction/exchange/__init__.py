@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any, cast
 
 from aiogram import Router
 
-from . import common as _common
+_common = import_module(f"{__name__}.common")
 
 _EXCHANGE_DECK_IDS = (22, 24, 26, 28)
 
@@ -27,9 +28,9 @@ _common_module.EX_DECKS = list(_EXCHANGE_DECK_IDS)
 _common_module._get_exchange_deck_ids = _fixed_exchange_deck_ids
 _common_module.get_exchange_deck_ids = _fixed_exchange_deck_ids
 
-from . import catalog as _catalog
+_catalog = import_module(f"{__name__}.catalog")
 
-_original_q_exchange_approved_decks = _catalog.q_exchange_approved_decks
+_original_q_exchange_approved_decks = cast(Any, _catalog).q_exchange_approved_decks
 
 
 async def _fixed_q_exchange_approved_decks() -> list[dict[str, Any]]:
