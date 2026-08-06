@@ -140,10 +140,15 @@ router = Router(name=__name__)
 router.include_routers(*FEATURE_ROUTERS[1:])
 
 __all__ = [
-    "router", "FEATURE_ROUTERS", "notify_owners_lot_changed",
-    *admin_panel_system.__all__, *admin_panel_preorders.__all__,
-    *admin_panel_requests.__all__, *admin_panel_schedule.__all__,
-    *admin_panel_sections.__all__, *admin_user_lists.__all__,
+    "router",
+    "FEATURE_ROUTERS",
+    "notify_owners_lot_changed",
+    *admin_panel_system.__all__,
+    *admin_panel_preorders.__all__,
+    *admin_panel_requests.__all__,
+    *admin_panel_schedule.__all__,
+    *admin_panel_sections.__all__,
+    *admin_user_lists.__all__,
     *admin_panel_exchange.__all__,
 ]
 
