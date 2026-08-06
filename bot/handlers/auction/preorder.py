@@ -13,12 +13,17 @@ from aiogram.fsm.context import FSMContext
 from bot.domain.auctions import AuctionKind
 from bot.domain.preorders import (
     MAX_PREORDER_QUANTITY,
+    PREORDER_MODE_ITEMS,
+    PREORDER_MODE_WHOLE_DECK,
     PREORDER_RARITIES,
     PREORDER_RARITY_LABELS,
     build_preorder_title,
     change_preorder_quantity,
+    format_preorder_composition,
     normalize_preorder_items,
+    normalize_preorder_mode,
     preorder_total,
+    validate_preorder_selection,
 )
 from bot.features.auction_submission import ANY_DECK_PHOTO_ID
 from bot.handlers.auction.submission import user_addlot_confirm
@@ -142,33 +147,66 @@ def future_decks_keyboard(decks: list[dict[str, Any]]) -> types.InlineKeyboardMa
     return types.InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def preorder_cart_keyboard(items: dict[str, int]) -> types.InlineKeyboardMarkup:
-    normalized = normalize_preorder_items(items)
+def preorder_cart_keyboard(
+    items: dict[str, int],
+    *,
+    mode: object = PREORDER_MODE_ITEMS,
+) -> types.InlineKeyboardMarkup:
+    normalized_mode = normalize_preorder_mode(mode)
     rows: list[list[types.InlineKeyboardButton]] = []
-    for rarity in PREORDER_RARITIES:
-        quantity = normalized.get(rarity, 0)
+
+    if normalized_mode == PREORDER_MODE_WHOLE_DECK:
+        rows.extend(
+            [
+                [
+                    types.InlineKeyboardButton(
+                        text="🃏 Целая колода выбрана",
+                        callback_data="preorder:noop",
+                    )
+                ],
+                [
+                    types.InlineKeyboardButton(
+                        text="🔄 Выбрать карты по редкостям",
+                        callback_data="preorder:items",
+                    )
+                ],
+            ]
+        )
+    else:
+        normalized = normalize_preorder_items(items)
+        for rarity in PREORDER_RARITIES:
+            quantity = normalized.get(rarity, 0)
+            rows.append(
+                [
+                    types.InlineKeyboardButton(
+                        text="➖",
+                        callback_data=_ITEM_CALLBACK.pack(
+                            rarity=rarity,
+                            direction="dec",
+                        ),
+                    ),
+                    types.InlineKeyboardButton(
+                        text=f"{PREORDER_RARITY_LABELS[rarity]}: {quantity}",
+                        callback_data="preorder:noop",
+                    ),
+                    types.InlineKeyboardButton(
+                        text="➕",
+                        callback_data=_ITEM_CALLBACK.pack(
+                            rarity=rarity,
+                            direction="inc",
+                        ),
+                    ),
+                ]
+            )
         rows.append(
             [
                 types.InlineKeyboardButton(
-                    text="➖",
-                    callback_data=_ITEM_CALLBACK.pack(
-                        rarity=rarity,
-                        direction="dec",
-                    ),
-                ),
-                types.InlineKeyboardButton(
-                    text=f"{PREORDER_RARITY_LABELS[rarity]}: {quantity}",
-                    callback_data="preorder:noop",
-                ),
-                types.InlineKeyboardButton(
-                    text="➕",
-                    callback_data=_ITEM_CALLBACK.pack(
-                        rarity=rarity,
-                        direction="inc",
-                    ),
-                ),
+                    text="🃏 Заказать целую колоду",
+                    callback_data="preorder:whole",
+                )
             ]
         )
+
     rows.extend(
         [
             [
@@ -188,11 +226,46 @@ def preorder_cart_keyboard(items: dict[str, int]) -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def preorder_cart_text(*, deck_id: int, deck_name: str, items: dict[str, int]) -> str:
+def whole_deck_confirmation_keyboard() -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="🗑 Очистить и выбрать целую колоду",
+                    callback_data="preorder:whole:confirm",
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="Отмена",
+                    callback_data="preorder:whole:cancel",
+                )
+            ],
+        ]
+    )
+
+
+def preorder_cart_text(
+    *,
+    deck_id: int,
+    deck_name: str,
+    items: dict[str, int],
+    mode: object = PREORDER_MODE_ITEMS,
+) -> str:
+    normalized_mode = normalize_preorder_mode(mode)
+    if normalized_mode == PREORDER_MODE_WHOLE_DECK:
+        return (
+            f"<b>Предзаказ колоды №{deck_id}</b>\n"
+            f"{deck_name}\n\n"
+            "<b>Режим:</b> целая колода.\n"
+            "В заявку войдёт вся будущая колода одним лотом."
+        )
+
     total = preorder_total(items)
     return (
         f"<b>Предзаказ колоды №{deck_id}</b>\n"
         f"{deck_name}\n\n"
+        "<b>Режим:</b> карты по редкостям.\n"
         "Соберите состав будущего лота. Можно комбинировать редкости, "
         "например 2 бронзы и 1 золото.\n\n"
         f"Всего карт: <b>{total}</b>\n"
@@ -239,10 +312,32 @@ async def _edit_or_answer(
         await message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
 
 
+async def _render_preorder_cart(
+    message: types.Message,
+    *,
+    deck_id: int,
+    deck_name: str,
+    items: dict[str, int],
+    mode: object,
+) -> None:
+    await _edit_or_answer(
+        message,
+        preorder_cart_text(
+            deck_id=deck_id,
+            deck_name=deck_name,
+            items=items,
+            mode=mode,
+        ),
+        reply_markup=preorder_cart_keyboard(items, mode=mode),
+        parse_mode="HTML",
+    )
+
+
 async def _show_future_decks(message: types.Message, state: FSMContext) -> None:
     await state.update_data(
         preorder_deck_id=None,
         preorder_deck_name=None,
+        preorder_mode=PREORDER_MODE_ITEMS,
         preorder_items={},
         deck_id=None,
         card_id=None,
@@ -290,7 +385,11 @@ async def show_clean_other_lots_menu(call: types.CallbackQuery, state: FSMContex
         return
 
     await state.set_state(UserAddLotFSM.waiting_for_own_variant)
-    await state.update_data(preorder_deck_id=None, preorder_items={})
+    await state.update_data(
+        preorder_deck_id=None,
+        preorder_mode=PREORDER_MODE_ITEMS,
+        preorder_items={},
+    )
     await message.answer(
         "Выберите вариант лота:",
         reply_markup=preorder_menu_keyboard(),
@@ -308,7 +407,11 @@ async def preorder_back(call: types.CallbackQuery, state: FSMContext) -> None:
         await call.answer("Сообщение недоступно. Откройте меню заново.", show_alert=True)
         return
 
-    await state.update_data(preorder_deck_id=None, preorder_items={})
+    await state.update_data(
+        preorder_deck_id=None,
+        preorder_mode=PREORDER_MODE_ITEMS,
+        preorder_items={},
+    )
     await _edit_or_answer(
         message,
         "Выберите вариант лота:",
@@ -352,7 +455,10 @@ async def redirect_legacy_preorder_buttons(
     StateFilter(UserAddLotFSM.waiting_for_own_variant),
     F.data == "preorder:decks",
 )
-async def preorder_choose_other_deck(call: types.CallbackQuery, state: FSMContext) -> None:
+async def preorder_choose_other_deck(
+    call: types.CallbackQuery,
+    state: FSMContext,
+) -> None:
     message = _callback_message(call)
     if message is None:
         await call.answer("Сообщение недоступно. Откройте меню заново.", show_alert=True)
@@ -403,17 +509,15 @@ async def preorder_choose_deck(call: types.CallbackQuery, state: FSMContext) -> 
     await state.update_data(
         preorder_deck_id=deck_id,
         preorder_deck_name=deck_name,
+        preorder_mode=PREORDER_MODE_ITEMS,
         preorder_items={},
     )
-    await _edit_or_answer(
+    await _render_preorder_cart(
         message,
-        preorder_cart_text(
-            deck_id=deck_id,
-            deck_name=deck_name,
-            items={},
-        ),
-        reply_markup=preorder_cart_keyboard({}),
-        parse_mode="HTML",
+        deck_id=deck_id,
+        deck_name=deck_name,
+        items={},
+        mode=PREORDER_MODE_ITEMS,
     )
     await call.answer()
 
@@ -442,19 +546,175 @@ async def preorder_change_item(call: types.CallbackQuery, state: FSMContext) -> 
         await call.answer("Сначала выберите будущую колоду.", show_alert=True)
         await _show_future_decks(message, state)
         return
+    if normalize_preorder_mode(data.get("preorder_mode")) == PREORDER_MODE_WHOLE_DECK:
+        await call.answer(
+            "Сначала переключитесь на выбор карт по редкостям.",
+            show_alert=True,
+        )
+        return
 
     delta = 1 if direction == "inc" else -1
     items = change_preorder_quantity(data.get("preorder_items"), rarity, delta)
-    await state.update_data(preorder_items=items)
-    await _edit_or_answer(
+    await state.update_data(
+        preorder_mode=PREORDER_MODE_ITEMS,
+        preorder_items=items,
+    )
+    await _render_preorder_cart(
         message,
-        preorder_cart_text(
-            deck_id=deck_id,
-            deck_name=str(data.get("preorder_deck_name") or "Будущая колода"),
-            items=items,
-        ),
-        reply_markup=preorder_cart_keyboard(items),
-        parse_mode="HTML",
+        deck_id=deck_id,
+        deck_name=str(data.get("preorder_deck_name") or "Будущая колода"),
+        items=items,
+        mode=PREORDER_MODE_ITEMS,
+    )
+    await call.answer()
+
+
+@router.callback_query(
+    StateFilter(UserAddLotFSM.waiting_for_own_variant),
+    F.data == "preorder:whole",
+)
+async def preorder_select_whole_deck(
+    call: types.CallbackQuery,
+    state: FSMContext,
+) -> None:
+    message = _callback_message(call)
+    if message is None:
+        await call.answer("Сообщение недоступно. Откройте меню заново.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    deck_id = int(data.get("preorder_deck_id") or 0)
+    if deck_id <= 0:
+        await call.answer("Сначала выберите будущую колоду.", show_alert=True)
+        await _show_future_decks(message, state)
+        return
+
+    items = normalize_preorder_items(data.get("preorder_items"))
+    if items:
+        composition = format_preorder_composition(items)
+        await _edit_or_answer(
+            message,
+            "Вы уже выбрали карты по редкостям:\n"
+            f"<b>{composition}</b>\n\n"
+            "При переходе на целую колоду этот состав будет очищен. Продолжить?",
+            reply_markup=whole_deck_confirmation_keyboard(),
+            parse_mode="HTML",
+        )
+        await call.answer()
+        return
+
+    deck_name = str(data.get("preorder_deck_name") or "Будущая колода")
+    await state.update_data(
+        preorder_mode=PREORDER_MODE_WHOLE_DECK,
+        preorder_items={},
+    )
+    await _render_preorder_cart(
+        message,
+        deck_id=deck_id,
+        deck_name=deck_name,
+        items={},
+        mode=PREORDER_MODE_WHOLE_DECK,
+    )
+    await call.answer()
+
+
+@router.callback_query(
+    StateFilter(UserAddLotFSM.waiting_for_own_variant),
+    F.data == "preorder:whole:confirm",
+)
+async def preorder_confirm_whole_deck(
+    call: types.CallbackQuery,
+    state: FSMContext,
+) -> None:
+    message = _callback_message(call)
+    if message is None:
+        await call.answer("Сообщение недоступно. Откройте меню заново.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    deck_id = int(data.get("preorder_deck_id") or 0)
+    if deck_id <= 0:
+        await call.answer("Сначала выберите будущую колоду.", show_alert=True)
+        await _show_future_decks(message, state)
+        return
+
+    deck_name = str(data.get("preorder_deck_name") or "Будущая колода")
+    await state.update_data(
+        preorder_mode=PREORDER_MODE_WHOLE_DECK,
+        preorder_items={},
+    )
+    await _render_preorder_cart(
+        message,
+        deck_id=deck_id,
+        deck_name=deck_name,
+        items={},
+        mode=PREORDER_MODE_WHOLE_DECK,
+    )
+    await call.answer("Состав очищен. Выбрана целая колода.")
+
+
+@router.callback_query(
+    StateFilter(UserAddLotFSM.waiting_for_own_variant),
+    F.data == "preorder:whole:cancel",
+)
+async def preorder_cancel_whole_deck(
+    call: types.CallbackQuery,
+    state: FSMContext,
+) -> None:
+    message = _callback_message(call)
+    if message is None:
+        await call.answer("Сообщение недоступно. Откройте меню заново.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    deck_id = int(data.get("preorder_deck_id") or 0)
+    if deck_id <= 0:
+        await call.answer("Сначала выберите будущую колоду.", show_alert=True)
+        await _show_future_decks(message, state)
+        return
+
+    items = normalize_preorder_items(data.get("preorder_items"))
+    await state.update_data(preorder_mode=PREORDER_MODE_ITEMS)
+    await _render_preorder_cart(
+        message,
+        deck_id=deck_id,
+        deck_name=str(data.get("preorder_deck_name") or "Будущая колода"),
+        items=items,
+        mode=PREORDER_MODE_ITEMS,
+    )
+    await call.answer()
+
+
+@router.callback_query(
+    StateFilter(UserAddLotFSM.waiting_for_own_variant),
+    F.data == "preorder:items",
+)
+async def preorder_select_items_mode(
+    call: types.CallbackQuery,
+    state: FSMContext,
+) -> None:
+    message = _callback_message(call)
+    if message is None:
+        await call.answer("Сообщение недоступно. Откройте меню заново.", show_alert=True)
+        return
+
+    data = await state.get_data()
+    deck_id = int(data.get("preorder_deck_id") or 0)
+    if deck_id <= 0:
+        await call.answer("Сначала выберите будущую колоду.", show_alert=True)
+        await _show_future_decks(message, state)
+        return
+
+    await state.update_data(
+        preorder_mode=PREORDER_MODE_ITEMS,
+        preorder_items={},
+    )
+    await _render_preorder_cart(
+        message,
+        deck_id=deck_id,
+        deck_name=str(data.get("preorder_deck_name") or "Будущая колода"),
+        items={},
+        mode=PREORDER_MODE_ITEMS,
     )
     await call.answer()
 
@@ -479,12 +739,24 @@ async def preorder_finish(call: types.CallbackQuery, state: FSMContext) -> None:
 
     data = await state.get_data()
     deck_id = int(data.get("preorder_deck_id") or 0)
-    items = normalize_preorder_items(data.get("preorder_items"))
+    mode = normalize_preorder_mode(data.get("preorder_mode"))
     if deck_id <= 0:
         await call.answer("Сначала выберите будущую колоду.", show_alert=True)
         return
-    if not items:
-        await call.answer("Добавьте хотя бы одну карту.", show_alert=True)
+
+    try:
+        mode, items = validate_preorder_selection(
+            mode=mode,
+            items=data.get("preorder_items"),
+        )
+    except ValueError:
+        if mode == PREORDER_MODE_WHOLE_DECK:
+            await call.answer(
+                "Целую колоду нельзя смешивать с отдельными картами.",
+                show_alert=True,
+            )
+        else:
+            await call.answer("Добавьте хотя бы одну карту.", show_alert=True)
         return
 
     try:
@@ -503,12 +775,22 @@ async def preorder_finish(call: types.CallbackQuery, state: FSMContext) -> None:
         return
 
     deck_name = str(deck.get("deck_name") or data.get("preorder_deck_name") or "")
-    title = build_preorder_title(deck_id=deck_id, deck_name=deck_name, items=items)
+    title = build_preorder_title(
+        deck_id=deck_id,
+        deck_name=deck_name,
+        items=items,
+        mode=mode,
+    )
+    hero_name = (
+        "Предзаказ целой будущей колоды"
+        if mode == PREORDER_MODE_WHOLE_DECK
+        else "Предзаказ будущей колоды"
+    )
     await state.update_data(
         deck_id=deck_id,
         card_id=None,
         card_name=title,
-        hero_name="Предзаказ будущей колоды",
+        hero_name=hero_name,
         rarity="any",
         deck_type=str(deck.get("deck_type") or "").strip().lower() or None,
         service="deck",
@@ -518,6 +800,7 @@ async def preorder_finish(call: types.CallbackQuery, state: FSMContext) -> None:
         image_file_id=ANY_DECK_PHOTO_ID,
         preorder_deck_id=deck_id,
         preorder_deck_name=deck_name,
+        preorder_mode=mode,
         preorder_items=items,
     )
     await call.answer()
@@ -549,6 +832,7 @@ async def confirm_preorder_with_revalidation(
         await state.update_data(
             preorder_deck_id=None,
             preorder_deck_name=None,
+            preorder_mode=PREORDER_MODE_ITEMS,
             preorder_items={},
             deck_id=None,
             card_id=None,
