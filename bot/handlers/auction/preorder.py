@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Filter, StateFilter
 from aiogram.fsm.context import FSMContext
 
+from bot.domain.auctions import AuctionKind
 from bot.domain.preorders import (
     MAX_PREORDER_QUANTITY,
     PREORDER_RARITIES,
@@ -20,7 +21,8 @@ from bot.domain.preorders import (
     preorder_total,
 )
 from bot.features.auction_submission import ANY_DECK_PHOTO_ID
-from bot.handlers.auction.submission import _ask_for_currency, user_addlot_confirm
+from bot.handlers.auction.submission import user_addlot_confirm
+from bot.handlers.auction.submission_support import auction_currency_kb
 from bot.services.auction_submission import AuctionSubmissionCatalogService
 from bot.telegram.boundary import (
     CallbackField,
@@ -205,6 +207,23 @@ def _callback_message(call: types.CallbackQuery) -> types.Message | None:
 
 async def _catalog() -> AuctionSubmissionCatalogService:
     return await AuctionSubmissionCatalogService.create()
+
+
+async def _ask_for_preorder_currency(
+    message: types.Message,
+    state: FSMContext,
+) -> None:
+    data = await state.get_data()
+    kind = str(data.get("auction_kind") or "standard").strip().lower()
+    if kind == AuctionKind.FREE.value:
+        prompt = "Выберите, в какой валюте принимать предложения:"
+    elif kind == AuctionKind.REVERSE.value:
+        prompt = "Выберите валюту обратного аукциона:"
+    else:
+        prompt = "Выберите валюту:"
+
+    await state.set_state(UserAddLotFSM.waiting_for_currency)
+    await message.answer(prompt, reply_markup=auction_currency_kb(kind))
 
 
 async def _edit_or_answer(
@@ -502,7 +521,7 @@ async def preorder_finish(call: types.CallbackQuery, state: FSMContext) -> None:
         preorder_items=items,
     )
     await call.answer()
-    await _ask_for_currency(message, state)
+    await _ask_for_preorder_currency(message, state)
 
 
 @router.message(
