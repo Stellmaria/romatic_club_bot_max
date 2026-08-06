@@ -7,7 +7,7 @@ SET search_path = public, pg_catalog;
 INSERT INTO public.presets (key, title)
 SELECT
     'deck_all_' || d.id::text,
-    'Вся колода ' || d.id::text || ' — ' || d.name
+    'Вся колода ' || d.id::text || ' — ' || COALESCE(d.name, d.id::text || ' колода')
 FROM public.decks AS d
 ON CONFLICT (key) DO UPDATE
 SET title = EXCLUDED.title;
@@ -20,7 +20,7 @@ BEGIN
     INSERT INTO public.presets (key, title)
     VALUES (
         'deck_all_' || NEW.id::text,
-        'Вся колода ' || NEW.id::text || ' — ' || NEW.name
+        'Вся колода ' || NEW.id::text || ' — ' || COALESCE(NEW.name, NEW.id::text || ' колода')
     )
     ON CONFLICT (key) DO UPDATE
     SET title = EXCLUDED.title;

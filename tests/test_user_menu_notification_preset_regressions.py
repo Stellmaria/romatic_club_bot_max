@@ -43,9 +43,9 @@ async def test_notification_screen_explains_every_toggle(monkeypatch) -> None:
         captured["text"] = text
         captured["reply_markup"] = reply_markup
 
-    monkeypatch.setattr(user_menu._impl, "get_settings", fake_get_settings)
-    monkeypatch.setattr(user_menu._impl, "is_subscribed", fake_is_subscribed)
-    monkeypatch.setattr(user_menu._impl, "_edit_or_answer", fake_edit_or_answer)
+    monkeypatch.setattr(user_menu, "get_settings", fake_get_settings)
+    monkeypatch.setattr(user_menu, "is_subscribed", fake_is_subscribed)
+    monkeypatch.setattr(user_menu, "_edit_or_answer", fake_edit_or_answer)
 
     marker = object()
     await user_menu.show_notifications_menu(marker, user_id=42)
@@ -83,7 +83,9 @@ def test_notification_preferences_respect_global_delivery_switch() -> None:
 
 
 def test_support_cancel_has_user_menu_escape_for_staff() -> None:
-    source = Path("bot/handlers/admin/admin_navigation.py").read_text(encoding="utf-8")
+    source = Path("bot/handlers/admin/admin_navigation.py").read_text(
+        encoding="utf-8"
+    )
     assert "current_state in _USER_APPEAL_STATES" in source
     assert "Обращение отменено." in source
     assert "build_user_main_keyboard()" in source

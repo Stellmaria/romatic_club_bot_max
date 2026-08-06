@@ -1,13 +1,163 @@
-"""Canonical user-menu facade with current UX policy overrides."""
+"""Canonical button-driven menu for private users."""
 
 from __future__ import annotations
 
 import html
-from typing import Any
+import logging
+from collections import defaultdict
+from datetime import date, datetime, time, timedelta
 
-from aiogram.types import Message
+from aiogram import Bot, F, Router, types
+from aiogram.dispatcher.event.bases import SkipHandler
+from aiogram.exceptions import TelegramForbiddenError
+from aiogram.filters import Command, CommandObject, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.handlers import user_menu_impl as _impl
+from bot.core.time import to_moscow, utc_now
+from bot.handlers.admin.helper.admin_keyboards import months_keyboard
+from bot.handlers.auction.schedule import (
+    LUX_END,
+    LUX_START,
+    REG_END,
+    REG_START,
+    WORK_END,
+    WORK_START,
+)
+from bot.handlers.constants import USER_MESSAGES
+from bot.handlers.helper.appeals import appeal_start
+from bot.handlers.helper.helpers_users import check_luxury, format_today_lots_fancy, register_user
+from bot.handlers.users import my_lots_cmd
+from bot.keyboards.keyboards import (
+    USER_MENU_ADD_LOT,
+    USER_MENU_EXCHANGE,
+    USER_MENU_HELP,
+    USER_MENU_HOME,
+    USER_MENU_LUXURY,
+    USER_MENU_MY_LOTS,
+    USER_MENU_NOTIFICATIONS,
+    USER_MENU_PROFILE,
+    USER_MENU_SCHEDULE,
+    USER_MENU_SUBSCRIPTIONS,
+    USER_MENU_SUPPORT,
+    build_user_main_keyboard,
+)
+from bot.legacy_fsm import LuxScheduleFSM, UIDVerificationFSM
+from bot.services.handler_persistence import (
+    get_auctions_by_date,
+    get_settings,
+    get_user_verified_uid,
+    is_subscribed,
+    log_admin_action,
+    mark_user_private_chat_closed,
+    mark_user_private_chat_opened,
+    set_settings,
+    set_subscription,
+    sync_trusted_status,
+)
+from bot.telegram.boundary import escape_html
+from bot.telegram.user_entrypoints import launch_add_lot, launch_card_subscription
+from db.legacy import (
+    get_auctions_by_card_ref,
+    get_auctions_in_range,
+    get_verified_uid_for_user,
+    is_admin,
+    is_luxury_user,
+)
+
+router = Router(name="user-menu")
+logger = logging.getLogger(__name__)
+
+_SCHEDULE_PAGE_SIZE = 8
+_SLOT = timedelta(minutes=30)
+_WEEKDAYS_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+_NOTIFY_DEFAULTS = {
+    "notify_auction_start": True,
+    "notify_bid_reminder": True,
+    "notify_auction_end": True,
+    "notify_daily_today": False,
+}
+_NOTIFY_MAP = {
+    "notify_toggle_start": ("notify_auction_start", "notify_start_on", "notify_start_off"),
+    "notify_toggle_remind": ("notify_bid_reminder", "notify_remind_on", "notify_remind_off"),
+    "notify_toggle_end": ("notify_auction_end", "notify_end_on", "notify_end_off"),
+    "notify_toggle_today": ("notify_daily_today", "notify_today_on", "notify_today_off"),
+}
+
+
+class UserMenuFSM(StatesGroup):
+    waiting_for_card_search = State()
+
+
+def _today_msk() -> date:
+    return to_moscow(utc_now()).date()
+
+
+def _as_bool(value: object, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, int):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "да", "on"}
+    return default
+
+
+def _slot_iter_range(day: date, start: time, end: time) -> list[datetime]:
+    current = datetime.combine(day, start)
+    last = datetime.combine(day, end)
+    result: list[datetime] = []
+    while current <= last:
+        result.append(current)
+        current += _SLOT
+    return result
+
+
+def _contiguous_blocks(slots: list[datetime]) -> list[tuple[datetime, datetime]]:
+    if not slots:
+        return []
+    ordered = sorted(slots)
+    result: list[tuple[datetime, datetime]] = []
+    block_start = previous = ordered[0]
+    for current in ordered[1:]:
+        if current - previous == _SLOT:
+            previous = current
+            continue
+        result.append((block_start, previous + _SLOT))
+        block_start = previous = current
+    result.append((block_start, previous + _SLOT))
+    return result
+
+
+def _format_slots(slots: list[datetime]) -> str:
+    if not slots:
+        return "0 слотов — —"
+    count = len(slots)
+    n10, n100 = count % 10, count % 100
+    if n10 == 1 and n100 != 11:
+        word = "слот"
+    elif n10 in (2, 3, 4) and not 12 <= n100 <= 14:
+        word = "слота"
+    else:
+        word = "слотов"
+    return f"{count} {word} — {', '.join(slot.strftime('%H:%M') for slot in slots)}"
+
+
+def _format_blocks(slots: list[datetime]) -> list[str]:
+    result: list[str] = []
+    for start, end in _contiguous_blocks(slots):
+        left = start.strftime("%H:%M")
+        right = (end - _SLOT).strftime("%H:%M")
+        result.append(left if left == right else f"{left}–{right}")
+    return result
+
+
+async def _has_luxury_access(user_id: int) -> bool:
+    return await is_admin(user_id) or await is_luxury_user(user_id)
 
 
 def user_main_text(*, full_name: str | None = None, status_line: str | None = None) -> str:
@@ -20,15 +170,191 @@ def user_main_text(*, full_name: str | None = None, status_line: str | None = No
         [
             "",
             "Здесь всё работает через кнопки. Выберите нужный раздел ниже.",
+            "Кнопка «🏠 Меню» в любой момент отменит текущий сценарий и вернёт на главный экран.",
         ]
     )
     return "\n".join(parts)
 
 
+async def send_user_main_menu(
+    message: Message,
+    state: FSMContext,
+    *,
+    user: types.User | None = None,
+    status_line: str | None = None,
+) -> None:
+    await state.clear()
+    actor = user or message.from_user
+    full_name = actor.full_name if actor else None
+    await message.answer(
+        user_main_text(full_name=full_name, status_line=status_line),
+        parse_mode="HTML",
+        reply_markup=build_user_main_keyboard(),
+    )
+
+
+def _home_inline_button() -> InlineKeyboardButton:
+    return InlineKeyboardButton(text="🏠 Главное меню", callback_data="user_menu|home")
+
+
+def build_schedule_keyboard(*, page: int = 0) -> InlineKeyboardMarkup:
+    page = max(0, int(page))
+    today = _today_msk()
+    start = today + timedelta(days=page * _SCHEDULE_PAGE_SIZE)
+    builder = InlineKeyboardBuilder()
+    buttons: list[InlineKeyboardButton] = []
+    for offset in range(_SCHEDULE_PAGE_SIZE):
+        selected = start + timedelta(days=offset)
+        if selected == today:
+            label = f"Сегодня • {selected:%d.%m}"
+        elif selected == today + timedelta(days=1):
+            label = f"Завтра • {selected:%d.%m}"
+        else:
+            label = f"{_WEEKDAYS_RU[selected.weekday()]} • {selected:%d.%m}"
+        buttons.append(
+            InlineKeyboardButton(text=label, callback_data=f"user_day|{selected.isoformat()}")
+        )
+    for index in range(0, len(buttons), 2):
+        builder.row(*buttons[index : index + 2])
+    navigation: list[InlineKeyboardButton] = []
+    if page > 0:
+        navigation.append(
+            InlineKeyboardButton(text="⬅️ Раньше", callback_data=f"user_schedule|{page - 1}")
+        )
+    navigation.append(
+        InlineKeyboardButton(text="Позже ➡️", callback_data=f"user_schedule|{page + 1}")
+    )
+    builder.row(*navigation)
+    builder.row(_home_inline_button())
+    return builder.as_markup()
+
+
+async def _edit_or_answer(
+    message: Message,
+    *,
+    text: str,
+    reply_markup: InlineKeyboardMarkup,
+) -> None:
+    try:
+        await message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+    except Exception:
+        await message.answer(
+            text,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+
+
+async def show_schedule_menu(message: Message, *, page: int = 0) -> None:
+    start = _today_msk() + timedelta(days=max(0, page) * _SCHEDULE_PAGE_SIZE)
+    end = start + timedelta(days=_SCHEDULE_PAGE_SIZE - 1)
+    await _edit_or_answer(
+        message,
+        text=(
+            "📅 <b>Расписание аукционов</b>\n\n"
+            f"Период: <b>{start:%d.%m.%Y}</b> – <b>{end:%d.%m.%Y}</b>\n"
+            "Выберите день:"
+        ),
+        reply_markup=build_schedule_keyboard(page=page),
+    )
+
+
+async def show_day_schedule(message: Message, target_day: date) -> None:
+    lots = await get_auctions_by_date(target_day)
+    if not lots:
+        await message.answer(
+            f"📅 На <b>{target_day:%d.%m.%Y}</b> аукционов пока нет.",
+            parse_mode="HTML",
+            reply_markup=build_user_main_keyboard(),
+        )
+        return
+    text = await format_today_lots_fancy(target_day, lots)
+    lines = text.splitlines()
+    header = f"🛜АНОНС НА {target_day:%d.%m.%Y}🛜"
+    text = "\n".join([header, *lines[1:]]) if lines else header
+    await message.answer(
+        text,
+        parse_mode="HTML",
+        reply_markup=build_user_main_keyboard(),
+        disable_web_page_preview=True,
+    )
+
+
+def build_exchange_keyboard() -> InlineKeyboardMarkup:
+    """Compatibility keyboard for already-sent exchange messages."""
+
+    builder = InlineKeyboardBuilder()
+    builder.row(_home_inline_button())
+    return builder.as_markup()
+
+
+async def show_exchange_menu(message: Message) -> None:
+    """Explain the current entry point to users of stale exchange keyboards."""
+
+    await message.answer(
+        "🛍 <b>Биржевые лоты</b> теперь подаются через общую кнопку "
+        "«🎴 Подать лот». Просмотр предложений доступен только администраторам.",
+        parse_mode="HTML",
+        reply_markup=build_user_main_keyboard(),
+    )
+
+
+async def show_exchange_browser(message: Message) -> None:
+    await message.answer(
+        "Просмотр предложений биржи доступен только администраторам.",
+        reply_markup=build_user_main_keyboard(),
+    )
+
+
+def build_notifications_keyboard(settings: dict, *, subscribed: bool) -> InlineKeyboardMarkup:
+    def enabled(key: str) -> bool:
+        return _as_bool(settings.get(key), _NOTIFY_DEFAULTS[key])
+
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text=f"📨 Общие уведомления {'✅' if subscribed else '❌'}",
+            callback_data="user_notify|global",
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=f"🔔 О начале аукциона {'✅' if enabled('notify_auction_start') else '❌'}",
+            callback_data="notify_toggle_start",
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=f"⏰ За минуту до конца {'✅' if enabled('notify_bid_reminder') else '❌'}",
+            callback_data="notify_toggle_remind",
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=f"🏁 О завершении {'✅' if enabled('notify_auction_end') else '❌'}",
+            callback_data="notify_toggle_end",
+        )
+    )
+    builder.row(
+        InlineKeyboardButton(
+            text=f"📅 Анонс дня в 00:00 {'✅' if enabled('notify_daily_today') else '❌'}",
+            callback_data="notify_toggle_today",
+        )
+    )
+    builder.row(_home_inline_button())
+    return builder.as_markup()
+
+
 async def show_notifications_menu(message: Message, *, user_id: int) -> None:
-    settings = await _impl.get_settings(user_id) or {}
-    subscribed = await _impl.is_subscribed(user_id)
-    await _impl._edit_or_answer(
+    settings = await get_settings(user_id) or {}
+    subscribed = await is_subscribed(user_id)
+    await _edit_or_answer(
         message,
         text=(
             "🔔 <b>Уведомления</b>\n\n"
@@ -42,26 +368,190 @@ async def show_notifications_menu(message: Message, *, user_id: int) -> None:
             "✅ — включено, ❌ — выключено.\n"
             f"Сейчас общие уведомления: <b>{'включены' if subscribed else 'выключены'}</b>."
         ),
-        reply_markup=_impl.build_notifications_keyboard(settings, subscribed=subscribed),
+        reply_markup=build_notifications_keyboard(settings, subscribed=subscribed),
     )
 
 
-async def show_exchange_menu(message: Message) -> None:
-    await _impl._edit_or_answer(
-        message,
-        text=(
-            "🛍 <b>Биржа карт</b>\n\n"
-            "Отдельного пользовательского раздела биржи больше нет. "
-            "Чтобы подать биржевой лот, нажмите «🎴 Подать лот» и выберите нужный тип заявки."
-        ),
-        reply_markup=_impl.build_user_main_keyboard(),
+def build_profile_keyboard(*, verified: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if not verified:
+        builder.row(
+            InlineKeyboardButton(
+                text="🆔 Пройти UID-верификацию",
+                callback_data="user_profile|verify_uid",
+            )
+        )
+    builder.row(
+        InlineKeyboardButton(
+            text="🔔 Настроить уведомления",
+            callback_data="user_profile|notifications",
+        )
     )
+    builder.row(_home_inline_button())
+    return builder.as_markup()
 
 
-async def show_exchange_browser(message: Message) -> None:
+async def show_profile(message: Message, *, user: types.User) -> None:
+    subscribed = await is_subscribed(user.id)
+    try:
+        uid = await get_user_verified_uid(user.id)
+    except Exception:
+        uid = None
+    verification = "✅ UID верифицирован" if uid else "❌ UID не верифицирован"
+    uid_line = ""
+    if uid:
+        value = str(uid)
+        uid_line = f"\nUID: <code>{value[:3]}***{value[-3:]}</code>"
     await message.answer(
-        "Просмотр предложений биржи доступен только администраторам.",
-        reply_markup=_impl.build_user_main_keyboard(),
+        "<b>👤 Профиль</b>\n"
+        f"Имя: {escape_html(user.full_name)}\n"
+        f"Telegram ID: <code>{user.id}</code>\n"
+        f"Общие уведомления: {'✅ включены' if subscribed else '❌ выключены'}\n"
+        f"Верификация: {verification}{uid_line}",
+        parse_mode="HTML",
+        reply_markup=build_profile_keyboard(verified=bool(uid)),
+    )
+
+
+def build_luxury_keyboard(*, is_luxury: bool) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🔄 Обновить статус", callback_data="user_luxury|refresh")
+    )
+    if is_luxury:
+        builder.row(
+            InlineKeyboardButton(text="📅 VIP-расписание", callback_data="user_luxury|schedule")
+        )
+        builder.row(
+            InlineKeyboardButton(text="🕳 Свободные слоты", callback_data="user_luxury|gaps")
+        )
+        builder.row(
+            InlineKeyboardButton(
+                text="🔎 Найти карту в расписании",
+                callback_data="user_luxury|when",
+            )
+        )
+    builder.row(_home_inline_button())
+    return builder.as_markup()
+
+
+async def show_luxury_menu(message: Message, *, user_id: int, bot: Bot) -> None:
+    is_luxury = await is_admin(user_id) or await check_luxury(user_id, bot)
+    text = "👑 <b>Лакшери-раздел</b>\n\n" + (
+        "Статус подтверждён. Доступны расширенное расписание, свободные слоты и поиск карт."
+        if is_luxury
+        else "Лакшери-статус не найден. Оформить доступ можно у @velassya."
+    )
+    await _edit_or_answer(
+        message,
+        text=text,
+        reply_markup=build_luxury_keyboard(is_luxury=is_luxury),
+    )
+
+
+def build_gap_days_keyboard(*, page: int = 0) -> InlineKeyboardMarkup:
+    page = max(0, int(page))
+    start = _today_msk() + timedelta(days=page * _SCHEDULE_PAGE_SIZE)
+    builder = InlineKeyboardBuilder()
+    buttons = [
+        InlineKeyboardButton(
+            text=f"{_WEEKDAYS_RU[day.weekday()]} • {day:%d.%m}",
+            callback_data=f"user_gap_day|{day.isoformat()}",
+        )
+        for day in (start + timedelta(days=offset) for offset in range(_SCHEDULE_PAGE_SIZE))
+    ]
+    for index in range(0, len(buttons), 2):
+        builder.row(*buttons[index : index + 2])
+    navigation: list[InlineKeyboardButton] = []
+    if page > 0:
+        navigation.append(
+            InlineKeyboardButton(text="⬅️ Раньше", callback_data=f"user_gaps_page|{page - 1}")
+        )
+    navigation.append(
+        InlineKeyboardButton(text="Позже ➡️", callback_data=f"user_gaps_page|{page + 1}")
+    )
+    builder.row(*navigation)
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="user_luxury|root"))
+    return builder.as_markup()
+
+
+async def show_gap_days(message: Message, *, page: int = 0) -> None:
+    await _edit_or_answer(
+        message,
+        text="🕳 <b>Свободные слоты</b>\n\nВыберите день:",
+        reply_markup=build_gap_days_keyboard(page=page),
+    )
+
+
+async def show_day_gaps(message: Message, *, user_id: int, target_day: date) -> None:
+    if not await _has_luxury_access(user_id):
+        await message.answer("Эта функция доступна только Лакшери-пользователям.")
+        return
+    range_start = datetime.combine(target_day, time())
+    rows = await get_auctions_in_range(
+        range_start,
+        range_start + timedelta(days=1),
+        statuses=["scheduled", "active"],
+    )
+    busy: set[time] = set()
+    for auction in rows:
+        start = to_moscow(auction["start_time"]).replace(tzinfo=None)
+        busy.add(time(start.hour, 0 if start.minute < 30 else 30))
+    now = to_moscow(utc_now()).replace(tzinfo=None)
+
+    def free_slots(start: time, end: time) -> list[datetime]:
+        slots = _slot_iter_range(target_day, start, end)
+        if target_day == _today_msk():
+            slots = [slot for slot in slots if slot >= now]
+        return [slot for slot in slots if slot.time() not in busy]
+
+    show_free = free_slots(WORK_START, WORK_END)
+    luxury_free = free_slots(LUX_START, LUX_END)
+    regular_free = free_slots(REG_START, REG_END)
+    blocks = _format_blocks(show_free)
+    await message.answer(
+        f"🕳 Свободные слоты на <b>{target_day:%d.%m.%Y}</b>\n\n"
+        f"<b>Показ:</b> {', '.join(blocks) if blocks else '—'}\n"
+        f"<b>Лакшери:</b> {_format_slots(luxury_free)}\n"
+        f"<b>Обычные:</b> {_format_slots(regular_free)}\n\n"
+        f"Всего свободных стартов: <b>{len(show_free)}</b>",
+        parse_mode="HTML",
+        protect_content=True,
+        reply_markup=build_user_main_keyboard(),
+    )
+
+
+async def show_card_schedule_search(message: Message, *, user_id: int, query: str) -> None:
+    if not await _has_luxury_access(user_id):
+        await message.answer("Эта функция доступна только Лакшери-пользователям.")
+        return
+    lots = await get_auctions_by_card_ref(
+        query,
+        statuses=["pending", "scheduled", "active"],
+    )
+    if not lots:
+        await message.answer(
+            "По этой карте или герою ничего не найдено.",
+            reply_markup=build_user_main_keyboard(),
+        )
+        return
+    by_day: dict[date, list[dict]] = defaultdict(list)
+    for lot in lots:
+        by_day[to_moscow(lot["start_time"]).date()].append(lot)
+    lines = [f"🔎 <b>Расписание по запросу «{html.escape(query)}»</b>", ""]
+    for selected_day in sorted(by_day):
+        lines.append(f"<b>{selected_day:%d.%m.%Y}</b>")
+        for lot in sorted(by_day[selected_day], key=lambda item: to_moscow(item["start_time"])):
+            start = to_moscow(lot["start_time"]).strftime("%H:%M")
+            hero = html.escape(str(lot.get("hero_name") or "—"))
+            card = html.escape(str(lot.get("card_name") or "—"))
+            lines.append(f"• {start} • {hero} — {card}")
+        lines.append("")
+    await message.answer(
+        "\n".join(lines).strip(),
+        parse_mode="HTML",
+        protect_content=True,
+        reply_markup=build_user_main_keyboard(),
     )
 
 
@@ -71,7 +561,7 @@ def help_text() -> str:
         "🎴 <b>Подать лот</b> — оформление аукционного или биржевого лота.\n"
         "📦 <b>Мои лоты</b> — актуальные, завершённые, выплаты и архив.\n"
         "📅 <b>Сегодня</b> — аукционы на текущий день.\n"
-        "🔔 <b>Уведомления</b> — все переключатели и их пояснения.\n"
+        "🔔 <b>Уведомления</b> — переключатели и пояснения к ним.\n"
         "🃏 <b>Подписки</b> — подписки на карты, колоды и пресеты.\n"
         "👤 <b>Профиль</b> — статус уведомлений и UID-верификация.\n"
         "👑 <b>Лакшери</b> — расширенное расписание и поиск.\n"
@@ -79,48 +569,323 @@ def help_text() -> str:
     )
 
 
-# Aiogram registered the handlers while importing the implementation module.
-# Those handlers resolve these helpers through their module globals at runtime,
-# so replacing the globals keeps one router while applying the current UX policy.
-_impl.user_main_text = user_main_text
-_impl.show_notifications_menu = show_notifications_menu
-_impl.show_exchange_menu = show_exchange_menu
-_impl.show_exchange_browser = show_exchange_browser
-_impl.help_text = help_text
+@router.message(Command("start"), F.chat.type == "private")
+async def user_start(
+    message: Message,
+    state: FSMContext,
+    bot: Bot,
+    command: CommandObject,
+) -> None:
+    try:
+        await mark_user_private_chat_opened(message.from_user.id)
+    except Exception:
+        pass
+    argument = (command.args or "").strip().lower()
+    if argument == "addlot":
+        await launch_add_lot(message, state, bot)
+        return
+    if argument == "subs":
+        await launch_card_subscription(message, state)
+        return
+    try:
+        await sync_trusted_status(message.from_user.id, message.from_user.username)
+        is_luxury, full_name = await register_user(message.from_user, bot)
+        status = (
+            "👑 Лакшери-статус подтверждён."
+            if is_luxury
+            else "✅ Профиль участника зарегистрирован."
+        )
+        await state.clear()
+        await message.answer(
+            user_main_text(full_name=full_name, status_line=status),
+            parse_mode="HTML",
+            reply_markup=build_user_main_keyboard(),
+        )
+    except TelegramForbiddenError:
+        try:
+            await mark_user_private_chat_closed(message.from_user.id)
+        except Exception:
+            pass
+    except Exception:
+        logger.exception("Could not open the user menu")
+        await message.answer(
+            "Не удалось загрузить профиль. Попробуйте открыть меню ещё раз.",
+            reply_markup=build_user_main_keyboard(),
+        )
 
-router = _impl.router
-UserMenuFSM = _impl.UserMenuFSM
-build_exchange_keyboard = _impl.build_exchange_keyboard
-build_notifications_keyboard = _impl.build_notifications_keyboard
-build_schedule_keyboard = _impl.build_schedule_keyboard
-send_user_main_menu = _impl.send_user_main_menu
-show_day_schedule = _impl.show_day_schedule
-show_schedule_menu = _impl.show_schedule_menu
+
+@router.message(F.text == USER_MENU_HOME, F.chat.type == "private")
+async def user_home(message: Message, state: FSMContext) -> None:
+    await send_user_main_menu(message, state)
 
 
-def __getattr__(name: str) -> Any:
-    return getattr(_impl, name)
+@router.message(F.text == USER_MENU_ADD_LOT, F.chat.type == "private")
+async def user_add_lot(message: Message, state: FSMContext, bot: Bot) -> None:
+    await launch_add_lot(message, state, bot)
 
 
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(dir(_impl)))
+@router.message(F.text == USER_MENU_MY_LOTS, F.chat.type == "private")
+async def user_my_lots(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await my_lots_cmd(message)
 
 
-__all__ = sorted(
-    set(getattr(_impl, "__all__", ()))
-    | {
-        "UserMenuFSM",
-        "build_exchange_keyboard",
-        "build_notifications_keyboard",
-        "build_schedule_keyboard",
-        "help_text",
-        "router",
-        "send_user_main_menu",
-        "show_day_schedule",
-        "show_exchange_browser",
-        "show_exchange_menu",
-        "show_notifications_menu",
-        "show_schedule_menu",
-        "user_main_text",
-    }
+@router.message(F.text == USER_MENU_SCHEDULE, F.chat.type == "private")
+async def user_schedule(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await show_schedule_menu(message)
+
+
+@router.message(F.text == USER_MENU_EXCHANGE, F.chat.type == "private")
+async def user_exchange(message: Message, state: FSMContext, bot: Bot) -> None:
+    await launch_add_lot(message, state, bot)
+
+
+@router.message(F.text == USER_MENU_NOTIFICATIONS, F.chat.type == "private")
+async def user_notifications(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await show_notifications_menu(message, user_id=message.from_user.id)
+
+
+@router.message(F.text == USER_MENU_SUBSCRIPTIONS, F.chat.type == "private")
+async def user_subscriptions(message: Message, state: FSMContext) -> None:
+    await launch_card_subscription(message, state)
+
+
+@router.message(F.text == USER_MENU_PROFILE, F.chat.type == "private")
+async def user_profile(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await show_profile(message, user=message.from_user)
+
+
+@router.message(F.text == USER_MENU_LUXURY, F.chat.type == "private")
+async def user_luxury(message: Message, state: FSMContext, bot: Bot) -> None:
+    await state.clear()
+    await show_luxury_menu(message, user_id=message.from_user.id, bot=bot)
+
+
+@router.message(F.text == USER_MENU_SUPPORT, F.chat.type == "private")
+async def user_support(message: Message, state: FSMContext) -> None:
+    await appeal_start(message, state)
+
+
+@router.message(F.text == USER_MENU_HELP, F.chat.type == "private")
+async def user_help(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        help_text(),
+        parse_mode="HTML",
+        reply_markup=build_user_main_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "user_menu|home")
+async def user_home_callback(call: CallbackQuery, state: FSMContext) -> None:
+    await call.answer()
+    await send_user_main_menu(call.message, state, user=call.from_user)
+
+
+@router.callback_query(F.data.startswith("user_schedule|"))
+async def user_schedule_page(call: CallbackQuery) -> None:
+    try:
+        page = int((call.data or "").split("|", 1)[1])
+    except (TypeError, ValueError, IndexError):
+        await call.answer("Некорректная страница.", show_alert=True)
+        return
+    await call.answer()
+    await show_schedule_menu(call.message, page=page)
+
+
+@router.callback_query(F.data.startswith("user_day|"))
+async def user_schedule_day(call: CallbackQuery) -> None:
+    try:
+        target_day = date.fromisoformat((call.data or "").split("|", 1)[1])
+    except (TypeError, ValueError, IndexError):
+        await call.answer("Некорректная дата.", show_alert=True)
+        return
+    await call.answer("Открываю расписание")
+    await show_day_schedule(call.message, target_day)
+
+
+@router.callback_query(F.data == "user_exchange|root")
+async def user_exchange_root(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    await call.answer("Открываю подачу лота")
+    await launch_add_lot(call.message, state, bot)
+
+
+@router.callback_query(F.data == "user_exchange|create")
+async def user_exchange_create(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    await call.answer("Открываю подачу лота")
+    await launch_add_lot(call.message, state, bot)
+
+
+@router.callback_query(F.data == "ex_view:decks")
+async def user_exchange_decks(call: CallbackQuery) -> None:
+    if await is_admin(call.from_user.id):
+        raise SkipHandler
+    await call.answer()
+    await show_exchange_browser(call.message)
+
+
+@router.callback_query(F.data == "user_notify|global")
+async def user_toggle_global_notifications(call: CallbackQuery) -> None:
+    current = await is_subscribed(call.from_user.id)
+    new_value = not current
+    await set_subscription(call.from_user.id, new_value)
+    try:
+        await log_admin_action(
+            call.from_user.id,
+            "subscribe" if new_value else "unsubscribe",
+            None,
+            (
+                "Пользователь включил общие уведомления через меню"
+                if new_value
+                else "Пользователь выключил общие уведомления через меню"
+            ),
+        )
+    except Exception:
+        pass
+    await call.answer(
+        "Общие уведомления включены" if new_value else "Общие уведомления выключены"
+    )
+    await show_notifications_menu(call.message, user_id=call.from_user.id)
+
+
+@router.callback_query(
+    F.data.startswith("notify_toggle_") | (F.data == "toggle_notify_daily_today")
 )
+async def user_toggle_notification(call: CallbackQuery) -> None:
+    callback = call.data or ""
+    if callback == "toggle_notify_daily_today":
+        callback = "notify_toggle_today"
+    if callback not in _NOTIFY_MAP:
+        await call.answer("Неизвестная настройка.", show_alert=True)
+        return
+    field, enabled_key, disabled_key = _NOTIFY_MAP[callback]
+    settings = await get_settings(call.from_user.id) or {}
+    current = _as_bool(settings.get(field), _NOTIFY_DEFAULTS[field])
+    new_value = not current
+    await set_settings(call.from_user.id, **{field: new_value})
+    await call.answer(
+        USER_MESSAGES.get(enabled_key if new_value else disabled_key) or "Настройка обновлена"
+    )
+    await show_notifications_menu(call.message, user_id=call.from_user.id)
+
+
+@router.callback_query(F.data == "user_profile|notifications")
+async def user_profile_notifications(call: CallbackQuery) -> None:
+    await call.answer()
+    await show_notifications_menu(call.message, user_id=call.from_user.id)
+
+
+@router.callback_query(F.data == "user_profile|verify_uid")
+async def user_profile_verify_uid(call: CallbackQuery, state: FSMContext) -> None:
+    existing = await get_verified_uid_for_user(call.from_user.id)
+    if existing:
+        await call.answer("UID уже верифицирован.", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(UIDVerificationFSM.waiting_for_uid)
+    await call.answer()
+    await call.message.answer(
+        "🆔 <b>UID-верификация</b>\n\nПришлите UID из 24 символов (0–9, a–f).",
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data == "user_luxury|root")
+async def user_luxury_root(call: CallbackQuery, bot: Bot) -> None:
+    await call.answer()
+    await show_luxury_menu(call.message, user_id=call.from_user.id, bot=bot)
+
+
+@router.callback_query(F.data == "user_luxury|refresh")
+async def user_luxury_refresh(call: CallbackQuery, bot: Bot) -> None:
+    await call.answer("Статус обновлён")
+    await show_luxury_menu(call.message, user_id=call.from_user.id, bot=bot)
+
+
+@router.callback_query(F.data == "user_luxury|schedule")
+async def user_luxury_schedule(call: CallbackQuery, state: FSMContext) -> None:
+    if not await _has_luxury_access(call.from_user.id):
+        await call.answer("Доступно только Лакшери-пользователям.", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(LuxScheduleFSM.choosing_month)
+    await call.answer()
+    await call.message.answer(
+        "📅 Выберите месяц:",
+        reply_markup=months_keyboard(prefix="luxsched", auction_id=None),
+        protect_content=True,
+    )
+
+
+@router.callback_query(F.data == "user_luxury|gaps")
+async def user_luxury_gaps(call: CallbackQuery) -> None:
+    if not await _has_luxury_access(call.from_user.id):
+        await call.answer("Доступно только Лакшери-пользователям.", show_alert=True)
+        return
+    await call.answer()
+    await show_gap_days(call.message)
+
+
+@router.callback_query(F.data.startswith("user_gaps_page|"))
+async def user_luxury_gaps_page(call: CallbackQuery) -> None:
+    try:
+        page = int((call.data or "").split("|", 1)[1])
+    except (TypeError, ValueError, IndexError):
+        await call.answer("Некорректная страница.", show_alert=True)
+        return
+    await call.answer()
+    await show_gap_days(call.message, page=page)
+
+
+@router.callback_query(F.data.startswith("user_gap_day|"))
+async def user_luxury_gap_day(call: CallbackQuery) -> None:
+    try:
+        target_day = date.fromisoformat((call.data or "").split("|", 1)[1])
+    except (TypeError, ValueError, IndexError):
+        await call.answer("Некорректная дата.", show_alert=True)
+        return
+    await call.answer("Считаю свободные слоты")
+    await show_day_gaps(call.message, user_id=call.from_user.id, target_day=target_day)
+
+
+@router.callback_query(F.data == "user_luxury|when")
+async def user_luxury_when(call: CallbackQuery, state: FSMContext) -> None:
+    if not await _has_luxury_access(call.from_user.id):
+        await call.answer("Доступно только Лакшери-пользователям.", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(UserMenuFSM.waiting_for_card_search)
+    await call.answer()
+    await call.message.answer(
+        "🔎 Напишите название карты, имя героя или ID карты.\n"
+        "Кнопка «🏠 Меню» отменит поиск."
+    )
+
+
+@router.message(StateFilter(UserMenuFSM.waiting_for_card_search), F.chat.type == "private")
+async def user_luxury_when_query(message: Message, state: FSMContext) -> None:
+    query = (message.text or "").strip()
+    if not query:
+        await message.answer("Введите название карты, героя или ID.")
+        return
+    await state.clear()
+    await show_card_schedule_search(message, user_id=message.from_user.id, query=query)
+
+
+__all__ = [
+    "UserMenuFSM",
+    "build_exchange_keyboard",
+    "build_notifications_keyboard",
+    "build_schedule_keyboard",
+    "help_text",
+    "router",
+    "send_user_main_menu",
+    "show_day_schedule",
+    "show_exchange_menu",
+    "show_notifications_menu",
+    "show_schedule_menu",
+    "user_main_text",
+]
