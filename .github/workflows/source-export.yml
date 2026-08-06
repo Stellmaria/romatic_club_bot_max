@@ -1,0 +1,27 @@
+name: Source Export
+
+on:
+  push:
+    branches:
+      - fix/user-menu-notifications-presets
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: source-export
+          path: |
+            bot/handlers/user_menu_impl.py
+            db/subscriptions_impl.py
+            tests/test_user_menu_contract.py
+            tests/test_user_menu_notification_preset_regressions.py
+            .github/workflows/ci.yml
+          retention-days: 1
