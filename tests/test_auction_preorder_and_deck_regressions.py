@@ -1,15 +1,17 @@
-# fmt: off
 from pathlib import Path
+
+from aiogram.types import InlineKeyboardMarkup
 
 from bot.domain.auctions import AuctionKind
 from bot.handlers.auction.kinds import auction_kind_keyboard
 
+# fmt: off
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _callbacks(markup: object) -> dict[str, str]:
-    rows = getattr(markup, "inline_keyboard")
+def _callbacks(markup: InlineKeyboardMarkup) -> dict[str, str]:
+    rows = markup.inline_keyboard
     return {
         str(button.text): str(button.callback_data)
         for row in rows
@@ -53,4 +55,5 @@ def test_deck_name_migration_sets_canonical_names() -> None:
     assert "WHEN 29 THEN '29 колода'" in sql
     assert "WHERE id IN (28, 29)" in sql
     assert "IS DISTINCT FROM" in sql
+
 # fmt: on
