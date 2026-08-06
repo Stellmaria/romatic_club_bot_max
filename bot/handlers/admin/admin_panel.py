@@ -37,6 +37,7 @@ from bot.handlers.admin.admin_panel_exchange import (
     ex1_reject_start,
     ex1_reject_reason,
 )
+from bot.handlers.admin.admin_panel_preorders import show_pending_preorders
 from bot.handlers.admin.admin_panel_requests import (
     admreq_back,
     cmd_ex_owners,
