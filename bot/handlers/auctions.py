@@ -1,25 +1,47 @@
 """Compatibility facade for the split auction submission handlers."""
 
-from aiogram import Router
+from aiogram import Router, types
+from aiogram.fsm.context import FSMContext
 
-from bot.handlers.auction import guides, luxury_admin, preorder, submission, submission_support
+from bot.domain.auctions import AuctionKind
+from bot.handlers.auction import (
+    guides,
+    luxury_admin,
+    preorder,
+    submission,
+    submission_support,
+)
 from bot.handlers.auction.guides import guides_kb
 from bot.handlers.auction.luxury_admin import cmd_remove_luxury
-from bot.handlers.auction.submission_support import compute_start_price_limits
+from bot.handlers.auction.publication import auction_publisher_loop
+from bot.handlers.auction.submission import addlot_start
+from bot.handlers.auction.submission_support import (
+    auction_currency_kb,
+    compute_start_price_limits,
+)
 from bot.handlers.auction.winner_components.common import admin_tag
 from bot.handlers.auction.winner_components.thanks import build_thanks_kb
-from bot.handlers.auction.publication import auction_publisher_loop
-from bot.domain.auctions import AuctionKind
 from bot.legacy_fsm import UserAddLotFSM
-from bot.handlers.auction.submission_support import auction_currency_kb
-from bot.handlers.auction.submission import addlot_start
+
+__all__ = [
+    "addlot_start",
+    "admin_tag",
+    "auction_publisher_loop",
+    "build_thanks_kb",
+    "cmd_remove_luxury",
+    "compute_start_price_limits",
+    "guides_kb",
+    "router",
+    "submission_support",
+]
 
 router = Router(name=__name__)
 router.include_routers(preorder.router, submission.router, guides.router, luxury_admin.router)
 
 
-async def _ask_for_currency(message, state):
+async def _ask_for_currency(message: types.Message, state: FSMContext) -> None:
     """Compatibility copy for legacy imports and focused transition checks."""
+
     data = await state.get_data()
     kind = str(data.get("auction_kind") or "standard").strip().lower()
     if kind == AuctionKind.FREE.value:
