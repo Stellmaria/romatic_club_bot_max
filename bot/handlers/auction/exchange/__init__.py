@@ -1,11 +1,55 @@
 """Public composition package for the auction exchange feature."""
 
 # Public compatibility exports are intentionally grouped by feature module.
-# ruff: noqa: I001
+# ruff: noqa: E402, I001
 
 from __future__ import annotations
 
+from importlib import import_module
+from typing import Any, cast
+
 from aiogram import Router
+
+_common = import_module(f"{__name__}.common")
+
+_EXCHANGE_DECK_IDS = (22, 24, 26, 28)
+
+
+async def _fixed_exchange_deck_ids(
+    _decks: list[dict[str, Any]] | None = None,
+) -> list[int]:
+    """Return the exact deck set supported by the MAX exchange."""
+    return list(_EXCHANGE_DECK_IDS)
+
+
+_common_module = cast(Any, _common)
+_common_module.EXCHANGE_RESOURCE_DECK_LIMIT = len(_EXCHANGE_DECK_IDS)
+_common_module.EX_DECKS = list(_EXCHANGE_DECK_IDS)
+_common_module._get_exchange_deck_ids = _fixed_exchange_deck_ids
+_common_module.get_exchange_deck_ids = _fixed_exchange_deck_ids
+
+_catalog = import_module(f"{__name__}.catalog")
+
+_original_q_exchange_approved_decks = cast(Any, _catalog).q_exchange_approved_decks
+
+
+async def _fixed_q_exchange_approved_decks() -> list[dict[str, Any]]:
+    """Build the four supported deck rows and matching labels."""
+    rows = await _original_q_exchange_approved_decks()
+    by_id = {int(row.get("deck_id") or 0): row for row in rows}
+    result: list[dict[str, Any]] = []
+    for deck_id in _EXCHANGE_DECK_IDS:
+        row = dict(by_id.get(deck_id, {}))
+        row["deck_id"] = deck_id
+        row["deck_name"] = f"{deck_id} колода"
+        row["cnt"] = int(row.get("cnt") or 0)
+        result.append(row)
+    return result
+
+
+_catalog_module = cast(Any, _catalog)
+_catalog_module._q_exchange_approved_decks = _fixed_q_exchange_approved_decks
+_catalog_module.q_exchange_approved_decks = _fixed_q_exchange_approved_decks
 
 from .catalog import (
     format_exchange_approved_lot_caption,

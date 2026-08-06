@@ -5,9 +5,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.domain.auctions import AuctionKind
 
+# fmt: off
 
 AUCTION_KIND_TITLES = {
     AuctionKind.STANDARD: "⭐️ Стандартный",
+    AuctionKind.PREORDER: "📦 Предзаказ",
     AuctionKind.REVERSE: "✨ Обратный",
     AuctionKind.FAST: "⚡️ Быстрый",
     AuctionKind.FREE: "🪶 Свободный",
@@ -40,3 +42,4 @@ def auction_kind_keyboard(luxury_level: int) -> InlineKeyboardMarkup:
     )
     return keyboard.as_markup()
 
+# fmt: on
