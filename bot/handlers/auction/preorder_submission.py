@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# fmt: off
 import html
 import logging
 import secrets
@@ -363,3 +364,4 @@ async def preorder_submission_confirmed(
             f"✅ Заявка №{submitted.auction_id} создана и отправлена на модерацию."
         )
     await message.answer(result_text, reply_markup=ReplyKeyboardRemove())
+# fmt: on
