@@ -1,8 +1,8 @@
 """Application service for future-deck preorder submissions."""
 
-from __future__ import annotations
-
 # ruff: noqa: RUF001
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
