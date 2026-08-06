@@ -6,6 +6,7 @@ import html
 from collections.abc import Mapping
 
 from aiogram import F, Router, types
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery
 
 from bot.domain.preorders import (
@@ -60,7 +61,9 @@ def _preorder_details(row: Mapping[str, object]) -> str:
         )
 
     deck_id = html.escape(str(row.get("preorder_deck_id") or "—"))
-    deck_name = html.escape(str(row.get("preorder_deck_name") or "Будущая колода"))
+    deck_name = html.escape(
+        str(row.get("preorder_deck_name") or "Будущая колода")
+    )
     return (
         "\n\n🗓 <b>Данные предзаказа</b>\n"
         f"🗂 <b>Будущая колода:</b> №{deck_id} — {deck_name}\n"
@@ -80,7 +83,7 @@ async def show_pending_preorders(call: CallbackQuery) -> None:
 
     try:
         await message.delete()
-    except Exception:
+    except TelegramBadRequest:
         pass
 
     rows = await (await PreorderSubmissionService.create()).list_pending(limit=50)
