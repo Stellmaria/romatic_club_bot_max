@@ -114,10 +114,18 @@ def validate_preorder_selection(
 def validate_preorder_start_price(value: object) -> int:
     """Validate the single start-price range used by every preorder composition."""
 
-    try:
-        price = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("preorder start price must be an integer") from exc
+    if isinstance(value, bool):
+        raise ValueError("preorder start price must be an integer")
+    if isinstance(value, int):
+        price = value
+    elif isinstance(value, str):
+        try:
+            price = int(value)
+        except ValueError as exc:
+            raise ValueError("preorder start price must be an integer") from exc
+    else:
+        raise ValueError("preorder start price must be an integer")
+
     if not PREORDER_MIN_START_PRICE <= price <= PREORDER_MAX_START_PRICE:
         raise ValueError(
             "preorder start price must be between "
