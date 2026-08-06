@@ -116,7 +116,12 @@ class AuctionSubmissionRepository:
             )
         return str(value) if value is not None else None
 
-    async def deck_type_for_identity(self, *, card_name: str, hero_name: str) -> str | None:
+    async def deck_type_for_identity(
+        self,
+        *,
+        card_name: str,
+        hero_name: str,
+    ) -> str | None:
         async with self._pool.acquire() as connection:
             value = await connection.fetchval(
                 """
