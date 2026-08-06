@@ -108,9 +108,7 @@ def _marker_errors(marker: MarkerPolicy) -> list[str]:
     return []
 
 
-def validate_policy(
-    policy_path: Path = DEFAULT_POLICY_PATH,
-) -> list[str]:
+def validate_policy(policy_path: Path = DEFAULT_POLICY_PATH) -> list[str]:
     policy = load_policy(policy_path)
     errors: list[str] = []
     for service_name, service in sorted(policy["services"].items()):
@@ -142,8 +140,7 @@ def validate_policy(
             )
 
         forbidden = {
-            normalize_distribution(item)
-            for item in service["forbidden_distributions"]
+            normalize_distribution(item) for item in service["forbidden_distributions"]
         }
         forbidden_direct = sorted(forbidden & set(declared))
         forbidden_locked = sorted(forbidden & locked)
@@ -169,9 +166,7 @@ def validate_policy(
     return errors
 
 
-def build_report(
-    policy_path: Path = DEFAULT_POLICY_PATH,
-) -> dict[str, object]:
+def build_report(policy_path: Path = DEFAULT_POLICY_PATH) -> dict[str, object]:
     policy = load_policy(policy_path)
     services: dict[str, object] = {}
     for service_name, service in sorted(policy["services"].items()):
@@ -207,9 +202,7 @@ def build_report(
             "source_roots": service["source_roots"],
             "source_file_count": file_count,
             "imported_modules": imports,
-            "direct_distributions_not_observed_in_static_imports": sorted(
-                not_observed
-            ),
+            "direct_distributions_not_observed_in_static_imports": sorted(not_observed),
             "note": (
                 "Static non-observation is review evidence only; it is not proof "
                 "that a package is safe to remove."
@@ -262,10 +255,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         report = build_report(policy_path)
         services = cast(dict[str, object], report["services"])
-        print(
-            "Runtime dependency policy passed: "
-            + ", ".join(sorted(services))
-        )
+        print("Runtime dependency policy passed: " + ", ".join(sorted(services)))
         return 0
     if args.command == "report":
         _write_report(build_report(policy_path), args.output)
