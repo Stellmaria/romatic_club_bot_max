@@ -52,12 +52,15 @@ def test_preorder_supports_whole_deck_as_an_alternative_mode() -> None:
 
     assert mode == PREORDER_MODE_WHOLE_DECK
     assert items == {}
-    assert build_preorder_title(
-        deck_id=29,
-        deck_name="Будущая история",
-        mode=mode,
-        items=items,
-    ) == "Предзаказ: Колода №29 «Будущая история», целая колода"
+    assert (
+        build_preorder_title(
+            deck_id=29,
+            deck_name="Будущая история",
+            mode=mode,
+            items=items,
+        )
+        == "Предзаказ: Колода №29 «Будущая история», целая колода"
+    )
 
 
 def test_whole_deck_mode_rejects_separate_rarity_items() -> None:
@@ -71,9 +74,7 @@ def test_whole_deck_mode_rejects_separate_rarity_items() -> None:
 def test_old_preorder_drafts_default_to_items_mode() -> None:
     assert normalize_preorder_mode(None) == PREORDER_MODE_ITEMS
     assert normalize_preorder_mode("unknown") == PREORDER_MODE_ITEMS
-    assert normalize_preorder_mode(PREORDER_MODE_WHOLE_DECK) == (
-        PREORDER_MODE_WHOLE_DECK
-    )
+    assert normalize_preorder_mode(PREORDER_MODE_WHOLE_DECK) == PREORDER_MODE_WHOLE_DECK
 
 
 def test_preorder_normalization_drops_invalid_and_zero_values() -> None:
@@ -119,9 +120,7 @@ def test_preorder_router_has_priority_over_legacy_submission() -> None:
 
 
 def test_preorder_whole_deck_requires_explicit_clear_confirmation() -> None:
-    source = (ROOT / "bot/handlers/auction/preorder.py").read_text(
-        encoding="utf-8"
-    )
+    source = (ROOT / "bot/handlers/auction/preorder.py").read_text(encoding="utf-8")
 
     assert 'callback_data="preorder:whole"' in source
     assert 'callback_data="preorder:whole:confirm"' in source
