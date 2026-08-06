@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "services": {
+    "bot": {
+      "build_markers": [
+        {
+          "minimum_occurrences": 1,
+          "path": "Dockerfile",
+          "value": "ARG REQUIREMENTS_LOCK=requirements/bot.lock"
+        },
+        {
+          "minimum_occurrences": 2,
+          "path": "compose.yaml",
+          "value": "REQUIREMENTS_LOCK: requirements/bot.lock"
+        }
+      ],
+      "direct_distributions": [
+        "aiofiles",
+        "aiogram",
+        "aiohttp",
+        "asyncpg",
+        "cffi",
+        "cryptography",
+        "flask",
+        "pymorphy2",
+        "pymorphy2-dicts-ru",
+        "python-dateutil",
+        "python-dotenv",
+        "pytz",
+        "requests"
+      ],
+      "distribution_imports": {
+        "aiofiles": [
+          "aiofiles"
+        ],
+        "aiogram": [
+          "aiogram"
+        ],
+        "aiohttp": [
+          "aiohttp"
+        ],
+        "asyncpg": [
+          "asyncpg"
+        ],
+        "cffi": [
+          "cffi"
+        ],
+        "cryptography": [
+          "cryptography"
+        ],
+        "flask": [
+          "flask"
+        ],
+        "pymorphy2": [
+          "pymorphy2"
+        ],
+        "pymorphy2-dicts-ru": [
+          "pymorphy2_dicts_ru"
+        ],
+        "python-dateutil": [
+          "dateutil"
+        ],
+        "python-dotenv": [
+          "dotenv"
+        ],
+        "pytz": [
+          "pytz"
+        ],
+        "requests": [
+          "requests"
+        ]
+      },
+      "forbidden_distributions": [
+        "cryptg",
+        "telethon"
+      ],
+      "requirements_input": "requirements/bot.in",
+      "requirements_lock": "requirements/bot.lock",
+      "source_roots": [
+        "main.py",
+        "bot",
+        "db",
+        "database",
+        "config.py",
+        "fsm_states.py"
+      ]
+    },
+    "userbot": {
+      "build_markers": [
+        {
+          "minimum_occurrences": 1,
+          "path": "Dockerfile",
+          "value": "COPY ${REQUIREMENTS_LOCK} /tmp/requirements.lock"
+        },
+        {
+          "minimum_occurrences": 1,
+          "path": "compose.yaml",
+          "value": "REQUIREMENTS_LOCK: requirements/userbot.lock"
+        }
+      ],
+      "direct_distributions": [
+        "asyncpg",
+        "cffi",
+        "cryptg",
+        "cryptography",
+        "python-dateutil",
+        "python-dotenv",
+        "pytz",
+        "telethon"
+      ],
+      "distribution_imports": {
+        "asyncpg": [
+          "asyncpg"
+        ],
+        "cffi": [
+          "cffi"
+        ],
+        "cryptg": [
+          "cryptg"
+        ],
+        "cryptography": [
+          "cryptography"
+        ],
+        "python-dateutil": [
+          "dateutil"
+        ],
+        "python-dotenv": [
+          "dotenv"
+        ],
+        "pytz": [
+          "pytz"
+        ],
+        "telethon": [
+          "telethon"
+        ]
+      },
+      "forbidden_distributions": [
+        "aiofiles",
+        "aiogram",
+        "aiohttp",
+        "flask",
+        "pymorphy2",
+        "pymorphy2-dicts-ru",
+        "requests"
+      ],
+      "requirements_input": "requirements/userbot.in",
+      "requirements_lock": "requirements/userbot.lock",
+      "source_roots": [
+        "userbot",
+        "bot/core",
+        "db",
+        "database",
+        "config.py"
+      ]
+    }
+  }
+}
