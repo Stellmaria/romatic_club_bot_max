@@ -14,16 +14,26 @@ PREORDER_RARITY_LABELS: dict[str, str] = {
 MAX_PREORDER_QUANTITY = 99
 
 
+def _quantity(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
+
+
 def normalize_preorder_items(items: Mapping[str, object] | None) -> dict[str, int]:
     """Return a stable, positive-only preorder composition."""
 
     source = items or {}
     normalized: dict[str, int] = {}
     for rarity in PREORDER_RARITIES:
-        try:
-            quantity = int(source.get(rarity, 0) or 0)
-        except (TypeError, ValueError):
-            quantity = 0
+        quantity = _quantity(source.get(rarity, 0))
         if quantity > 0:
             normalized[rarity] = min(quantity, MAX_PREORDER_QUANTITY)
     return normalized
@@ -42,7 +52,7 @@ def change_preorder_quantity(
         raise ValueError("preorder quantity delta must be -1 or 1")
 
     result = normalize_preorder_items(items)
-    current = int(result.get(rarity, 0))
+    current = result.get(rarity, 0)
     updated = max(0, min(MAX_PREORDER_QUANTITY, current + delta))
     if updated:
         result[rarity] = updated
