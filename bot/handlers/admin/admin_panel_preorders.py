@@ -1,8 +1,8 @@
 """Structured preorder queue for the admin moderation panel."""
 
-from __future__ import annotations
-
 # ruff: noqa: RUF001
+
+from __future__ import annotations
 
 import html
 import json
