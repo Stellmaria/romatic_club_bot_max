@@ -13,7 +13,7 @@ class AuctionSubmissionCatalogService:
         self._repository = repository
 
     @classmethod
-    async def create(cls) -> "AuctionSubmissionCatalogService":
+    async def create(cls) -> AuctionSubmissionCatalogService:
         return cls(AuctionSubmissionRepository(await get_db_pool()))
 
     async def card(self, card_id: int) -> dict[str, Any] | None:
