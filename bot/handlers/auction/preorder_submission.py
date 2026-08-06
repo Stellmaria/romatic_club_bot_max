@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E501,RUF001,RUF100
 # fmt: off
 import html
 import logging
