@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import difflib
 import json
 from pathlib import Path
+
+import black
 
 from scripts.runtime_dependency_inventory import (
     DEFAULT_POLICY_PATH,
@@ -46,3 +49,18 @@ def test_runtime_dependency_report_is_deterministic() -> None:
     assert isinstance(services, dict)
     assert sorted(services) == ["bot", "userbot"]
     json.dumps(first, ensure_ascii=False, sort_keys=True)
+
+
+def test_black_diagnostic_exposes_exact_runtime_inventory_diff() -> None:
+    path = Path("scripts/runtime_dependency_inventory.py")
+    source = path.read_text(encoding="utf-8")
+    formatted = black.format_str(source, mode=black.Mode(line_length=100))
+    difference = "".join(
+        difflib.unified_diff(
+            source.splitlines(keepends=True),
+            formatted.splitlines(keepends=True),
+            fromfile="current",
+            tofile="black",
+        )
+    )
+    assert source == formatted, "\n" + difference
