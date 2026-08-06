@@ -11,6 +11,12 @@ PREORDER_RARITY_LABELS: dict[str, str] = {
     "gold": "Золото",
     "epic": "Эпик",
 }
+PREORDER_MODE_ITEMS = "items"
+PREORDER_MODE_WHOLE_DECK = "whole_deck"
+PREORDER_MODES: tuple[str, ...] = (
+    PREORDER_MODE_ITEMS,
+    PREORDER_MODE_WHOLE_DECK,
+)
 MAX_PREORDER_QUANTITY = 99
 
 
@@ -25,6 +31,15 @@ def _quantity(value: object) -> int:
         except ValueError:
             return 0
     return 0
+
+
+def normalize_preorder_mode(value: object) -> str:
+    """Return a supported preorder mode, preserving old drafts as item mode."""
+
+    normalized = str(value or "").strip().lower()
+    if normalized == PREORDER_MODE_WHOLE_DECK:
+        return PREORDER_MODE_WHOLE_DECK
+    return PREORDER_MODE_ITEMS
 
 
 def normalize_preorder_items(items: Mapping[str, object] | None) -> dict[str, int]:
@@ -74,17 +89,43 @@ def format_preorder_composition(items: Mapping[str, object] | None) -> str:
     )
 
 
+def validate_preorder_selection(
+    *,
+    mode: object,
+    items: Mapping[str, object] | None,
+) -> tuple[str, dict[str, int]]:
+    """Validate that a preorder uses exactly one composition mode."""
+
+    normalized_mode = normalize_preorder_mode(mode)
+    normalized_items = normalize_preorder_items(items)
+
+    if normalized_mode == PREORDER_MODE_WHOLE_DECK:
+        if normalized_items:
+            raise ValueError("whole-deck preorder cannot contain separate items")
+        return normalized_mode, {}
+
+    if not normalized_items:
+        raise ValueError("item preorder must contain at least one item")
+    return normalized_mode, normalized_items
+
+
 def build_preorder_title(
     *,
     deck_id: int,
     deck_name: str | None,
     items: Mapping[str, object] | None,
+    mode: object = PREORDER_MODE_ITEMS,
 ) -> str:
     """Build the canonical single-lot title stored in the existing auction schema."""
 
-    composition = format_preorder_composition(items)
-    if not composition:
-        raise ValueError("preorder composition must contain at least one item")
+    normalized_mode, normalized_items = validate_preorder_selection(
+        mode=mode,
+        items=items,
+    )
+    if normalized_mode == PREORDER_MODE_WHOLE_DECK:
+        composition = "целая колода"
+    else:
+        composition = format_preorder_composition(normalized_items)
 
     clean_name = " ".join(str(deck_name or "").split())
     deck_label = f"Колода №{int(deck_id)}"
