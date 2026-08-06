@@ -38,7 +38,9 @@ def test_preorder_button_is_available_to_luxury_levels_one_and_two() -> None:
 
 
 def test_whole_deck_button_is_added_even_when_card_list_is_empty() -> None:
-    source = (ROOT / "bot/handlers/auction/submission.py").read_text(encoding="utf-8")
+    source = (ROOT / "bot/handlers/auction/submission.py").read_text(
+        encoding="utf-8"
+    )
     card_list = "for c in (cards or [])"
     whole_deck = 'callback_data=f"user_all_deck_{deck_id}"'
     assert card_list in source
@@ -47,7 +49,9 @@ def test_whole_deck_button_is_added_even_when_card_list_is_empty() -> None:
 
 
 def test_deck_name_migration_sets_canonical_names() -> None:
-    sql = (ROOT / "migrations/009_fix_deck_names_28_29.sql").read_text(encoding="utf-8")
+    sql = (ROOT / "migrations/009_fix_deck_names_28_29.sql").read_text(
+        encoding="utf-8"
+    )
     assert "WHEN 28 THEN '28 колода'" in sql
     assert "WHEN 29 THEN '29 колода'" in sql
     assert "WHERE id IN (28, 29)" in sql
