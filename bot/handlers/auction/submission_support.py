@@ -10,6 +10,8 @@ for _name in dir(_implementation):
     if not _name.startswith("__"):
         globals()[_name] = getattr(_implementation, _name)
 
-__all__ = tuple(name for name in dir(_implementation) if not name.startswith("__"))
+__all__ = tuple(
+    name for name in dir(_implementation) if not name.startswith("__")
+)
 
 del _name
