@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-# ruff: noqa: SIM117
-
 from typing import Any
 
 import asyncpg
@@ -19,7 +17,7 @@ class AuctionAdminRepository:
         discussion_message_id: int,
         reason: str,
     ) -> dict[str, Any] | None:
-        async with self._pool.acquire() as conn:
+        async with self._pool.acquire() as conn:  # noqa: SIM117
             async with conn.transaction():
                 bid = await conn.fetchrow(
                     """
