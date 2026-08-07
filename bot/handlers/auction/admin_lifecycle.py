@@ -141,11 +141,14 @@ async def activate_lot_cmd(message: Message) -> None:
         user = await get_user(owner["user_id"])
         if user:
             owner_users.append(dict(user))
-    owners_text = ", ".join(
-        ("👑 " if user.get("is_luxury") else "")
-        + (f"@{user['username']}" if user.get("username") else f"id:{user['user_id']}")
-        for user in owner_users
-    ) or "-"
+    owners_text = (
+        ", ".join(
+            ("👑 " if user.get("is_luxury") else "")
+            + (f"@{user['username']}" if user.get("username") else f"id:{user['user_id']}")
+            for user in owner_users
+        )
+        or "-"
+    )
 
     await message.answer(
         f"✅ Лот <b>{lot.get('card_name')}</b> (ID {auction_id}) возвращён в очередь публикации.",
@@ -182,7 +185,9 @@ async def show_user_lots(message: Message) -> None:
         return
 
     who = parts[1]
-    user = await get_user(int(who)) if who.isdigit() else await get_user_by_username(who.lstrip("@"))
+    user = (
+        await get_user(int(who)) if who.isdigit() else await get_user_by_username(who.lstrip("@"))
+    )
     if not user:
         await message.answer("Пользователь не найден.")
         return
