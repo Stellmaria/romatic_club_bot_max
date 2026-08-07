@@ -18,7 +18,7 @@ def _canonical_admin_action_log(action: str, *args: Any, **kwargs: Any) -> str:
     text = _ORIGINAL_ADMIN_ACTION_LOG(action, *args, **kwargs)
     lines = text.splitlines()
     if len(lines) >= 2:
-        lines[1] = f"🕒 {moscow_now().strftime(_admin.DT_FMT)} (МСК)"
+        lines[1] = f"🕒 {moscow_now().strftime(_admin.DT_FMT)} (МСК)"  # noqa: RUF001
     if lines:
         lines[-1] = f"Действие: <code>{html.escape(action)}</code> через бота."
     return "\n".join(lines)
