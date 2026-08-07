@@ -13,17 +13,17 @@ router = Router(name="emoji_setup")
 def _first_custom_emoji_id(msg: types.Message) -> str | None:
     for entity in msg.entities or []:
         if entity.type == "custom_emoji" and entity.custom_emoji_id:
-            return entity.custom_emoji_id
+            return str(entity.custom_emoji_id)
     for entity in getattr(msg, "caption_entities", None) or []:
         if entity.type == "custom_emoji" and entity.custom_emoji_id:
-            return entity.custom_emoji_id
+            return str(entity.custom_emoji_id)
     sticker = getattr(msg, "sticker", None)
     if (
         sticker
         and getattr(sticker, "is_custom_emoji", False)
         and getattr(sticker, "custom_emoji_id", None)
     ):
-        return sticker.custom_emoji_id
+        return str(sticker.custom_emoji_id)
     return None
 
 
