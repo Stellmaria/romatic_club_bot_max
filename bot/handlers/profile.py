@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """Canonical private profile, privacy, and user lookup entrypoints."""
 
 from __future__ import annotations
@@ -119,14 +120,14 @@ async def show_profile_menu(
     edit: bool = False,
 ) -> None:
     subscribed = await is_subscribed(user.id)
-    notification_status = "Подписан ✅" if subscribed else "Не подписан"  # noqa: RUF001
+    notification_status = "Подписан ✅" if subscribed else "Не подписан"
 
     try:
         uid = await get_user_verified_uid(user.id)
     except Exception:  # noqa: BLE001 - profile remains available if UID lookup fails
         uid = None
 
-    verification = "❌ НЕТ ВЕРИФИКАЦИИ"  # noqa: RUF001
+    verification = "❌ НЕТ ВЕРИФИКАЦИИ"
     uid_line = ""
     if uid:
         value = str(uid)
