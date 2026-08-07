@@ -13,7 +13,7 @@ from bot.core.legacy_config import legacy_config
 from bot.core.time import auction_end_at_59, to_moscow, utc_now
 from bot.domain.auctions import InvalidAuctionTransition
 from bot.handlers.admin.action_support.compat import send_admin_log
-from bot.handlers.admin.helper.new.formatting import format_admin_action_log
+from bot.presentation.admin import format_admin_action_log
 from bot.presentation.audit import format_admin_bid_deleted_log, format_audit_event
 from bot.services.auction_admin import AuctionAdminService
 from bot.services.auction_workflows import AuctionLifecycleService
