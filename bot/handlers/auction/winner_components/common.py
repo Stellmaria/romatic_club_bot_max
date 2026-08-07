@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: BLE001, E501, RUF001, S112
+
 import asyncio
 import html
 import logging
