@@ -10,6 +10,12 @@ from typing import Any, cast
 
 from aiogram import Router
 
+from bot.presentation.audit import (
+    format_exchange_approved_log as _canonical_exchange_approved_log,
+    format_exchange_moderation_log as _canonical_exchange_moderation_log,
+    format_exchange_new_request_log as _canonical_exchange_new_request_log,
+)
+
 _common = import_module(f"{__name__}.common")
 
 _EXCHANGE_DECK_IDS = (22, 24, 26, 28)
@@ -50,6 +56,19 @@ async def _fixed_q_exchange_approved_decks() -> list[dict[str, Any]]:
 _catalog_module = cast(Any, _catalog)
 _catalog_module._q_exchange_approved_decks = _fixed_q_exchange_approved_decks
 _catalog_module.q_exchange_approved_decks = _fixed_q_exchange_approved_decks
+
+# The split exchange handlers still contain historical local formatter copies.
+# Keep those compatibility globals, but route runtime calls through one canonical
+# presentation implementation so every exchange audit has the same field order,
+# human labels and action footer.
+_moderation = import_module(f"{__name__}.moderation")
+_moderation_module = cast(Any, _moderation)
+_moderation_module.format_exchange_approved_log = _canonical_exchange_approved_log
+_moderation_module.format_exchange_moderation_log = _canonical_exchange_moderation_log
+
+_submission = import_module(f"{__name__}.submission")
+_submission_module = cast(Any, _submission)
+_submission_module.format_exchange_new_request_log = _canonical_exchange_new_request_log
 
 from .catalog import (
     format_exchange_approved_lot_caption,
