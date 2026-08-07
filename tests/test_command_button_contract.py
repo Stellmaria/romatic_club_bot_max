@@ -90,6 +90,7 @@ def test_public_command_button_contract_documents_intentional_shortcuts() -> Non
         command_present = (
             f'Command("{command}")' in source
             or f'Command("{command}")' in users
+            or f'Command("{command}")' in subscriptions
             or command == "addlot"
         )
         assert command_present, command
