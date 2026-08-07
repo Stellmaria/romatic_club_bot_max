@@ -86,9 +86,7 @@ def test_bid_handler_does_not_bypass_admin_log_transport() -> None:
 
 
 def test_winner_common_routes_audits_through_shared_transport() -> None:
-    source = Path("bot/handlers/auction/winner_components/common.py").read_text(
-        encoding="utf-8"
-    )
+    source = Path("bot/handlers/auction/winner_components/common.py").read_text(encoding="utf-8")
 
     assert "await send_admin_log(bot, payload)" in source
     assert "for chat_id in iter_admin_log_chats():" not in source
