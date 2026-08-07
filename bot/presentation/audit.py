@@ -43,7 +43,7 @@ def format_audit_timestamp(value: datetime | None = None) -> str:
     """Render an audit timestamp using the canonical Moscow business timezone."""
 
     moment = moscow_now() if value is None else to_moscow(value)
-    return f"🕒 {moment.strftime(DT_FMT)} (МСК)"
+    return f"🕒 {moment.strftime(DT_FMT)} (МСК)"  # noqa: RUF001
 
 
 def format_action_footer(action: str) -> str:
@@ -89,7 +89,7 @@ def format_currency(value: object) -> str:
 
 def _compat_timestamp(value: str | None) -> str:
     text = str(value or "").strip()
-    return f"🕒 {html.escape(text)} (МСК)" if text else format_audit_timestamp()
+    return f"🕒 {html.escape(text)} (МСК)" if text else format_audit_timestamp()  # noqa: RUF001
 
 
 def format_exchange_new_request_log(
@@ -305,8 +305,8 @@ __all__ = [
     "format_bid_log",
     "format_currency",
     "format_exchange_approved_log",
-    "format_exchange_moderation_log",
     "format_exchange_mode",
+    "format_exchange_moderation_log",
     "format_exchange_new_request_log",
     "format_user_ref",
 ]
