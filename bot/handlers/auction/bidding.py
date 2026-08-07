@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+# ruff: noqa: B904, C901, I001, RUF001
+
 import asyncio
 import html
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from aiogram import F, Router, types
 from aiogram.dispatcher.event.bases import SkipHandler
