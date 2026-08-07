@@ -11,9 +11,11 @@ from aiogram import Bot, types
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.core.time import to_moscow, utc_now
-from bot.services.auction_winners import AuctionWinnerService
 from bot.core.legacy_config import legacy_config
+from bot.core.time import to_moscow, utc_now
+from bot.presentation.audit import format_audit_event
+from bot.services.admin_logging import send_admin_log
+from bot.services.auction_winners import AuctionWinnerService
 
 logger = logging.getLogger("auction.winner")
 
@@ -218,6 +220,8 @@ def fmt_msk(value: datetime) -> str:
 
 
 def iter_admin_log_chats() -> list[int]:
+    """Compatibility accessor; delivery itself is centralized in admin_logging."""
+
     values: list[int] = []
     for source in (legacy_config.ADMIN_LOG_CHATS, legacy_config.LOG_CHAT_ID):
         if isinstance(source, int):
@@ -231,16 +235,16 @@ def iter_admin_log_chats() -> list[int]:
 
 
 async def log_admin(bot: Bot, text: str) -> None:
-    for chat_id in iter_admin_log_chats():
-        try:
-            await bot.send_message(
-                chat_id,
-                text,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
-        except Exception:
-            continue
+    """Route winner/runtime audit notes through the shared admin transport."""
+
+    payload = text
+    if "🕒 " not in text or "Действие:" not in text:
+        payload = format_audit_event(
+            title="🏁 <b>Служебное событие аукциона</b>",
+            action="auction_runtime_event",
+            details=[text],
+        )
+    await send_admin_log(bot, payload)
 
 
 def kb_winner_actions(auction_id: int, winner_id: int) -> InlineKeyboardMarkup:
