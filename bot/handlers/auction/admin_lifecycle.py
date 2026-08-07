@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import html
 import logging
 from typing import Optional
 
@@ -8,13 +9,14 @@ from aiogram import F, Router, types
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import Message
 
+from bot.core.legacy_config import legacy_config
 from bot.core.time import auction_end_at_59, to_moscow, utc_now
 from bot.domain.auctions import InvalidAuctionTransition
 from bot.handlers.admin.action_support.compat import send_admin_log
 from bot.handlers.admin.helper.new.formatting import format_admin_action_log
+from bot.presentation.audit import format_admin_bid_deleted_log, format_audit_event
 from bot.services.auction_admin import AuctionAdminService
 from bot.services.auction_workflows import AuctionLifecycleService
-from bot.core.legacy_config import legacy_config
 from db.legacy import (
     get_bid_auction_by_discussion_id,
     get_auction_by_discussion_id,
@@ -29,6 +31,14 @@ from db.legacy import (
 router = Router(name="auction-admin-lifecycle")
 logger = logging.getLogger("auction.admin_lifecycle")
 TG_MAX = 3900
+
+
+def _admin_audit_actor(message: Message) -> dict[str, object]:
+    return {
+        "id": message.from_user.id,
+        "username": message.from_user.username,
+        "full_name": message.from_user.full_name,
+    }
 
 
 async def _resolve_lot_from_reply(
@@ -222,6 +232,31 @@ async def admin_delete_bid(message: Message) -> None:
         parse_mode="HTML",
     )
 
+    try:
+        await send_admin_log(
+            message.bot,
+            format_admin_bid_deleted_log(
+                admin_id=message.from_user.id,
+                admin_username=message.from_user.username,
+                auction_id=int(bid["auction_id"]),
+                bidder_id=int(bid["bidder_id"]),
+                bidder_username=bid.get("username"),
+                amount=int(bid["amount"]),
+                currency=bid.get("currency"),
+                warnings_count=int(bid["warnings_count"]),
+                is_banned=bool(bid["is_banned"]),
+            ),
+        )
+    except Exception:
+        logger.exception("Could not write deleted bid %s to audit chat", bid.get("bid_id"))
+
+    await log_audit_action(
+        user_id=message.from_user.id,
+        action_type="delete_bid",
+        auction_id=int(bid["auction_id"]),
+        details=f"bid_id={bid['bid_id']}; bidder_id={bid['bidder_id']}; amount={bid['amount']}",
+    )
+
 
 @router.message(F.text.lower().startswith("макс старт"))
 async def admin_start_auction(message: Message) -> None:
@@ -276,6 +311,26 @@ async def admin_start_auction(message: Message) -> None:
         parse_mode="HTML",
     )
 
+    auction_id = int(lot["auction_id"])
+    await send_admin_log(
+        message.bot,
+        format_audit_event(
+            title="⏳ <b>Аукцион запущен администратором</b>",
+            action="force_start_auction",
+            actor=_admin_audit_actor(message),
+            details=[
+                f"🎴 Лот №<code>{auction_id}</code>: {html.escape(str(lot.get('card_name') or '-'))}",
+                f"⏰ Новое окончание: <b>{new_end_time:%d.%m.%Y %H:%M}</b> (МСК)",
+            ],
+        ),
+    )
+    await log_audit_action(
+        user_id=message.from_user.id,
+        action_type="force_start_auction",
+        auction_id=auction_id,
+        details=f"end_time_msk={new_end_time.isoformat()}",
+    )
+
 
 @router.message(F.text.lower().startswith("макс стоп"))
 async def admin_stop_auction(message: Message) -> None:
@@ -328,6 +383,26 @@ async def admin_stop_auction(message: Message) -> None:
     await message.answer(
         f"✅ Аукцион <b>{lot['card_name']}</b> досрочно завершён.",
         parse_mode="HTML",
+    )
+
+    auction_id = int(lot["auction_id"])
+    await send_admin_log(
+        message.bot,
+        format_audit_event(
+            title="⏹ <b>Аукцион остановлен администратором</b>",
+            action="force_stop_auction",
+            actor=_admin_audit_actor(message),
+            details=[
+                f"🎴 Лот №<code>{auction_id}</code>: {html.escape(str(lot.get('card_name') or '-'))}",
+                f"⏰ Завершён: <b>{stop_time:%d.%m.%Y %H:%M}</b> (МСК)",
+            ],
+        ),
+    )
+    await log_audit_action(
+        user_id=message.from_user.id,
+        action_type="force_stop_auction",
+        auction_id=auction_id,
+        details=f"end_time_msk={stop_time.isoformat()}",
     )
 
 
