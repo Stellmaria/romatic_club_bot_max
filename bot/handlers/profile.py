@@ -47,9 +47,7 @@ def build_profile_keyboard(*, verified: bool) -> InlineKeyboardMarkup:
             callback_data="user_profile|privacy",
         )
     )
-    builder.row(
-        InlineKeyboardButton(text="🏠 Главное меню", callback_data="user_menu|home")
-    )
+    builder.row(InlineKeyboardButton(text="🏠 Главное меню", callback_data="user_menu|home"))
     return builder.as_markup()
 
 
@@ -73,12 +71,8 @@ def build_privacy_keyboard() -> InlineKeyboardMarkup:
             callback_data="user_privacy|status",
         )
     )
-    builder.row(
-        InlineKeyboardButton(text="⬅️ К профилю", callback_data="user_privacy|back")
-    )
-    builder.row(
-        InlineKeyboardButton(text="🏠 Главное меню", callback_data="user_menu|home")
-    )
+    builder.row(InlineKeyboardButton(text="⬅️ К профилю", callback_data="user_privacy|back"))
+    builder.row(InlineKeyboardButton(text="🏠 Главное меню", callback_data="user_menu|home"))
     return builder.as_markup()
 
 
@@ -102,9 +96,7 @@ def build_delete_keyboard() -> InlineKeyboardMarkup:
             callback_data="user_privacy|cancel",
         )
     )
-    builder.row(
-        InlineKeyboardButton(text="⬅️ Назад", callback_data="user_profile|privacy")
-    )
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="user_profile|privacy"))
     return builder.as_markup()
 
 
@@ -279,9 +271,7 @@ async def profile_who(call: types.CallbackQuery, state: FSMContext) -> None:
     await state.set_state(PublicWhoFSM.waiting_for_who_target)
     await call.answer()
     builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="❌ Отмена", callback_data="user_profile|who_cancel")
-    )
+    builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="user_profile|who_cancel"))
     await call.message.answer(
         "🔎 <b>Проверка пользователя</b>\n\n"
         "Пришлите @username, Telegram ID, UID либо перешлите сообщение пользователя.",
