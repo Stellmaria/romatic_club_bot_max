@@ -98,6 +98,4 @@ async def em_del(message: types.Message) -> None:
         return
     name = parts[1].strip().lower()
     deleted_name = await (await CustomEmojiService.create()).delete(name)
-    await message.answer(
-        f"🗑 Удалено: {deleted_name}" if deleted_name else "Такого имени нет."
-    )
+    await message.answer(f"🗑 Удалено: {deleted_name}" if deleted_name else "Такого имени нет.")
