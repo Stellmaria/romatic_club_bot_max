@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 from html import escape
 
 from aiogram import F, Router, types
@@ -58,8 +59,8 @@ async def em_add(message: types.Message) -> None:
         await (await CustomEmojiService.create()).save(name, emoji_id)
     except Exception as exc:  # noqa: BLE001 - admin gets the storage error in chat
         await message.answer(
-            "❌ Ошибка БД: <code>{}</code>\n"
-            "Подозрение: нет таблицы — запусти /em_migrate.".format(escape(str(exc))),
+            f"❌ Ошибка БД: <code>{escape(str(exc))}</code>\n"
+            "Подозрение: нет таблицы — запусти /em_migrate.",
             parse_mode="HTML",
         )
         return
