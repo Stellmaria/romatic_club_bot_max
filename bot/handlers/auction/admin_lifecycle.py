@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+# ruff: noqa: E501, RUF001
+
 import contextlib
 import html
 import logging
-from typing import Optional
 
-from aiogram import F, Router, types
+from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import Message
 
@@ -44,7 +45,7 @@ def _admin_audit_actor(message: Message) -> dict[str, object]:
 async def _resolve_lot_from_reply(
     message: Message,
     max_depth: int = 7,
-) -> Optional[dict]:
+) -> dict | None:
     """Resolve a lot from a post or any bid in its reply chain."""
 
     current = message.reply_to_message
