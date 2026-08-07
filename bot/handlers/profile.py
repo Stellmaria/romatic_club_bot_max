@@ -101,6 +101,11 @@ def build_delete_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def _callback_message(call: types.CallbackQuery) -> types.Message | None:
+    message = call.message
+    return message if isinstance(message, types.Message) else None
+
+
 async def _edit_or_answer(
     message: types.Message,
     *,
@@ -255,9 +260,12 @@ async def user_profile(message: types.Message) -> None:
 
 @router.callback_query(F.data == "user_profile|privacy")
 async def profile_privacy(call: types.CallbackQuery) -> None:
+    message = _callback_message(call)
     await call.answer()
+    if message is None:
+        return
     await _edit_or_answer(
-        call.message,
+        message,
         text=(
             "🔐 <b>Данные и приватность</b>\n\n"
             "Здесь можно скачать копию своих данных и управлять запросом на анонимизацию."
@@ -268,12 +276,15 @@ async def profile_privacy(call: types.CallbackQuery) -> None:
 
 @router.callback_query(F.data == "user_profile|who")
 async def profile_who(call: types.CallbackQuery, state: FSMContext) -> None:
+    message = _callback_message(call)
+    await call.answer()
+    if message is None:
+        return
     await state.clear()
     await state.set_state(PublicWhoFSM.waiting_for_who_target)
-    await call.answer()
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="user_profile|who_cancel"))
-    await call.message.answer(
+    await message.answer(
         "🔎 <b>Проверка пользователя</b>\n\n"
         "Пришлите @username, Telegram ID, UID либо перешлите сообщение пользователя.",
         parse_mode="HTML",
@@ -283,22 +294,31 @@ async def profile_who(call: types.CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "user_profile|who_cancel")
 async def profile_who_cancel(call: types.CallbackQuery, state: FSMContext) -> None:
-    await state.clear()
+    message = _callback_message(call)
     await call.answer("Отменено")
-    await show_profile_menu(call.message, user=call.from_user)
+    if message is None:
+        return
+    await state.clear()
+    await show_profile_menu(message, user=call.from_user)
 
 
 @router.callback_query(F.data == "user_privacy|back")
 async def privacy_back(call: types.CallbackQuery) -> None:
+    message = _callback_message(call)
     await call.answer()
-    await show_profile_menu(call.message, user=call.from_user, edit=True)
+    if message is None:
+        return
+    await show_profile_menu(message, user=call.from_user, edit=True)
 
 
 @router.callback_query(F.data == "user_privacy|delete")
 async def privacy_delete_menu(call: types.CallbackQuery) -> None:
+    message = _callback_message(call)
     await call.answer()
+    if message is None:
+        return
     await _edit_or_answer(
-        call.message,
+        message,
         text=(
             "🗑 <b>Удаление данных</b>\n\n"
             "Запрос запускает проверяемую анонимизацию. История ставок, модерации и безопасности "
@@ -313,9 +333,12 @@ async def privacy_export_callback(
     call: types.CallbackQuery,
     application_container: ApplicationContainer,
 ) -> None:
+    message = _callback_message(call)
     await call.answer("Формирую экспорт…")
+    if message is None:
+        return
     await _export_self(
-        call.message,
+        message,
         user_id=call.from_user.id,
         application_container=application_container,
     )
@@ -326,9 +349,12 @@ async def privacy_delete_request_callback(
     call: types.CallbackQuery,
     application_container: ApplicationContainer,
 ) -> None:
+    message = _callback_message(call)
     await call.answer()
+    if message is None:
+        return
     await _request_delete_self(
-        call.message,
+        message,
         user_id=call.from_user.id,
         application_container=application_container,
     )
@@ -339,9 +365,12 @@ async def privacy_delete_status_callback(
     call: types.CallbackQuery,
     application_container: ApplicationContainer,
 ) -> None:
+    message = _callback_message(call)
     await call.answer()
+    if message is None:
+        return
     await _status_delete_self(
-        call.message,
+        message,
         user_id=call.from_user.id,
         application_container=application_container,
     )
@@ -352,9 +381,12 @@ async def privacy_delete_cancel_callback(
     call: types.CallbackQuery,
     application_container: ApplicationContainer,
 ) -> None:
+    message = _callback_message(call)
     await call.answer()
+    if message is None:
+        return
     await _cancel_delete_self(
-        call.message,
+        message,
         user_id=call.from_user.id,
         application_container=application_container,
     )
