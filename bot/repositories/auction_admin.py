@@ -21,7 +21,13 @@ class AuctionAdminRepository:
             async with conn.transaction():
                 bid = await conn.fetchrow(
                     """
-                    SELECT b.bid_id, b.amount, b.bidder_id, u.username
+                    SELECT
+                        b.bid_id,
+                        b.auction_id,
+                        b.amount,
+                        b.currency,
+                        b.bidder_id,
+                        u.username
                     FROM public.bids b
                     JOIN public.users u ON u.user_id = b.bidder_id
                     WHERE b.discussion_message_id = $1
