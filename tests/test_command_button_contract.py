@@ -95,15 +95,7 @@ def test_public_command_button_contract_documents_intentional_shortcuts() -> Non
         assert command_present, command
         assert button_token in source, command
 
-    # These remain deliberate power-user/operator shortcuts rather than root-menu buttons.
-    intentional_command_only = {
-        "day",
-        "hide_menu",
-        "privacy_export",
-        "privacy_delete_request",
-        "privacy_delete_status",
-        "privacy_delete_cancel",
-        "who",
-        "who_u",
-    }
-    assert intentional_command_only
+    # Deliberate command-only compatibility/power-user entries.
+    intentional_command_only = {"day", "hide_menu"}
+    for command in intentional_command_only:
+        assert f'Command("{command}")' in users
