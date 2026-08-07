@@ -3,19 +3,19 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from bot.presentation.admin import format_admin_action_log
 from bot.presentation.audit import (
     format_action_footer,
     format_audit_timestamp,
     format_bid_log,
     format_exchange_new_request_log,
 )
-from bot.presentation.admin import format_admin_action_log
 
 
 def test_audit_timestamp_converts_explicit_instant_to_moscow() -> None:
     value = datetime(2026, 8, 7, 21, 1, 2, tzinfo=UTC)
 
-    assert format_audit_timestamp(value) == "🕒 08.08.2026 00:01:02 (МСК)"
+    assert format_audit_timestamp(value) == "🕒 08.08.2026 00:01:02 (МСК)"  # noqa: RUF001
 
 
 def test_action_footer_normalizes_legacy_transport_suffix() -> None:
@@ -58,7 +58,7 @@ def test_bid_log_matches_audit_field_order() -> None:
 
     lines = text.splitlines()
     assert lines[0] == "💬 <b>Новая ставка</b>"
-    assert lines[1].startswith("🕒 ") and lines[1].endswith(" (МСК)")
+    assert lines[1].startswith("🕒 ") and lines[1].endswith(" (МСК)")  # noqa: RUF001
     assert "🙍‍♂️ Участник:" in lines[2]
     assert "🎴 Лот №<code>77</code>" in lines[3]
     assert "💰 Ставка: <b>250 🍵 чай</b>" in lines[4]
@@ -74,7 +74,7 @@ def test_legacy_admin_formatter_is_wrapped_in_canonical_frame() -> None:
     )
 
     lines = text.splitlines()
-    assert lines[1].startswith("🕒 ") and lines[1].endswith(" (МСК)")
+    assert lines[1].startswith("🕒 ") and lines[1].endswith(" (МСК)")  # noqa: RUF001
     assert lines[-1] == "Действие: <code>broadcast</code> через бота."
 
 
