@@ -139,7 +139,11 @@ def emoji_by_currency(currency: str | None) -> str:
 
 
 def mention(user_id: int, username: str | None) -> str:
-    return f"@{username}" if username else f'<a href="tg://user?id={int(user_id)}">id{int(user_id)}</a>'
+    return (
+        f"@{username}"
+        if username
+        else f'<a href="tg://user?id={int(user_id)}">id{int(user_id)}</a>'
+    )
 
 
 def norm_username(username: str | None) -> str | None:
@@ -165,8 +169,12 @@ def build_channel_link(message_id: int | None) -> str | None:
     if not message_id:
         return None
     if legacy_config.AUCTION_CHANNEL_USERNAME:
-        return f"https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}/{int(message_id)}"
-    if legacy_config.AUCTION_CHANNEL_ID and str(legacy_config.AUCTION_CHANNEL_ID).startswith("-100"):
+        return (
+            f"https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}/{int(message_id)}"
+        )
+    if legacy_config.AUCTION_CHANNEL_ID and str(legacy_config.AUCTION_CHANNEL_ID).startswith(
+        "-100"
+    ):
         return f"https://t.me/c/{str(legacy_config.AUCTION_CHANNEL_ID)[4:]}/{int(message_id)}"
     return None
 
@@ -181,7 +189,11 @@ def mention_soft(user_id: int | None, username: str | None) -> str:
 
 
 def mention_html(user_id: int, username: str | None) -> str:
-    return f"@{username}" if username else f'<a href="tg://user?id={int(user_id)}">id{int(user_id)}</a>'
+    return (
+        f"@{username}"
+        if username
+        else f'<a href="tg://user?id={int(user_id)}">id{int(user_id)}</a>'
+    )
 
 
 def admin_tag(user: types.User) -> str:
@@ -248,14 +260,31 @@ async def log_admin(bot: Bot, text: str) -> None:
 
 
 def kb_winner_actions(auction_id: int, winner_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📨 Отправить уведомления", callback_data=f"{CB_WIN_SEND}:{auction_id}:{winner_id}")],
-        [
-            InlineKeyboardButton(text="✎ Исправить стоимость", callback_data=f"{CB_WIN_EDIT_AMT}:{auction_id}:{winner_id}"),
-            InlineKeyboardButton(text="👤 Исправить победителя", callback_data=f"{CB_WIN_EDIT_USER}:{auction_id}:{winner_id}"),
-        ],
-        [InlineKeyboardButton(text="⛔ Не отправлять", callback_data=f"{CB_WIN_SKIP}:{auction_id}:{winner_id}")],
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📨 Отправить уведомления",
+                    callback_data=f"{CB_WIN_SEND}:{auction_id}:{winner_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✎ Исправить стоимость",
+                    callback_data=f"{CB_WIN_EDIT_AMT}:{auction_id}:{winner_id}",
+                ),
+                InlineKeyboardButton(
+                    text="👤 Исправить победителя",
+                    callback_data=f"{CB_WIN_EDIT_USER}:{auction_id}:{winner_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⛔ Не отправлять", callback_data=f"{CB_WIN_SKIP}:{auction_id}:{winner_id}"
+                )
+            ],
+        ]
+    )
 
 
 async def post_rules_under_lot(
