@@ -18,6 +18,7 @@ from aiogram.types import (
 )
 
 from bot.core.legacy_config import legacy_config
+from bot.core.time import moscow_now
 from bot.domain.auctions import AuctionKind, Currency
 from bot.domain.preorders import (
     PREORDER_MAX_START_PRICE,
@@ -354,15 +355,50 @@ async def preorder_submission_confirmed(
         )
         return
 
-    action = "уже существовала" if submitted.was_existing else "создана"
-    await send_admin_log(
-        bot,
-        "🗓 <b>Заявка предзаказа "
-        f"№{submitted.auction_id} {action}</b>\n"
-        f"Пользователь: <code>{user_id}</code>\n"
-        f"Колода: №{html.escape(str(data.get('preorder_deck_id') or '-'))}\n"
-        f"Режим: {html.escape(str(data.get('preorder_mode') or '-'))}",
-    )
+    try:
+        mode, items = validate_preorder_selection(
+            mode=data.get("preorder_mode"),
+            items=data.get("preorder_items"),
+        )
+        price = validate_preorder_start_price(data.get("start_price"))
+        currency = Currency.from_raw(data.get("currency"))
+        deck_id = int(data.get("preorder_deck_id") or 0)
+        deck_name = str(data.get("preorder_deck_name") or "Будущая колода").strip()
+        title = str(submitted.snapshot.get("card_name") or data.get("card_name") or "Предзаказ").strip()
+        comment = str(data.get("comment") or "").strip()
+        username = (user.username or "").strip()
+        user_ref = f"@{html.escape(username)}" if username else f"<code>{user_id}</code>"
+        deck_label = f"№{deck_id}"
+        if deck_name:
+            deck_label += f" — {html.escape(deck_name)}"
+        header = (
+            "♻️ <b>Повторное подтверждение предзаказа</b>"
+            if submitted.was_existing
+            else "🆕 <b>Новая заявка на предзаказ</b>"
+        )
+        duplicate_line = (
+            "\n♻️ Заявка уже существовала, дубликат не создан."
+            if submitted.was_existing
+            else ""
+        )
+        await send_admin_log(
+            bot,
+            f"{header}\n"
+            f"🕒 {moscow_now().strftime('%d.%m.%Y %H:%M:%S')} (МСК)\n"
+            f"🙍‍♂️ Отправитель: {user_ref}\n"
+            f"🎴 Лот №{submitted.auction_id}: {html.escape(title)}\n"
+            f"🗂 Будущая колода: {deck_label}\n"
+            "⚙️ Тип: 🗓 Предзаказ\n"
+            f"🧩 Режим: {_mode_label(mode)}\n"
+            f"🃏 Состав: {html.escape(_composition_label(mode, items))}\n"
+            f"💰 Старт: <b>{price} {currency.emoji}</b>\n"
+            f"📝 Комментарий: {html.escape(comment) if comment else '-'}\n"
+            "Действие: add_preorder через бота."
+            f"{duplicate_line}",
+        )
+    except Exception:  # noqa: BLE001 - audit formatting must not break a persisted submission.
+        log.exception("preorder admin-log failed auction_id=%s", submitted.auction_id)
+
     await state.clear()
     if submitted.was_existing:
         result_text = (
