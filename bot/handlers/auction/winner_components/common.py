@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: BLE001, E501, I001, RUF001, S112
+
 import asyncio
 import html
 import logging
@@ -11,9 +13,11 @@ from aiogram import Bot, types
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.core.time import to_moscow, utc_now
-from bot.services.auction_winners import AuctionWinnerService
 from bot.core.legacy_config import legacy_config
+from bot.core.time import to_moscow, utc_now
+from bot.presentation.audit import format_audit_event
+from bot.services.admin_logging import send_admin_log
+from bot.services.auction_winners import AuctionWinnerService
 
 logger = logging.getLogger("auction.winner")
 
@@ -137,7 +141,11 @@ def emoji_by_currency(currency: str | None) -> str:
 
 
 def mention(user_id: int, username: str | None) -> str:
-    return f"@{username}" if username else f'<a href="tg://user?id={int(user_id)}">id{int(user_id)}</a>'
+    return (
+        f"@{username}"
+        if username
+        else f'<a href="tg://user?id={int(user_id)}">id{int(user_id)}</a>'
+    )
 
 
 def norm_username(username: str | None) -> str | None:
@@ -163,8 +171,12 @@ def build_channel_link(message_id: int | None) -> str | None:
     if not message_id:
         return None
     if legacy_config.AUCTION_CHANNEL_USERNAME:
-        return f"https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}/{int(message_id)}"
-    if legacy_config.AUCTION_CHANNEL_ID and str(legacy_config.AUCTION_CHANNEL_ID).startswith("-100"):
+        return (
+            f"https://t.me/{legacy_config.AUCTION_CHANNEL_USERNAME.lstrip('@')}/{int(message_id)}"
+        )
+    if legacy_config.AUCTION_CHANNEL_ID and str(legacy_config.AUCTION_CHANNEL_ID).startswith(
+        "-100"
+    ):
         return f"https://t.me/c/{str(legacy_config.AUCTION_CHANNEL_ID)[4:]}/{int(message_id)}"
     return None
 
@@ -179,7 +191,11 @@ def mention_soft(user_id: int | None, username: str | None) -> str:
 
 
 def mention_html(user_id: int, username: str | None) -> str:
-    return f"@{username}" if username else f'<a href="tg://user?id={int(user_id)}">id{int(user_id)}</a>'
+    return (
+        f"@{username}"
+        if username
+        else f'<a href="tg://user?id={int(user_id)}">id{int(user_id)}</a>'
+    )
 
 
 def admin_tag(user: types.User) -> str:
@@ -218,6 +234,8 @@ def fmt_msk(value: datetime) -> str:
 
 
 def iter_admin_log_chats() -> list[int]:
+    """Compatibility accessor; delivery itself is centralized in admin_logging."""
+
     values: list[int] = []
     for source in (legacy_config.ADMIN_LOG_CHATS, legacy_config.LOG_CHAT_ID):
         if isinstance(source, int):
@@ -231,27 +249,44 @@ def iter_admin_log_chats() -> list[int]:
 
 
 async def log_admin(bot: Bot, text: str) -> None:
-    for chat_id in iter_admin_log_chats():
-        try:
-            await bot.send_message(
-                chat_id,
-                text,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
-        except Exception:
-            continue
+    """Route winner/runtime audit notes through the shared admin transport."""
+
+    payload = text
+    if "🕒 " not in text or "Действие:" not in text:
+        payload = format_audit_event(
+            title="🏁 <b>Служебное событие аукциона</b>",
+            action="auction_runtime_event",
+            details=[text],
+        )
+    await send_admin_log(bot, payload)
 
 
 def kb_winner_actions(auction_id: int, winner_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📨 Отправить уведомления", callback_data=f"{CB_WIN_SEND}:{auction_id}:{winner_id}")],
-        [
-            InlineKeyboardButton(text="✎ Исправить стоимость", callback_data=f"{CB_WIN_EDIT_AMT}:{auction_id}:{winner_id}"),
-            InlineKeyboardButton(text="👤 Исправить победителя", callback_data=f"{CB_WIN_EDIT_USER}:{auction_id}:{winner_id}"),
-        ],
-        [InlineKeyboardButton(text="⛔ Не отправлять", callback_data=f"{CB_WIN_SKIP}:{auction_id}:{winner_id}")],
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📨 Отправить уведомления",
+                    callback_data=f"{CB_WIN_SEND}:{auction_id}:{winner_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✎ Исправить стоимость",
+                    callback_data=f"{CB_WIN_EDIT_AMT}:{auction_id}:{winner_id}",
+                ),
+                InlineKeyboardButton(
+                    text="👤 Исправить победителя",
+                    callback_data=f"{CB_WIN_EDIT_USER}:{auction_id}:{winner_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⛔ Не отправлять", callback_data=f"{CB_WIN_SKIP}:{auction_id}:{winner_id}"
+                )
+            ],
+        ]
+    )
 
 
 async def post_rules_under_lot(

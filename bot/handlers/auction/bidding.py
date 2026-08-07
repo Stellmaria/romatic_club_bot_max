@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+# ruff: noqa: B904, C901, I001, RUF001
+
 import asyncio
 import html
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from aiogram import F, Router, types
 from aiogram.dispatcher.event.bases import SkipHandler
 
+from bot.core.legacy_config import legacy_config
+from bot.core.time import utc_now
 from bot.domain.auctions import (
     AuctionEnded,
     AuctionKindNotBiddable,
@@ -24,9 +28,9 @@ from bot.domain.auctions import (
     BidderNotEligible,
     UnsupportedCurrency,
 )
+from bot.presentation.audit import format_bid_log
+from bot.services.admin_logging import send_admin_log
 from bot.services.auction_bids import AuctionBidService
-from bot.core.time import utc_now
-from bot.core.legacy_config import legacy_config
 from db.legacy import add_warning, get_warnings_count
 
 logger = logging.getLogger("auction_bot.bidding")
@@ -41,15 +45,19 @@ def _bot_bid_validation_enabled() -> bool:
 
 
 async def _mute_for_invalid_bid(message: types.Message) -> None:
+    bot = message.bot
+    user = message.from_user
+    if bot is None or user is None:
+        return
     try:
-        await message.bot.restrict_chat_member(
+        await bot.restrict_chat_member(
             message.chat.id,
-            message.from_user.id,
+            user.id,
             permissions=types.ChatPermissions(can_send_messages=False),
             until_date=utc_now() + timedelta(minutes=1),
         )
     except Exception:
-        logger.exception("Could not temporarily mute invalid bidder %s", message.from_user.id)
+        logger.exception("Could not temporarily mute invalid bidder %s", user.id)
 
 
 async def _delete_message_safely(message: types.Message) -> None:
@@ -165,21 +173,20 @@ async def accept_bid_message(message: types.Message) -> None:
         )
         return
 
-    if legacy_config.LOG_CHAT_ID:
-        try:
-            await message.bot.send_message(
-                legacy_config.LOG_CHAT_ID,
-                "💬 <b>Новая ставка</b>\n"
-                f"Аукцион: <code>{placement.auction.auction_id}</code>\n"
-                f"Пользователь: @{html.escape(username)} "
-                f"(<code>{message.from_user.id}</code>)\n"
-                f"Сумма: <b>{placement.bid.amount}</b> "
-                f"{placement.auction.currency.emoji}\n"
-                f"msg_id: <code>{message.message_id}</code>",
-                parse_mode="HTML",
-            )
-        except Exception:
-            logger.exception("Could not write bid %s to audit chat", placement.bid.bid_id)
+    try:
+        await send_admin_log(
+            message.bot,
+            format_bid_log(
+                auction_id=placement.auction.auction_id,
+                bidder_id=message.from_user.id,
+                bidder_username=message.from_user.username,
+                amount=placement.bid.amount,
+                currency=placement.auction.currency.value,
+                message_id=message.message_id,
+            ),
+        )
+    except Exception:
+        logger.exception("Could not write bid %s to audit chat", placement.bid.bid_id)
 
 
 @router.edited_message(F.chat.id < 0)

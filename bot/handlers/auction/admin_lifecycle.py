@@ -1,20 +1,24 @@
 from __future__ import annotations
 
-import contextlib
-import logging
-from typing import Optional
+# mypy: disable-error-code="no-any-return, type-arg, union-attr"
+# ruff: noqa: E501, I001, RUF001
 
-from aiogram import F, Router, types
+import contextlib
+import html
+import logging
+
+from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import Message
 
+from bot.core.legacy_config import legacy_config
 from bot.core.time import auction_end_at_59, to_moscow, utc_now
 from bot.domain.auctions import InvalidAuctionTransition
-from bot.handlers.admin.action_support.compat import send_admin_log
-from bot.handlers.admin.helper.new.formatting import format_admin_action_log
+from bot.presentation.admin import format_admin_action_log
+from bot.presentation.audit import format_admin_bid_deleted_log, format_audit_event
+from bot.services.admin_logging import send_admin_log
 from bot.services.auction_admin import AuctionAdminService
 from bot.services.auction_workflows import AuctionLifecycleService
-from bot.core.legacy_config import legacy_config
 from db.legacy import (
     get_bid_auction_by_discussion_id,
     get_auction_by_discussion_id,
@@ -31,10 +35,18 @@ logger = logging.getLogger("auction.admin_lifecycle")
 TG_MAX = 3900
 
 
+def _admin_audit_actor(message: Message) -> dict[str, object]:
+    return {
+        "id": message.from_user.id,
+        "username": message.from_user.username,
+        "full_name": message.from_user.full_name,
+    }
+
+
 async def _resolve_lot_from_reply(
     message: Message,
     max_depth: int = 7,
-) -> Optional[dict]:
+) -> dict | None:
     """Resolve a lot from a post or any bid in its reply chain."""
 
     current = message.reply_to_message
@@ -131,11 +143,14 @@ async def activate_lot_cmd(message: Message) -> None:
         user = await get_user(owner["user_id"])
         if user:
             owner_users.append(dict(user))
-    owners_text = ", ".join(
-        ("👑 " if user.get("is_luxury") else "")
-        + (f"@{user['username']}" if user.get("username") else f"id:{user['user_id']}")
-        for user in owner_users
-    ) or "-"
+    owners_text = (
+        ", ".join(
+            ("👑 " if user.get("is_luxury") else "")
+            + (f"@{user['username']}" if user.get("username") else f"id:{user['user_id']}")
+            for user in owner_users
+        )
+        or "-"
+    )
 
     await message.answer(
         f"✅ Лот <b>{lot.get('card_name')}</b> (ID {auction_id}) возвращён в очередь публикации.",
@@ -172,7 +187,9 @@ async def show_user_lots(message: Message) -> None:
         return
 
     who = parts[1]
-    user = await get_user(int(who)) if who.isdigit() else await get_user_by_username(who.lstrip("@"))
+    user = (
+        await get_user(int(who)) if who.isdigit() else await get_user_by_username(who.lstrip("@"))
+    )
     if not user:
         await message.answer("Пользователь не найден.")
         return
@@ -220,6 +237,31 @@ async def admin_delete_bid(message: Message) -> None:
         f"Предупреждений: {bid['warnings_count']}/4\n"
         + ("🚫 Пользователь забанен!" if bid["is_banned"] else ""),
         parse_mode="HTML",
+    )
+
+    try:
+        await send_admin_log(
+            message.bot,
+            format_admin_bid_deleted_log(
+                admin_id=message.from_user.id,
+                admin_username=message.from_user.username,
+                auction_id=int(bid["auction_id"]),
+                bidder_id=int(bid["bidder_id"]),
+                bidder_username=bid.get("username"),
+                amount=int(bid["amount"]),
+                currency=bid.get("currency"),
+                warnings_count=int(bid["warnings_count"]),
+                is_banned=bool(bid["is_banned"]),
+            ),
+        )
+    except Exception:
+        logger.exception("Could not write deleted bid %s to audit chat", bid.get("bid_id"))
+
+    await log_audit_action(
+        user_id=message.from_user.id,
+        action_type="delete_bid",
+        auction_id=int(bid["auction_id"]),
+        details=f"bid_id={bid['bid_id']}; bidder_id={bid['bidder_id']}; amount={bid['amount']}",
     )
 
 
@@ -276,6 +318,26 @@ async def admin_start_auction(message: Message) -> None:
         parse_mode="HTML",
     )
 
+    auction_id = int(lot["auction_id"])
+    await send_admin_log(
+        message.bot,
+        format_audit_event(
+            title="⏳ <b>Аукцион запущен администратором</b>",
+            action="force_start_auction",
+            actor=_admin_audit_actor(message),
+            details=[
+                f"🎴 Лот №<code>{auction_id}</code>: {html.escape(str(lot.get('card_name') or '-'))}",
+                f"⏰ Новое окончание: <b>{new_end_time:%d.%m.%Y %H:%M}</b> (МСК)",
+            ],
+        ),
+    )
+    await log_audit_action(
+        user_id=message.from_user.id,
+        action_type="force_start_auction",
+        auction_id=auction_id,
+        details=f"end_time_msk={new_end_time.isoformat()}",
+    )
+
 
 @router.message(F.text.lower().startswith("макс стоп"))
 async def admin_stop_auction(message: Message) -> None:
@@ -328,6 +390,26 @@ async def admin_stop_auction(message: Message) -> None:
     await message.answer(
         f"✅ Аукцион <b>{lot['card_name']}</b> досрочно завершён.",
         parse_mode="HTML",
+    )
+
+    auction_id = int(lot["auction_id"])
+    await send_admin_log(
+        message.bot,
+        format_audit_event(
+            title="⏹ <b>Аукцион остановлен администратором</b>",
+            action="force_stop_auction",
+            actor=_admin_audit_actor(message),
+            details=[
+                f"🎴 Лот №<code>{auction_id}</code>: {html.escape(str(lot.get('card_name') or '-'))}",
+                f"⏰ Завершён: <b>{stop_time:%d.%m.%Y %H:%M}</b> (МСК)",
+            ],
+        ),
+    )
+    await log_audit_action(
+        user_id=message.from_user.id,
+        action_type="force_stop_auction",
+        auction_id=auction_id,
+        details=f"end_time_msk={stop_time.isoformat()}",
     )
 
 
