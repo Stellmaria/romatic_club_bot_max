@@ -45,15 +45,19 @@ def _bot_bid_validation_enabled() -> bool:
 
 
 async def _mute_for_invalid_bid(message: types.Message) -> None:
+    bot = message.bot
+    user = message.from_user
+    if bot is None or user is None:
+        return
     try:
-        await message.bot.restrict_chat_member(
+        await bot.restrict_chat_member(
             message.chat.id,
-            message.from_user.id,
+            user.id,
             permissions=types.ChatPermissions(can_send_messages=False),
             until_date=utc_now() + timedelta(minutes=1),
         )
     except Exception:
-        logger.exception("Could not temporarily mute invalid bidder %s", message.from_user.id)
+        logger.exception("Could not temporarily mute invalid bidder %s", user.id)
 
 
 async def _delete_message_safely(message: types.Message) -> None:
