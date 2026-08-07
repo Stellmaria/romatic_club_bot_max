@@ -68,10 +68,7 @@ def format_user_ref(
     if user_id:
         uid = int(user_id)
         label = f"@{clean_username}" if clean_username else clean_name or f"id{uid}"
-        return (
-            f"<a href='tg://user?id={uid}'>{html.escape(label)}</a> "
-            f"(id: <code>{uid}</code>)"
-        )
+        return f"<a href='tg://user?id={uid}'>{html.escape(label)}</a> " f"(id: <code>{uid}</code>)"
     if clean_username:
         safe_username = html.escape(clean_username)
         return f"<a href='https://t.me/{safe_username}'>@{safe_username}</a>"
@@ -238,10 +235,7 @@ def format_bid_log(
         [
             "💬 <b>Новая ставка</b>",
             format_audit_timestamp(),
-            (
-                "🙍‍♂️ Участник: "
-                + format_user_ref(user_id=bidder_id, username=bidder_username)
-            ),
+            ("🙍‍♂️ Участник: " + format_user_ref(user_id=bidder_id, username=bidder_username)),
             f"🎴 Лот №<code>{int(auction_id)}</code>",
             f"💰 Ставка: <b>{int(amount)} {format_currency(currency)}</b>",
             f"💬 msg_id: <code>{int(message_id)}</code>",
@@ -268,10 +262,8 @@ def format_admin_bid_deleted_log(
         [
             "🗑️ <b>Ставка удалена администратором</b>",
             format_audit_timestamp(),
-            "👤 Админ: "
-            + format_user_ref(user_id=admin_id, username=admin_username),
-            "🙍‍♂️ Участник: "
-            + format_user_ref(user_id=bidder_id, username=bidder_username),
+            "👤 Админ: " + format_user_ref(user_id=admin_id, username=admin_username),
+            "🙍‍♂️ Участник: " + format_user_ref(user_id=bidder_id, username=bidder_username),
             f"🎴 Лот №<code>{int(auction_id)}</code>",
             f"💰 Ставка: <b>{int(amount)} {format_currency(currency)}</b>",
             f"⚠️ Предупреждений: <b>{int(warnings_count)}/4</b>",
