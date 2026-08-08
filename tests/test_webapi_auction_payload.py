@@ -46,10 +46,7 @@ def test_serialize_auction_exposes_screen_fields_without_private_owner_data() ->
     assert payload["current_bid"] == 930
     assert payload["display_price"] == 930
     assert payload["telegram_url"] == "https://t.me/card_house/9308"
-    assert payload["seller"] == {
-        "display_name": "Seller Name",
-        "verified": False,
-    }
+    assert payload["seller"] == {"verified": False}
     assert payload["card"] == {
         "id": 7,
         "name": "Chaos",
@@ -64,6 +61,10 @@ def test_serialize_auction_exposes_screen_fields_without_private_owner_data() ->
         "obtain_amount": 80,
         "image_url": "/api/webapp/cards/7/image",
     }
-    assert "user_id" not in payload["seller"]
+    serialized = repr(payload)
+    assert "123456789" not in serialized
+    assert "seller" not in serialized.casefold()
+    assert "Seller Name" not in serialized
+    assert "is_luxury" not in serialized
     assert "balance" not in payload
     assert "comment" not in payload
