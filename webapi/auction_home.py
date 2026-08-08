@@ -92,12 +92,8 @@ async def list_free_slots(
 
     while current <= last:
         slot_time = current.time()
-        is_past_today = (
-            selected_date == business_now.date() and slot_time <= business_now.time()
-        )
-        if not is_past_today and not any(
-            start <= slot_time < end for start, end in occupied
-        ):
+        is_past_today = selected_date == business_now.date() and slot_time <= business_now.time()
+        if not is_past_today and not any(start <= slot_time < end for start, end in occupied):
             slots.append(slot_time.strftime("%H:%M"))
         current += SLOT_DURATION
     return slots
