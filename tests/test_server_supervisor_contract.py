@@ -123,7 +123,7 @@ def test_deploy_keeps_backup_health_and_rollback_gates() -> None:
     assert "Romatic server smoke OK" in deploy
     assert "rolling application code back" in deploy
     assert "DOCKER_CONFIG" in deploy
-    assert "COMPOSE_BAKE=false" in deploy
+    assert "COMPOSE_BAKE=false" not in deploy
 
 
 def test_postgres_image_matches_production_major_version() -> None:

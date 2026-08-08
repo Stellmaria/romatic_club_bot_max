@@ -82,7 +82,6 @@ chmod 0700 \
   "$data_dir/runtime/migrations" \
   "$data_dir/runtime/restore-drills"
 export DOCKER_CONFIG="${DOCKER_CONFIG:-$data_dir/runtime/docker-config}"
-export COMPOSE_BAKE=false
 compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 compose_ops=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile operations)
 
