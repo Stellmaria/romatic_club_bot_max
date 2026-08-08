@@ -5,6 +5,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# These assertions intentionally mirror literal HTML/JS/CSS source fragments.
+# fmt: off
+
 def _source(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
@@ -47,3 +50,5 @@ def test_mini_app_api_requests_have_a_timeout() -> None:
     assert "AbortController" in api
     assert "request_timeout" in api
     assert "signal: controller.signal" in api
+
+# fmt: on
