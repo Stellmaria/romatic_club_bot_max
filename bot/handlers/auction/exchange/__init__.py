@@ -95,7 +95,6 @@ from .common import (
     cur_emoji,
     currency_emoji,
     currency_label,
-    currency_to_emoji,
     deck_id_from_row as exchange_deck_id_from_row,
     exchange_deck_keyboard,
     exchange_gain_for_card,
