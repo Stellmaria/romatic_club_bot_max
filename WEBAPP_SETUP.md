@@ -40,7 +40,8 @@ button не меняется. Если URL задан, он должен быт�
 логина/пароля и URL fragment.
 
 При старте бот вызывает `setChatMenuButton` и публикует кнопку
-`Открыть приложение` для приватных чатов.
+`Открыть приложение` для приватных чатов. Временная ошибка Telegram API при
+настройке этой кнопки логируется, но не останавливает основной bot process.
 
 ## Локальный запуск
 
@@ -55,7 +56,18 @@ Telegram-клиентом по HTTPS URL.
 ## Запуск через Docker Compose
 
 Скопируйте `.env.webapp.example` в `.env.webapp`, заполните `BOT_TOKEN` и
-`DATABASE_URL`, затем запустите overlay вместе с основным Compose-файлом:
+`DATABASE_URL`, затем запустите opt-in webapp deployment:
+
+```bash
+./deploy/server/deploy-webapp.sh
+```
+
+Скрипт валидирует основной Compose + overlay, собирает webapp, запускает сервис и
+ждёт успешный healthcheck. Он намеренно отделён от основного production deploy до
+первого Telegram smoke-test, чтобы экспериментальный web surface не менял
+проверенный rollback-контур бота и userbot.
+
+Эквивалентная ручная команда:
 
 ```bash
 docker compose -f compose.yaml -f compose.webapp.yaml up -d --build webapp

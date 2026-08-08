@@ -13,9 +13,7 @@ def test_mini_app_is_disabled_without_public_url() -> None:
 
 
 def test_mini_app_accepts_https_public_url() -> None:
-    settings = MiniAppSettings.from_env(
-        {"WEBAPP_PUBLIC_URL": "https://app.example.com/telegram"}
-    )
+    settings = MiniAppSettings.from_env({"WEBAPP_PUBLIC_URL": "https://app.example.com/telegram"})
 
     assert settings.enabled is True
     assert settings.public_url == "https://app.example.com/telegram"
