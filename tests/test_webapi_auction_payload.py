@@ -10,8 +10,8 @@ def test_serialize_auction_exposes_only_public_fields() -> None:
         {
             "auction_id": 42,
             "card_id": 7,
-            "card_name": "Король",
-            "hero_name": "Влад",
+            "card_name": "King",
+            "hero_name": "Vlad",
             "start_price": 120,
             "currency": "tea",
             "status": "scheduled",
@@ -25,8 +25,8 @@ def test_serialize_auction_exposes_only_public_fields() -> None:
     assert payload == {
         "id": 42,
         "card_id": 7,
-        "card_name": "Король",
-        "hero_name": "Влад",
+        "card_name": "King",
+        "hero_name": "Vlad",
         "start_price": 120,
         "currency": "tea",
         "status": "scheduled",

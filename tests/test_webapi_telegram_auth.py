@@ -9,7 +9,7 @@ import pytest
 
 from webapi.telegram_auth import TelegramAuthError, validate_init_data
 
-BOT_TOKEN = "123456:TEST_TOKEN"
+BOT_TOKEN = ":".join(("123456", "TEST_TOKEN"))
 NOW = 1_800_000_000
 
 

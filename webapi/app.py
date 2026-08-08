@@ -23,6 +23,7 @@ logger = logging.getLogger("auction_bot.webapp")
 SETTINGS_KEY = web.AppKey("webapp_settings", WebAppSettings)
 DB_RUNTIME_KEY = web.AppKey("webapp_db_runtime", DatabaseRuntime)
 PUBLIC_AUCTION_STATUSES = ["scheduled", "publishing", "active"]
+NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 
 
 def create_app(
@@ -79,7 +80,11 @@ async def me(request: web.Request) -> web.Response:
     try:
         identity = _authenticate(request)
     except TelegramAuthError:
-        return web.json_response({"error": "telegram_auth_failed"}, status=401)
+        return web.json_response(
+            {"error": "telegram_auth_failed"},
+            status=401,
+            headers=NO_STORE_HEADERS,
+        )
 
     tg_user = identity.user
     await sync_user_profile(tg_user.id, tg_user.username, tg_user.full_name)
@@ -104,7 +109,8 @@ async def me(request: web.Request) -> web.Response:
                 "auth_date": identity.auth_date,
                 "start_param": identity.start_param,
             },
-        }
+        },
+        headers=NO_STORE_HEADERS,
     )
 
 
@@ -112,10 +118,17 @@ async def auctions(request: web.Request) -> web.Response:
     try:
         _authenticate(request)
     except TelegramAuthError:
-        return web.json_response({"error": "telegram_auth_failed"}, status=401)
+        return web.json_response(
+            {"error": "telegram_auth_failed"},
+            status=401,
+            headers=NO_STORE_HEADERS,
+        )
 
     rows = await list_auctions(PUBLIC_AUCTION_STATUSES)
-    return web.json_response({"auctions": [_serialize_auction(row) for row in rows]})
+    return web.json_response(
+        {"auctions": [_serialize_auction(row) for row in rows]},
+        headers=NO_STORE_HEADERS,
+    )
 
 
 def _serialize_auction(row: Mapping[str, Any]) -> dict[str, object]:

@@ -29,7 +29,11 @@ class MiniAppSettings:
         if not public_url:
             return cls()
 
-        parsed = urlsplit(public_url)
+        try:
+            parsed = urlsplit(public_url)
+            parsed.port
+        except ValueError as error:
+            raise MiniAppConfigurationError("WEBAPP_PUBLIC_URL: is malformed") from error
         if parsed.scheme.casefold() != "https" or not parsed.hostname:
             raise MiniAppConfigurationError("WEBAPP_PUBLIC_URL: must be an absolute HTTPS URL")
         if parsed.username is not None or parsed.password is not None:

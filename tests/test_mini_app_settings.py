@@ -26,6 +26,8 @@ def test_mini_app_accepts_https_public_url() -> None:
         "app.example.com",
         "https://user:password@app.example.com",
         "https://app.example.com/#fragment",
+        "https://app.example.com:99999",
+        "https://[broken",
     ],
 )
 def test_mini_app_rejects_unsafe_public_url(url: str) -> None:

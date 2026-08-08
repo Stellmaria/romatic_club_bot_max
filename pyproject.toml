@@ -17,6 +17,7 @@ tools = ["pandas==2.3.3"]
 
 [project.scripts]
 auction-bot = "main:main"
+auction-webapp = "webapi.__main__:main"
 auction-userbot = "userbot.entrypoint:run"
 auction-userbot-provision = "userbot.provision:run"
 auction-userbot-healthcheck = "userbot.healthcheck:run"
@@ -27,7 +28,7 @@ py-modules = ["config", "fsm_states", "main"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["bot*", "database*", "db*", "userbot*"]
+include = ["bot*", "database*", "db*", "userbot*", "webapi*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
@@ -80,7 +81,7 @@ select = ["E9", "F63", "F7", "F82"]
 max-complexity = 15
 
 [tool.ruff.lint.isort]
-known-first-party = ["bot", "database", "db", "userbot"]
+known-first-party = ["bot", "database", "db", "userbot", "webapi"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
