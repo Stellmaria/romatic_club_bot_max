@@ -137,6 +137,7 @@ class Monitor:
             self._last_event_at = float(self._state.get("last_event_at") or 0.0)
         except (TypeError, ValueError):
             self._last_event_at = 0.0
+        self._incident_episode_open = bool(self._state.get("incident_episode_open", False))
         self.telegram_token = os.getenv("BOT_TOKEN", "").strip()
         self.telegram_chat_id = _notification_chat_id()
 
@@ -144,7 +145,15 @@ class Monitor:
         self._stop.set()
 
     def _compose(self, *args: str) -> list[str]:
-        return ["docker", "compose", "--env-file", self.env_file, "-f", self.compose_file, *args]
+        return [
+            "docker",
+            "compose",
+            "--env-file",
+            self.env_file,
+            "-f",
+            self.compose_file,
+            *args,
+        ]
 
     def _run(self, args: list[str], timeout: int = 60) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -174,7 +183,7 @@ class Monitor:
                 str(state.get("Status") or "") or None,
                 str(health.get("Status") or "") or None,
                 max(0, int(item.get("RestartCount", 0) or 0)),
-                int(state.get("ExitCode")) if state.get("ExitCode") is not None else None,
+                (int(state.get("ExitCode")) if state.get("ExitCode") is not None else None),
             )
         except (ValueError, TypeError, KeyError, IndexError, json.JSONDecodeError):
             logger.exception("Could not parse Docker inspect for %s", service)
@@ -227,6 +236,7 @@ class Monitor:
             "active_status": self._active_status,
             "last_event_key": self._last_event_key,
             "last_event_at": self._last_event_at,
+            "incident_episode_open": self._incident_episode_open,
         }
         temporary = self.state_path.with_suffix(".tmp")
         temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -237,7 +247,8 @@ class Monitor:
 
     def _logs(self, service: str) -> str:
         result = self._run(
-            self._compose("logs", "--no-color", "--tail", str(self.log_lines), service), 60
+            self._compose("logs", "--no-color", "--tail", str(self.log_lines), service),
+            60,
         )
         return redact(result.stdout)[-12000:]
 
@@ -245,7 +256,10 @@ class Monitor:
         self, method: str, path: str, body: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         data = None
-        headers = {"Authorization": f"Bearer {self.hermes_key}", "Accept": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {self.hermes_key}",
+            "Accept": "application/json",
+        }
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             headers["Content-Type"] = "application/json"
@@ -272,7 +286,10 @@ class Monitor:
             logger.warning("Telegram notification skipped: destination is not configured")
             return
         payload = json.dumps(
-            {"chat_id": self.telegram_chat_id, "text": f"{title}\n\n{redact(text)[:3500]}"},
+            {
+                "chat_id": self.telegram_chat_id,
+                "text": f"{title}\n\n{redact(text)[:3500]}",
+            },
             ensure_ascii=False,
         ).encode("utf-8")
         request = urllib.request.Request(
@@ -301,14 +318,22 @@ class Monitor:
             )
         )
 
+    @staticmethod
+    def _is_recovered(probe: Probe) -> bool:
+        return probe.running and probe.health == "healthy"
+
+    def _can_submit(self, event_key: str) -> bool:
+        if self._incident_episode_open:
+            return False
+        if self._active_status in ACTIVE_STATUSES:
+            return False
+        if event_key != self._last_event_key:
+            return True
+        return time.time() - self._last_event_at >= self.cooldown_seconds
+
     def submit(self, probe: Probe, reason: str) -> None:
         event_key = self._event_key(probe, reason)
-        if self._active_status in ACTIVE_STATUSES:
-            return
-        if (
-            event_key == self._last_event_key
-            and time.time() - self._last_event_at < self.cooldown_seconds
-        ):
+        if not self._can_submit(event_key):
             return
         prompt = (
             "Разбери аварийный инцидент Romatic Club Max. Не выполняй merge, deployment, "  # noqa: RUF001
@@ -341,6 +366,7 @@ class Monitor:
         self._active_status = str(response.get("status") or "started")
         self._last_event_key = event_key
         self._last_event_at = time.time()
+        self._incident_episode_open = True
         self._notify(
             "Hermes начал разбор инцидента Max",
             f"service={probe.service}\nreason={reason}\nrun_id={run_id}",
@@ -378,6 +404,8 @@ class Monitor:
             threading.Thread(target=self._wait_run, args=(self._active_run,), daemon=True).start()
         while not self._stop.is_set():
             probes = [self.probe(service) for service in self.services]
+            if self._incident_episode_open and all(self._is_recovered(probe) for probe in probes):
+                self._incident_episode_open = False
             for probe in probes:
                 reason = self.reason(probe)
                 if reason:
