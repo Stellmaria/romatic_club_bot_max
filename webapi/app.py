@@ -224,8 +224,14 @@ def _viewer_payload(
 
 
 def _card_file_id(card: dict) -> str | None:
-    for key in ("media_file_id", "image_id", "thumb_file_id"):
+    for key in ("image_id", "thumb_file_id"):
         value = str(card.get(key) or "").strip()
+        if value:
+            return value
+
+    media_type = str(card.get("media_type") or "").strip().casefold()
+    if media_type in {"", "photo", "image"}:
+        value = str(card.get("media_file_id") or "").strip()
         if value:
             return value
     return None
