@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <title>Romantic Club</title>
+    <title>Карточный домик</title>
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
@@ -12,23 +12,23 @@
     <main class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">ROMANTIC CLUB</p>
-          <h1>Профиль</h1>
+          <p class="eyebrow">КАРТОЧНЫЙ ДОМИК</p>
+          <h1 id="page-title">Профиль</h1>
         </div>
-        <div id="avatar" class="avatar" aria-hidden="true">RC</div>
+        <div id="avatar" class="avatar" aria-hidden="true">КД</div>
       </header>
 
       <section id="loading" class="panel status-panel">
         <div class="spinner" aria-hidden="true"></div>
         <div>
-          <strong>Загружаем профиль</strong>
-          <p>Telegram проверяет, кто именно открыл приложение.</p>
+          <strong id="loading-title">Загружаем профиль</strong>
+          <p id="loading-message">Telegram проверяет, кто именно открыл приложение.</p>
         </div>
       </section>
 
       <section id="error" class="panel status-panel hidden" role="alert">
         <div>
-          <strong>Не удалось открыть профиль</strong>
+          <strong>Не удалось открыть приложение</strong>
           <p id="error-message">Откройте приложение из Telegram-бота.</p>
         </div>
         <button id="retry" class="button" type="button">Повторить</button>
@@ -46,28 +46,39 @@
 
         <div class="section-title">
           <h3>Разделы</h3>
-          <span>Первый технический прототип</span>
+          <span>Карточный домик</span>
         </div>
 
         <div class="action-grid">
           <button class="action-card" type="button" disabled>
             <span class="action-icon">◇</span>
             <strong>Коллекция</strong>
-            <span>Скоро</span>
+            <span>Следующий этап</span>
           </button>
-          <button class="action-card" type="button" disabled>
+          <button id="open-auctions" class="action-card" type="button">
             <span class="action-icon">↗</span>
             <strong>Аукцион</strong>
-            <span>Скоро</span>
+            <span>Публичные лоты</span>
           </button>
         </div>
+      </section>
+
+      <section id="auctions" class="hidden">
+        <div class="section-title compact-title">
+          <h3>Публичные лоты</h3>
+          <span>Москва</span>
+        </div>
+        <p id="auction-empty" class="panel empty-panel">Загружаем публичные лоты…</p>
+        <div id="auction-list" class="auction-list" aria-live="polite"></div>
       </section>
     </main>
 
     <nav class="bottom-nav" aria-label="Основная навигация">
-      <button class="nav-item active" type="button" aria-current="page">Профиль</button>
+      <button class="nav-item active" data-view="profile" type="button" aria-current="page">
+        Профиль
+      </button>
       <button class="nav-item" type="button" disabled>Коллекция</button>
-      <button class="nav-item" type="button" disabled>Аукцион</button>
+      <button class="nav-item" data-view="auctions" type="button">Аукцион</button>
     </nav>
 
     <script type="module" src="/static/main.js"></script>

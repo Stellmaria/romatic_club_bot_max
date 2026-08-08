@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from aiohttp import web
 
+from bot.core.time import serialize_timestamp
+from db.auctions import list_auctions
 from db.lifecycle import close_db, init_db
 from db.pool import DatabaseRuntime
 from db.profile_sync import sync_user_profile
@@ -18,6 +22,7 @@ logger = logging.getLogger("auction_bot.webapp")
 
 SETTINGS_KEY = web.AppKey("webapp_settings", WebAppSettings)
 DB_RUNTIME_KEY = web.AppKey("webapp_db_runtime", DatabaseRuntime)
+PUBLIC_AUCTION_STATUSES = ["scheduled", "publishing", "active"]
 
 
 def create_app(
@@ -38,6 +43,7 @@ def create_app(
 
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/api/webapp/me", me)
+    app.router.add_get("/api/webapp/auctions", auctions)
     app.router.add_get("/", _index_handler(index_file))
     app.router.add_static("/static/", static_dir, append_version=True)
 
@@ -100,6 +106,33 @@ async def me(request: web.Request) -> web.Response:
             },
         }
     )
+
+
+async def auctions(request: web.Request) -> web.Response:
+    try:
+        _authenticate(request)
+    except TelegramAuthError:
+        return web.json_response({"error": "telegram_auth_failed"}, status=401)
+
+    rows = await list_auctions(PUBLIC_AUCTION_STATUSES)
+    return web.json_response({"auctions": [_serialize_auction(row) for row in rows]})
+
+
+def _serialize_auction(row: Mapping[str, Any]) -> dict[str, object]:
+    start_time = row.get("start_time")
+    end_time = row.get("end_time")
+    card_id = row.get("card_id")
+    return {
+        "id": int(row["auction_id"]),
+        "card_id": int(card_id) if card_id is not None else None,
+        "card_name": str(row.get("card_name") or ""),
+        "hero_name": str(row.get("hero_name") or ""),
+        "start_price": int(row.get("start_price") or 0),
+        "currency": str(row.get("currency") or ""),
+        "status": str(row.get("status") or ""),
+        "start_time": serialize_timestamp(start_time) if start_time is not None else None,
+        "end_time": serialize_timestamp(end_time) if end_time is not None else None,
+    }
 
 
 def _authenticate(request: web.Request) -> ValidatedInitData:

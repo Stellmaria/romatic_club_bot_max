@@ -1,5 +1,5 @@
-export async function loadMe(initData) {
-  const response = await fetch("/api/webapp/me", {
+async function requestJson(path, initData) {
+  const response = await fetch(path, {
     method: "GET",
     headers: {
       Authorization: `tma ${initData}`,
@@ -16,4 +16,12 @@ export async function loadMe(initData) {
   }
 
   return response.json();
+}
+
+export function loadMe(initData) {
+  return requestJson("/api/webapp/me", initData);
+}
+
+export function loadAuctions(initData) {
+  return requestJson("/api/webapp/auctions", initData);
 }

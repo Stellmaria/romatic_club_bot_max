@@ -36,7 +36,7 @@ def test_build_mini_app_menu_uses_public_url() -> None:
     button = mini_app.build_mini_app_menu(MiniAppSettings(public_url="https://app.example.com"))
 
     assert isinstance(button, MenuButtonWebApp)
-    assert button.text == "Открыть приложение"
+    assert button.text == "Карточный домик"
     assert button.web_app.url == "https://app.example.com"
 
 

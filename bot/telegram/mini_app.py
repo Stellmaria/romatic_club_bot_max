@@ -20,7 +20,7 @@ def build_mini_app_menu(settings: MiniAppSettings) -> MenuButtonWebApp | None:
     if not settings.enabled:
         return None
     return MenuButtonWebApp(
-        text="Открыть приложение",
+        text="Карточный домик",
         web_app=WebAppInfo(url=settings.public_url),
     )
 
