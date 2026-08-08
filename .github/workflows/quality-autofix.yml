@@ -29,16 +29,17 @@ jobs:
           version: "0.11.16"
       - name: Install hashed development graph
         run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Format and autofix changed Python files
+      - name: Format and collect Ruff diagnostics
         run: |
           git fetch --no-tags --depth=1 origin main
           merge_base="$(git merge-base origin/main HEAD)"
           mapfile -t files < <(git diff --name-only --diff-filter=ACMR "${merge_base}...HEAD" -- '*.py')
           if (( ${#files[@]} == 0 )); then
+            : > /tmp/ruff.log
             exit 0
           fi
           python -m black "${files[@]}"
-          python -m ruff check --fix --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --ignore S101,S603,S607 "${files[@]}"
+          python -m ruff check --fix --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --ignore S101,S603,S607 "${files[@]}" | tee /tmp/ruff.log || true
       - name: Commit autofixes when needed
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
@@ -52,3 +53,11 @@ jobs:
           git add -- '*.py'
           git commit -m "Apply changed-file quality autofixes"
           git push origin "HEAD:${BRANCH}"
+      - name: Upload Ruff diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ruff-diagnostics
+          path: /tmp/ruff.log
+          if-no-files-found: warn
+          retention-days: 1
