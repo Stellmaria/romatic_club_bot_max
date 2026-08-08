@@ -18,6 +18,10 @@ from bot.presentation.audit import (
 
 _common = import_module(f"{__name__}.common")
 
+# Expose the admin-facing compatibility helper before importing exchange modules
+# that can re-enter the admin handler graph during a cold process start.
+currency_to_emoji = cast(Any, _common).currency_to_emoji
+
 _EXCHANGE_DECK_IDS = (22, 24, 26, 28)
 
 
