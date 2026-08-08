@@ -43,9 +43,7 @@ async def build_auction_home(
     current_time = ensure_utc(now or utc_now())
     rows = await get_auctions_by_date(selected_date)
     visible = [
-        row
-        for row in rows
-        if str(row.get("status") or "").casefold() in PUBLIC_AUCTION_STATUSES
+        row for row in rows if str(row.get("status") or "").casefold() in PUBLIC_AUCTION_STATUSES
     ]
 
     active_row = _select_active(visible, current_time)
@@ -106,8 +104,7 @@ def _select_active(
     publishing = [
         row
         for row in rows
-        if str(row.get("status") or "") == "publishing"
-        and _contains_time(row, now)
+        if str(row.get("status") or "") == "publishing" and _contains_time(row, now)
     ]
     return min(publishing, key=_start_sort_key) if publishing else None
 

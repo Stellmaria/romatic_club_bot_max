@@ -40,10 +40,7 @@ class WebAppSettings:
         if not bot_token:
             issues.append(ConfigurationIssue("BOT_TOKEN", "is required"))
 
-        host = (
-            str(env.get("WEBAPP_HOST", DEFAULT_WEBAPP_HOST)).strip()
-            or DEFAULT_WEBAPP_HOST
-        )
+        host = str(env.get("WEBAPP_HOST", DEFAULT_WEBAPP_HOST)).strip() or DEFAULT_WEBAPP_HOST
         port = _read_positive_int(env, "WEBAPP_PORT", 8080, issues, maximum=65535)
         auth_max_age_seconds = _read_positive_int(
             env,
@@ -53,9 +50,7 @@ class WebAppSettings:
         )
         luxury_chat_id = _read_optional_int(env, "LUXURY_CHAT_ID", issues)
         luxury_chat_id_lvl2 = _read_optional_int(env, "LUXURY_CHAT_ID_LVL2", issues)
-        auction_channel_username = (
-            str(env.get("AUCTION_CHANNEL_USERNAME", "")).strip().lstrip("@")
-        )
+        auction_channel_username = str(env.get("AUCTION_CHANNEL_USERNAME", "")).strip().lstrip("@")
         luxury_contact_url = _read_https_url(
             env,
             "WEBAPP_LUXURY_CONTACT_URL",
