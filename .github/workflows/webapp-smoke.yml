@@ -1,0 +1,42 @@
+name: Webapp Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webapp-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webapp-image-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - name: Build hardened webapp image
+        run: docker build --pull=false --file Dockerfile.webapp --tag "romatic-webapp:${GITHUB_SHA}" .
+      - name: Import web process and verify packaged frontend
+        run: |
+          docker run --rm --entrypoint python "romatic-webapp:${GITHUB_SHA}" -c \
+            "from pathlib import Path; from webapi.app import create_app; assert callable(create_app); assert Path('/app/webapp/index.html').is_file(); print('Webapp image smoke OK')"
+      - name: Materialize active Trivy exceptions
+        run: python scripts/check_vulnerability_exceptions.py --format trivy > .trivyignore
+      - name: Block fixed high and critical image vulnerabilities
+        uses: aquasecurity/trivy-action@2736533278103862a861f4a35ebac3e97854d956
+        with:
+          image-ref: romatic-webapp:${{ github.sha }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          trivyignores: .trivyignore

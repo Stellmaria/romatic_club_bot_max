@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#07111d" />
+    <title>Карточный домик · Аукционы</title>
+    <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="identity">
+          <div id="avatar" class="avatar" aria-hidden="true">КД</div>
+          <div class="identity-copy">
+            <strong id="user-name">Карточный домик</strong>
+            <span>Аукционы коллекционных карт</span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="icon-button" type="button" aria-label="Уведомления" disabled>
+            <span aria-hidden="true">♢</span>
+          </button>
+          <button id="luxury-status" class="luxury-status" type="button">
+            Купить Luxury
+          </button>
+        </div>
+      </header>
+
+      <section id="loading" class="status-card" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <div>
+          <strong id="loading-title">Открываем аукционы</strong>
+          <p id="loading-message">Проверяем Telegram-сессию и актуальные лоты.</p>
+        </div>
+      </section>
+
+      <section id="error" class="status-card error-card hidden" role="alert">
+        <div>
+          <strong>Не удалось загрузить страницу</strong>
+          <p id="error-message">Повторите попытку.</p>
+        </div>
+        <button id="retry" class="small-button" type="button">Повторить</button>
+      </section>
+
+      <section id="auction-page" class="hidden">
+        <div class="page-heading">
+          <div>
+            <div class="heading-line">
+              <h1 id="day-title">Сегодня</h1>
+              <span class="ornament" aria-hidden="true"></span>
+            </div>
+            <p id="day-date" class="day-date"></p>
+          </div>
+          <button id="free-slots" class="outline-button luxury-action" type="button">
+            <span aria-hidden="true">♛</span>
+            Свободные слоты
+          </button>
+        </div>
+
+        <div class="segment" role="tablist" aria-label="Период">
+          <button id="today-tab" class="segment-button active" type="button" role="tab">
+            Сегодня
+          </button>
+          <button id="calendar-tab" class="segment-button" type="button" role="tab">
+            Календарь
+            <span id="calendar-lock" class="lock-mark">Luxury</span>
+          </button>
+        </div>
+
+        <div id="calendar-panel" class="calendar-panel hidden">
+          <label for="calendar-date">Дата аукционов</label>
+          <input id="calendar-date" type="date" />
+          <button id="calendar-load" class="small-button" type="button">Показать</button>
+        </div>
+
+        <div id="free-slots-panel" class="free-slots-panel hidden">
+          <div class="panel-heading">
+            <strong>Свободные слоты</strong>
+            <button id="free-slots-close" class="plain-button" type="button">Закрыть</button>
+          </div>
+          <p id="free-slots-date" class="muted-line"></p>
+          <div id="free-slots-list" class="slot-list"></div>
+        </div>
+
+        <section aria-labelledby="active-title">
+          <div class="section-heading section-heading-compact">
+            <h2 id="active-title">Сейчас</h2>
+          </div>
+          <article id="active-auction" class="active-auction hidden">
+            <div class="active-media">
+              <span class="live-badge">Сейчас</span>
+              <img id="active-image" alt="" class="card-image hidden" />
+              <div id="active-image-placeholder" class="image-placeholder" aria-hidden="true">
+                <span>КД</span>
+              </div>
+            </div>
+
+            <div class="active-details">
+              <p id="active-lot-number" class="lot-number"></p>
+              <h2 id="active-name" class="auction-name"></h2>
+              <p id="active-rarity" class="rarity-line"></p>
+              <p id="active-seller" class="seller-line"></p>
+
+              <div class="price-row">
+                <div>
+                  <span class="meta-label">Текущая ставка</span>
+                  <strong id="active-price" class="current-price"></strong>
+                  <span id="active-start-price" class="start-price"></span>
+                </div>
+                <div class="deadline">
+                  <span id="active-end-time"></span>
+                  <strong id="active-countdown"></strong>
+                </div>
+              </div>
+
+              <p id="active-deck" class="deck-line"></p>
+              <div id="active-card-meta" class="card-meta"></div>
+              <p id="active-story" class="story-line"></p>
+
+              <button id="open-telegram" class="telegram-button" type="button">
+                <span aria-hidden="true">➤</span>
+                Открыть аукцион в Telegram
+              </button>
+              <p class="telegram-note">Ставки принимаются в комментариях Telegram</p>
+            </div>
+          </article>
+          <div id="no-active" class="empty-state">
+            Сейчас активного аукциона нет.
+          </div>
+        </section>
+
+        <section class="upcoming-section" aria-labelledby="upcoming-title">
+          <div class="section-heading">
+            <div class="heading-line">
+              <h2 id="upcoming-title">Дальше сегодня</h2>
+              <span class="ornament" aria-hidden="true"></span>
+            </div>
+            <span id="upcoming-count" class="section-note"></span>
+          </div>
+          <div id="upcoming-list" class="upcoming-list"></div>
+          <div id="upcoming-empty" class="empty-state hidden">
+            На выбранную дату больше лотов нет.
+          </div>
+        </section>
+
+        <aside class="rules-strip">
+          <span class="rules-icon" aria-hidden="true">i</span>
+          <strong>Правила ставок</strong>
+          <span>💎 / 🪙 шаг 10</span>
+          <span>🍵 шаг 2</span>
+        </aside>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Основная навигация">
+      <button class="nav-item active" type="button" aria-current="page">
+        <span class="nav-icon" aria-hidden="true">⚒</span>
+        <span>Аукционы</span>
+      </button>
+      <button class="nav-item" type="button" disabled>
+        <span class="nav-icon" aria-hidden="true">▱</span>
+        <span>Мои лоты</span>
+      </button>
+      <button class="nav-item nav-submit" type="button" disabled>
+        <span class="submit-icon" aria-hidden="true">+</span>
+        <span>Подать</span>
+      </button>
+      <button class="nav-item" type="button" disabled>
+        <span class="nav-icon" aria-hidden="true">♧</span>
+        <span>Подписки</span>
+      </button>
+      <button class="nav-item" type="button" disabled>
+        <span class="nav-icon" aria-hidden="true">○</span>
+        <span>Профиль</span>
+      </button>
+    </nav>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <script type="module" src="/static/main.js"></script>
+  </body>
+</html>
