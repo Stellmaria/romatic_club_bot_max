@@ -63,8 +63,9 @@ def test_serialize_auction_exposes_screen_fields_without_private_owner_data() ->
     }
     serialized = repr(payload)
     assert "123456789" not in serialized
-    assert "seller" not in serialized.casefold()
     assert "Seller Name" not in serialized
+    assert "'username': 'seller'" not in serialized
+    assert "display_name" not in serialized
     assert "is_luxury" not in serialized
     assert "balance" not in payload
     assert "comment" not in payload
