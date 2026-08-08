@@ -35,6 +35,5 @@ def test_card_image_does_not_serve_video_as_jpeg_without_thumbnail() -> None:
 
 def test_card_image_accepts_photo_media_fallback() -> None:
     assert (
-        _card_file_id({"media_type": "photo", "media_file_id": "photo-file-id"})
-        == "photo-file-id"
+        _card_file_id({"media_type": "photo", "media_file_id": "photo-file-id"}) == "photo-file-id"
     )
