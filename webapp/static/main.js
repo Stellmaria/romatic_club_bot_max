@@ -5,10 +5,15 @@ import {
   loadMe,
 } from "./api.js";
 import {
+  closeTelegramApp,
   initializeTelegram,
   openTelegramLink,
+  telegramColorScheme,
   telegramInitData,
 } from "./telegram.js";
+
+const THEME_STORAGE_KEY = "card-house-theme";
+const VIEW_NAMES = ["auction", "my-lots", "submit", "subscriptions", "profile"];
 
 const elements = {
   loading: document.querySelector("#loading"),
@@ -17,9 +22,18 @@ const elements = {
   error: document.querySelector("#error"),
   errorMessage: document.querySelector("#error-message"),
   retry: document.querySelector("#retry"),
-  page: document.querySelector("#auction-page"),
+  content: document.querySelector("#content"),
   avatar: document.querySelector("#avatar"),
   userName: document.querySelector("#user-name"),
+  profileShortcut: document.querySelector("#profile-shortcut"),
+  notificationsButton: document.querySelector("#notifications-button"),
+  themeToggle: document.querySelector("#theme-toggle"),
+  themeIcon: document.querySelector("#theme-icon"),
+  profileThemeToggle: document.querySelector("#profile-theme-toggle"),
+  profileAvatar: document.querySelector("#profile-avatar"),
+  profileTitle: document.querySelector("#profile-title"),
+  profileUsername: document.querySelector("#profile-username"),
+  profileLuxury: document.querySelector("#profile-luxury"),
   luxuryStatus: document.querySelector("#luxury-status"),
   dayTitle: document.querySelector("#day-title"),
   dayDate: document.querySelector("#day-date"),
@@ -54,6 +68,13 @@ const elements = {
   upcomingCount: document.querySelector("#upcoming-count"),
   upcomingList: document.querySelector("#upcoming-list"),
   upcomingEmpty: document.querySelector("#upcoming-empty"),
+  rulesButton: document.querySelector("#rules-button"),
+  rulesPanel: document.querySelector("#rules-panel"),
+  navItems: Array.from(document.querySelectorAll(".nav-item[data-view]")),
+  returnButtons: Array.from(document.querySelectorAll(".telegram-return")),
+  views: Object.fromEntries(
+    VIEW_NAMES.map((name) => [name, document.querySelector(`#${name}-view`)]),
+  ),
   toast: document.querySelector("#toast"),
 };
 
@@ -63,30 +84,79 @@ let initData = "";
 let profile = null;
 let currentHome = null;
 let selectedDate = "";
+let currentView = "auction";
 let pollTimer = null;
 let countdownTimer = null;
 let pollBusy = false;
 let toastTimer = null;
 
 function show(element) {
-  element.classList.remove("hidden");
+  element?.classList.remove("hidden");
 }
 
 function hide(element) {
-  element.classList.add("hidden");
+  element?.classList.add("hidden");
+}
+
+function storedTheme() {
+  try {
+    const value = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return value === "light" || value === "dark" ? value : "";
+  } catch {
+    return "";
+  }
+}
+
+function saveTheme(value) {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, value);
+  } catch {
+    // Storage may be unavailable in restricted WebViews; the current session still works.
+  }
+}
+
+function syncTelegramChrome(theme) {
+  const background = theme === "light" ? "#f5f0e7" : "#08131f";
+  const header = theme === "light" ? "#fbf7f0" : "#0b1724";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", background);
+  try {
+    telegram?.setBackgroundColor?.(background);
+    telegram?.setHeaderColor?.(header);
+  } catch {
+    // Older Telegram clients can reject custom colors; CSS remains authoritative.
+  }
+}
+
+function applyTheme(theme, { persist = false } = {}) {
+  const normalized = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = normalized;
+  elements.themeIcon.textContent = normalized === "dark" ? "☀" : "☾";
+  elements.themeToggle.setAttribute(
+    "aria-label",
+    normalized === "dark" ? "Включить светлую тему" : "Включить тёмную тему",
+  );
+  elements.profileThemeToggle.textContent =
+    normalized === "dark" ? "Светлая тема" : "Тёмная тема";
+  syncTelegramChrome(normalized);
+  if (persist) saveTheme(normalized);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme;
+  applyTheme(current === "dark" ? "light" : "dark", { persist: true });
 }
 
 function setLoading(title, message) {
   elements.loadingTitle.textContent = title;
   elements.loadingMessage.textContent = message;
   hide(elements.error);
-  hide(elements.page);
+  hide(elements.content);
   show(elements.loading);
 }
 
 function renderError(message) {
   hide(elements.loading);
-  hide(elements.page);
+  hide(elements.content);
   elements.errorMessage.textContent = message;
   show(elements.error);
 }
@@ -98,29 +168,55 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => hide(elements.toast), 2600);
 }
 
+function setView(name) {
+  if (!VIEW_NAMES.includes(name)) return;
+  currentView = name;
+  for (const [viewName, view] of Object.entries(elements.views)) {
+    view.classList.toggle("hidden", viewName !== name);
+  }
+  for (const item of elements.navItems) {
+    const active = item.dataset.view === name;
+    item.classList.toggle("active", active);
+    if (active) {
+      item.setAttribute("aria-current", "page");
+    } else {
+      item.removeAttribute("aria-current");
+    }
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function initials(name) {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "КД";
   return parts.slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
+function profilePhoto(imageUrl, name, target) {
+  if (!imageUrl) {
+    target.textContent = initials(name);
+    return;
+  }
+  const image = document.createElement("img");
+  image.src = imageUrl;
+  image.alt = "";
+  image.referrerPolicy = "no-referrer";
+  image.addEventListener("error", () => {
+    target.replaceChildren(document.createTextNode(initials(name)));
+  });
+  target.replaceChildren(image);
+}
+
 function renderProfile(payload) {
   profile = payload.user;
   const name = profile.full_name || profile.first_name || "Карточный домик";
   elements.userName.textContent = name;
-
-  if (profile.photo_url) {
-    const image = document.createElement("img");
-    image.src = profile.photo_url;
-    image.alt = "";
-    image.referrerPolicy = "no-referrer";
-    image.addEventListener("error", () => {
-      elements.avatar.replaceChildren(document.createTextNode(initials(name)));
-    });
-    elements.avatar.replaceChildren(image);
-  } else {
-    elements.avatar.textContent = initials(name);
-  }
+  elements.profileTitle.textContent = name;
+  elements.profileUsername.textContent = profile.username
+    ? `@${String(profile.username).replace(/^@/, "")}`
+    : "Telegram Mini App";
+  profilePhoto(profile.photo_url, name, elements.avatar);
+  profilePhoto(profile.photo_url, name, elements.profileAvatar);
 }
 
 function formatDay(isoDate) {
@@ -205,9 +301,11 @@ function renderViewer(viewer) {
   if (level > 0) {
     elements.luxuryStatus.textContent = `♛ Luxury ${level}`;
     elements.luxuryStatus.classList.add("owned");
+    elements.profileLuxury.textContent = `Luxury ${level}`;
   } else {
     elements.luxuryStatus.textContent = "Купить Luxury";
     elements.luxuryStatus.classList.remove("owned");
+    elements.profileLuxury.textContent = "Нет активного Luxury";
   }
 
   const canCalendar = Boolean(viewer?.can_use_calendar);
@@ -287,13 +385,13 @@ function renderActive(auction) {
   const currency = currencyIcon(auction.currency);
   const seller = auction.seller;
   elements.activeLotNumber.textContent = `Лот #${auction.id}`;
-  elements.activeName.textContent = [card.hero_name, card.name].filter(Boolean).join(" — ")
-    || "Карточный лот";
+  elements.activeName.textContent =
+    [card.hero_name, card.name].filter(Boolean).join(" — ") || "Карточный лот";
   elements.activeRarity.textContent = `★ ${rarityLabel(card.rarity)}`;
-  elements.activeSeller.textContent = seller
-    ? `Продавец: ${seller.display_name}${seller.verified ? " · подтверждён" : " · не верифицирован"}`
-    : "Продавец: данные уточняются";
-  elements.activeSeller.classList.toggle("unverified", Boolean(seller && !seller.verified));
+  elements.activeSeller.textContent = seller?.verified
+    ? "Продавец: скрыт · подтверждён"
+    : "Продавец: скрыт · не верифицирован";
+  elements.activeSeller.classList.toggle("unverified", !seller?.verified);
 
   elements.activePrice.textContent = `${auction.display_price} ${currency}`.trim();
   elements.activeStartPrice.textContent = `Старт: ${auction.start_price} ${currency}`.trim();
@@ -308,8 +406,7 @@ function renderActive(auction) {
   elements.activeCardMeta.replaceChildren();
   if (card.obtain_amount > 0) {
     const reward = document.createElement("span");
-    reward.textContent =
-      `Подарок +${card.obtain_amount} ${rewardIcon(card.obtain_type)}`.trim();
+    reward.textContent = `Подарок +${card.obtain_amount} ${rewardIcon(card.obtain_type)}`.trim();
     elements.activeCardMeta.append(reward);
   }
   if (card.num) {
@@ -324,9 +421,7 @@ function renderActive(auction) {
   const canOpen = Boolean(auction.telegram_url);
   elements.openTelegram.disabled = !canOpen;
   elements.openTelegram.dataset.url = auction.telegram_url || "";
-  elements.openTelegram.title = canOpen
-    ? ""
-    : "Лот ещё не опубликован в Telegram";
+  elements.openTelegram.title = canOpen ? "" : "Лот ещё не опубликован в Telegram";
 
   setImage(elements.activeImage, elements.activeImagePlaceholder, card);
 }
@@ -361,8 +456,7 @@ function upcomingRow(auction) {
   const price = document.createElement("span");
   price.className = "upcoming-price";
   const priceValue = document.createElement("strong");
-  priceValue.textContent =
-    `${auction.display_price} ${currencyIcon(auction.currency)}`.trim();
+  priceValue.textContent = `${auction.display_price} ${currencyIcon(auction.currency)}`.trim();
   const priceRarity = document.createElement("small");
   priceRarity.textContent = rarityLabel(card.rarity);
   price.append(priceValue, priceRarity);
@@ -398,7 +492,8 @@ function renderHome(home) {
 
   hide(elements.loading);
   hide(elements.error);
-  show(elements.page);
+  show(elements.content);
+  setView(currentView);
   schedulePolling();
 }
 
@@ -414,6 +509,9 @@ function homeErrorMessage(error) {
   }
   if (error.status === 403 && error.code === "luxury_required") {
     return "Календарь доступен пользователям Luxury.";
+  }
+  if (error.code === "request_timeout") {
+    return "Сервер отвечает слишком долго. Проверьте соединение и повторите попытку.";
   }
   return "Сервер временно недоступен. Повторите попытку.";
 }
@@ -509,7 +607,8 @@ async function boot() {
   window.clearInterval(pollTimer);
   window.clearInterval(countdownTimer);
   hide(elements.error);
-  hide(elements.page);
+  hide(elements.content);
+  currentView = "auction";
   setLoading("Открываем аукционы", "Проверяем Telegram-сессию и актуальные лоты.");
 
   initData = telegramInitData(telegram);
@@ -521,15 +620,28 @@ async function boot() {
   }
 
   try {
-    renderProfile(await loadMe(initData));
+    const [me, home] = await Promise.all([loadMe(initData), loadAuctionHome(initData)]);
+    renderProfile(me);
     selectedDate = "";
-    renderHome(await loadAuctionHome(initData));
+    renderHome(home);
   } catch (error) {
     renderError(homeErrorMessage(error));
   }
 }
 
+const initialTheme = storedTheme() || telegramColorScheme(telegram);
+applyTheme(initialTheme);
+if (!storedTheme()) {
+  telegram?.onEvent?.("themeChanged", () => {
+    if (!storedTheme()) applyTheme(telegramColorScheme(telegram));
+  });
+}
+
 elements.retry.addEventListener("click", boot);
+elements.themeToggle.addEventListener("click", toggleTheme);
+elements.profileThemeToggle.addEventListener("click", toggleTheme);
+elements.profileShortcut.addEventListener("click", () => setView("profile"));
+elements.notificationsButton.addEventListener("click", () => setView("subscriptions"));
 elements.luxuryStatus.addEventListener("click", () => {
   if (viewerHasLuxury()) {
     showToast(elements.luxuryStatus.textContent);
@@ -545,6 +657,15 @@ elements.calendarLoad.addEventListener("click", loadSelectedCalendarDay);
 elements.openTelegram.addEventListener("click", () => {
   openTelegramLink(telegram, elements.openTelegram.dataset.url || "");
 });
+elements.rulesButton.addEventListener("click", () => {
+  elements.rulesPanel.classList.toggle("hidden");
+});
+for (const item of elements.navItems) {
+  item.addEventListener("click", () => setView(item.dataset.view || "auction"));
+}
+for (const button of elements.returnButtons) {
+  button.addEventListener("click", () => closeTelegramApp(telegram));
+}
 
 window.addEventListener("beforeunload", () => {
   window.clearInterval(pollTimer);
