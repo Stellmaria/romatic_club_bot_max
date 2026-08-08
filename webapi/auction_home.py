@@ -222,11 +222,8 @@ def _serialize_auction(
 
 
 def _public_seller(owner: Mapping[str, Any]) -> dict[str, object]:
-    username = str(owner.get("username") or "").strip().lstrip("@")
-    full_name = str(owner.get("full_name") or "").strip()
-    display_name = full_name or (f"@{username}" if username else "Seller")
+    """Expose verification only; owner identity is private in the Mini App."""
     return {
-        "display_name": display_name,
         "verified": bool(owner.get("is_trusted")),
     }
 
