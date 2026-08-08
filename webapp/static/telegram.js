@@ -13,6 +13,10 @@ export function telegramInitData(telegram) {
   return telegram?.initData?.trim() ?? "";
 }
 
+export function telegramColorScheme(telegram) {
+  return telegram?.colorScheme === "light" ? "light" : "dark";
+}
+
 export function openTelegramLink(telegram, url) {
   if (!url) return;
   if (telegram?.openTelegramLink && url.startsWith("https://t.me/")) {
@@ -24,4 +28,12 @@ export function openTelegramLink(telegram, url) {
     return;
   }
   window.location.assign(url);
+}
+
+export function closeTelegramApp(telegram) {
+  if (telegram?.close) {
+    telegram.close();
+    return;
+  }
+  window.history.back();
 }
