@@ -31,7 +31,7 @@ class MiniAppSettings:
 
         try:
             parsed = urlsplit(public_url)
-            parsed.port
+            _ = parsed.port
         except ValueError as error:
             raise MiniAppConfigurationError("WEBAPP_PUBLIC_URL: is malformed") from error
         if parsed.scheme.casefold() != "https" or not parsed.hostname:
