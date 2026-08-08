@@ -7,7 +7,6 @@ from pathlib import Path
 
 from bot.bootstrap.routers import get_router_registry
 
-
 ROOT = Path(__file__).resolve().parents[1]
 EXCHANGE_MODULES = (
     "bot/handlers/auction/exchange/common.py",
@@ -24,9 +23,7 @@ def _source(relative: str) -> str:
 def _top_level_functions(relative: str) -> set[str]:
     tree = ast.parse(_source(relative), filename=relative)
     return {
-        node.name
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
 
@@ -81,11 +78,14 @@ def test_admin_consumers_use_public_exchange_contracts() -> None:
     requests = _source("bot/handlers/admin/admin_panel_requests.py")
     diagnostics = _source("bot/handlers/admin/moderation_diagnostics.py")
     queue = _source("bot/handlers/admin/presentation/exchange_queue.py")
+    admin_exchange = _source("bot/handlers/admin/admin_panel_exchange.py")
 
     assert "from bot.handlers.auction.exchange_catalog import (" in requests
     assert "kb_exchange_approved_root" in requests
     assert "show_pending_exchange_requests" in diagnostics
     assert "format_pending_exchange_batch_card" in queue
+    assert "from bot.handlers.auction.exchange.common import currency_to_emoji" in admin_exchange
+    assert "from bot.handlers.auction.exchange import currency_to_emoji" not in admin_exchange
     assert "import _" not in requests
 
 
