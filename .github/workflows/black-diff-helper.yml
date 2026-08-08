@@ -7,13 +7,16 @@ on:
       - .github/workflows/black-diff-helper.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  black-diff:
+  black-format:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.13"
@@ -22,5 +25,16 @@ jobs:
           version: "0.11.16"
       - name: Install formatter
         run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
-      - name: Print Black diff
-        run: python -m black --diff scripts/hermes_incident_monitor.py || true
+      - name: Apply Black
+        run: python -m black scripts/hermes_incident_monitor.py
+      - name: Commit formatter result
+        shell: bash
+        run: |
+          if git diff --quiet -- scripts/hermes_incident_monitor.py; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/hermes_incident_monitor.py
+          git commit -m "Apply Black to Hermes incident monitor"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
