@@ -1,23 +1,41 @@
-async function request(path, initData, responseType = "json") {
-  const response = await fetch(path, {
-    method: "GET",
-    headers: {
-      Authorization: `tma ${initData}`,
-      Accept: responseType === "blob" ? "image/*" : "application/json",
-    },
-    credentials: "same-origin",
-    cache: "no-store",
-  });
+const DEFAULT_TIMEOUT_MS = 10000;
+const IMAGE_TIMEOUT_MS = 12000;
 
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    const error = new Error(payload.error || `HTTP ${response.status}`);
-    error.status = response.status;
-    error.code = payload.error || "";
+async function request(path, initData, responseType = "json", timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(path, {
+      method: "GET",
+      headers: {
+        Authorization: `tma ${initData}`,
+        Accept: responseType === "blob" ? "image/*" : "application/json",
+      },
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const error = new Error(payload.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.code = payload.error || "";
+      throw error;
+    }
+
+    return responseType === "blob" ? response.blob() : response.json();
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutError = new Error("request_timeout");
+      timeoutError.code = "request_timeout";
+      throw timeoutError;
+    }
     throw error;
+  } finally {
+    window.clearTimeout(timeout);
   }
-
-  return responseType === "blob" ? response.blob() : response.json();
 }
 
 export function loadMe(initData) {
@@ -35,5 +53,5 @@ export function loadFreeSlots(initData, selectedDate) {
 }
 
 export function loadCardImage(initData, path) {
-  return request(path, initData, "blob");
+  return request(path, initData, "blob", IMAGE_TIMEOUT_MS);
 }
