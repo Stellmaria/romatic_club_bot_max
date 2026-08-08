@@ -6,13 +6,13 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from bot.core.time import ensure_utc, serialize_timestamp, utc_now
+from bot.core.time import ensure_utc, serialize_timestamp, to_moscow, utc_now
 from db.auctions import (
     get_auctions_by_date,
-    get_bids_for_auction,
     get_lot_by_id,
     get_lot_owners,
     get_occupied_slots,
+    get_top_bid_for_auction,
 )
 
 PUBLIC_AUCTION_STATUSES = frozenset({"scheduled", "publishing", "active"})
@@ -79,15 +79,25 @@ async def build_auction_home(
     }
 
 
-async def list_free_slots(selected_date: date) -> list[str]:
+async def list_free_slots(
+    selected_date: date,
+    *,
+    now: datetime | None = None,
+) -> list[str]:
     occupied = await get_occupied_slots(selected_date)
     slots: list[str] = []
     current = datetime.combine(selected_date, LUXURY_DAY_START)
     last = datetime.combine(selected_date, LUXURY_DAY_LAST_START)
+    business_now = to_moscow(ensure_utc(now or utc_now()))
 
     while current <= last:
         slot_time = current.time()
-        if not any(start <= slot_time < end for start, end in occupied):
+        is_past_today = (
+            selected_date == business_now.date() and slot_time <= business_now.time()
+        )
+        if not is_past_today and not any(
+            start <= slot_time < end for start, end in occupied
+        ):
             slots.append(slot_time.strftime("%H:%M"))
         current += SLOT_DURATION
     return slots
@@ -169,11 +179,8 @@ async def _enrich_auction(
 
 
 async def _current_bid(auction_id: int) -> int | None:
-    bids = await get_bids_for_auction(auction_id)
-    if not bids:
-        return None
-    amount = bids[0].get("amount")
-    return int(amount) if amount is not None else None
+    amount, _ = await get_top_bid_for_auction(auction_id)
+    return amount
 
 
 def _serialize_auction(
