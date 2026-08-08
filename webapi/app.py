@@ -3,26 +3,33 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
 
+from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from aiohttp import web
 
-from bot.core.time import serialize_timestamp
-from db.auctions import list_auctions
+from bot.core.time import business_today
+from db.cards import get_card_by_id
 from db.lifecycle import close_db, init_db
 from db.pool import DatabaseRuntime
 from db.profile_sync import sync_user_profile
 from db.users import get_user
+from webapi.auction_home import build_auction_home, list_free_slots, parse_selected_date
+from webapi.luxury import LuxuryLevelCache
 from webapi.settings import WebAppSettings
-from webapi.telegram_auth import TelegramAuthError, ValidatedInitData, validate_init_data
+from webapi.telegram_auth import (
+    TelegramAuthError,
+    ValidatedInitData,
+    validate_init_data,
+)
 
 logger = logging.getLogger("auction_bot.webapp")
 
 SETTINGS_KEY = web.AppKey("webapp_settings", WebAppSettings)
 DB_RUNTIME_KEY = web.AppKey("webapp_db_runtime", DatabaseRuntime)
-PUBLIC_AUCTION_STATUSES = ["scheduled", "publishing", "active"]
+BOT_KEY = web.AppKey("webapp_bot", Bot)
+LUXURY_CACHE_KEY = web.AppKey("webapp_luxury_cache", LuxuryLevelCache)
 NO_STORE_HEADERS = {"Cache-Control": "no-store"}
 
 
@@ -33,6 +40,7 @@ def create_app(
 ) -> web.Application:
     app = web.Application(client_max_size=256 * 1024)
     app[SETTINGS_KEY] = settings
+    app[LUXURY_CACHE_KEY] = LuxuryLevelCache()
 
     root = (
         Path(webapp_dir).resolve()
@@ -44,7 +52,9 @@ def create_app(
 
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/api/webapp/me", me)
-    app.router.add_get("/api/webapp/auctions", auctions)
+    app.router.add_get("/api/webapp/auction-home", auction_home)
+    app.router.add_get("/api/webapp/free-slots", free_slots)
+    app.router.add_get(r"/api/webapp/cards/{card_id:\d+}/image", card_image)
     app.router.add_get("/", _index_handler(index_file))
     app.router.add_static("/static/", static_dir, append_version=True)
 
@@ -55,10 +65,15 @@ def create_app(
 
 async def _startup(app: web.Application) -> None:
     app[DB_RUNTIME_KEY] = await init_db(app[SETTINGS_KEY].database)
+    app[BOT_KEY] = Bot(token=app[SETTINGS_KEY].bot_token)
     logger.info("Mini App API started")
 
 
 async def _cleanup(app: web.Application) -> None:
+    bot = app.get(BOT_KEY)
+    if bot is not None:
+        await bot.session.close()
+
     runtime = app.get(DB_RUNTIME_KEY)
     if runtime is not None:
         await close_db(runtime)
@@ -77,14 +92,9 @@ async def healthz(_: web.Request) -> web.Response:
 
 
 async def me(request: web.Request) -> web.Response:
-    try:
-        identity = _authenticate(request)
-    except TelegramAuthError:
-        return web.json_response(
-            {"error": "telegram_auth_failed"},
-            status=401,
-            headers=NO_STORE_HEADERS,
-        )
+    identity = _authenticate_or_response(request)
+    if isinstance(identity, web.Response):
+        return identity
 
     tg_user = identity.user
     await sync_user_profile(tg_user.id, tg_user.username, tg_user.full_name)
@@ -114,38 +124,128 @@ async def me(request: web.Request) -> web.Response:
     )
 
 
-async def auctions(request: web.Request) -> web.Response:
-    try:
-        _authenticate(request)
-    except TelegramAuthError:
-        return web.json_response(
-            {"error": "telegram_auth_failed"},
-            status=401,
-            headers=NO_STORE_HEADERS,
-        )
+async def auction_home(request: web.Request) -> web.Response:
+    identity = _authenticate_or_response(request)
+    if isinstance(identity, web.Response):
+        return identity
 
-    rows = await list_auctions(PUBLIC_AUCTION_STATUSES)
+    settings = request.app[SETTINGS_KEY]
+    today = business_today()
+    try:
+        selected_date = parse_selected_date(request.query.get("date"), today=today)
+    except ValueError:
+        return _api_error("invalid_date", 400)
+
+    luxury_level = await request.app[LUXURY_CACHE_KEY].get(
+        request.app[BOT_KEY],
+        settings,
+        identity.user.id,
+    )
+    if selected_date != today and luxury_level == 0:
+        return _api_error("luxury_required", 403)
+
+    snapshot = await build_auction_home(
+        selected_date,
+        channel_username=settings.auction_channel_username,
+    )
+    snapshot["is_today"] = selected_date == today
+    snapshot["viewer"] = _viewer_payload(luxury_level, settings)
+    return web.json_response(snapshot, headers=NO_STORE_HEADERS)
+
+
+async def free_slots(request: web.Request) -> web.Response:
+    identity = _authenticate_or_response(request)
+    if isinstance(identity, web.Response):
+        return identity
+
+    settings = request.app[SETTINGS_KEY]
+    luxury_level = await request.app[LUXURY_CACHE_KEY].get(
+        request.app[BOT_KEY],
+        settings,
+        identity.user.id,
+    )
+    if luxury_level == 0:
+        return _api_error("luxury_required", 403)
+
+    today = business_today()
+    try:
+        selected_date = parse_selected_date(request.query.get("date"), today=today)
+    except ValueError:
+        return _api_error("invalid_date", 400)
+
+    slots = await list_free_slots(selected_date)
     return web.json_response(
-        {"auctions": [_serialize_auction(row) for row in rows]},
+        {"date": selected_date.isoformat(), "slots": slots},
         headers=NO_STORE_HEADERS,
     )
 
 
-def _serialize_auction(row: Mapping[str, Any]) -> dict[str, object]:
-    start_time = row.get("start_time")
-    end_time = row.get("end_time")
-    card_id = row.get("card_id")
+async def card_image(request: web.Request) -> web.Response:
+    identity = _authenticate_or_response(request)
+    if isinstance(identity, web.Response):
+        return identity
+
+    card_id = int(request.match_info["card_id"])
+    card = await get_card_by_id(card_id)
+    if not card:
+        return _api_error("card_not_found", 404)
+
+    file_id = _card_file_id(card)
+    if file_id is None:
+        return _api_error("card_image_not_found", 404)
+
+    try:
+        downloaded = await request.app[BOT_KEY].download(file_id)
+    except TelegramAPIError:
+        logger.warning("Unable to download Telegram media for card %s", card_id)
+        return _api_error("card_image_unavailable", 502)
+
+    if downloaded is None:
+        return _api_error("card_image_unavailable", 502)
+
+    return web.Response(
+        body=downloaded.read(),
+        content_type="image/jpeg",
+        headers=NO_STORE_HEADERS,
+    )
+
+
+def _viewer_payload(
+    luxury_level: int,
+    settings: WebAppSettings,
+) -> dict[str, object]:
     return {
-        "id": int(row["auction_id"]),
-        "card_id": int(card_id) if card_id is not None else None,
-        "card_name": str(row.get("card_name") or ""),
-        "hero_name": str(row.get("hero_name") or ""),
-        "start_price": int(row.get("start_price") or 0),
-        "currency": str(row.get("currency") or ""),
-        "status": str(row.get("status") or ""),
-        "start_time": serialize_timestamp(start_time) if start_time is not None else None,
-        "end_time": serialize_timestamp(end_time) if end_time is not None else None,
+        "luxury_level": luxury_level,
+        "luxury_label": f"Luxury {luxury_level}" if luxury_level else None,
+        "can_use_calendar": luxury_level > 0,
+        "can_use_free_slots": luxury_level > 0,
+        "luxury_contact_url": settings.luxury_contact_url,
     }
+
+
+def _card_file_id(card: dict) -> str | None:
+    for key in ("media_file_id", "image_id", "thumb_file_id"):
+        value = str(card.get(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _authenticate_or_response(
+    request: web.Request,
+) -> ValidatedInitData | web.Response:
+    try:
+        return _authenticate(request)
+    except TelegramAuthError:
+        return _api_error("telegram_auth_failed", 401)
+
+
+def _api_error(code: str, status: int) -> web.Response:
+    return web.json_response(
+        {"error": code},
+        status=status,
+        headers=NO_STORE_HEADERS,
+    )
 
 
 def _authenticate(request: web.Request) -> ValidatedInitData:
