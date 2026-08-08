@@ -30,7 +30,7 @@ from zoneinfo import ZoneInfo
 from html import escape as _h
 from bot.handlers.admin.helper.new.wrapper import admin_only
 from bot.services.admin_thanks import build_thanks_kb
-from bot.handlers.auction.exchange import currency_to_emoji
+from bot.handlers.auction.exchange.common import currency_to_emoji
 from datetime import datetime
 from db.cards import (
     get_card_by_id,
@@ -74,23 +74,27 @@ from bot.handlers.admin.presentation.exchange_queue import (
 from bot.handlers.admin.presentation.media import extract_media_file_id
 from bot.services.admin_thanks import admin_tag
 
+
 def _short_media(v: object) -> str:
     # чтобы file_id не раздувал логи
     return short_media_id(v) if "short_media_id" in globals() else (str(v)[:12] + "…" if v else "—")
 
+
 async def _log_exchange_batch_action(
-        bot: Bot,
-        *,
-        action_type: str,
-        admin_user: types.User,
-        batch_id: int,
-        status: str,
+    bot: Bot,
+    *,
+    action_type: str,
+    admin_user: types.User,
+    batch_id: int,
+    status: str,
 ) -> None:
     batch = await get_exchange_batch_by_id(int(batch_id))
 
     # fallback, если заявка исчезла
     if not batch:
-        title = {"approved": "одобрено", "rejected": "отклонено", "deleted": "удалено"}.get(status, status)
+        title = {"approved": "одобрено", "rejected": "отклонено", "deleted": "удалено"}.get(
+            status, status
+        )
         log_text = (
             f"🛒 <b>Биржа: {title}</b>\n"
             f"🕒 {datetime.now(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S')} (МСК)\n"
@@ -166,7 +170,9 @@ async def _log_exchange_batch_action(
     created_at = batch.get("created_at")
     try:
         if isinstance(created_at, datetime):
-            created_msk = created_at.astimezone(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y %H:%M")
+            created_msk = created_at.astimezone(ZoneInfo("Europe/Moscow")).strftime(
+                "%d.%m.%Y %H:%M"
+            )
         else:
             created_msk = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y %H:%M")
     except Exception:
@@ -202,6 +208,7 @@ async def _log_exchange_batch_action(
         ),
     )
 
+
 def _extract_video_from_message(msg: Message) -> tuple[str, str | None, str | None] | None:
     """
     Возвращает (file_id, unique_id, thumb_file_id) для video/animation/video-document.
@@ -219,17 +226,23 @@ def _extract_video_from_message(msg: Message) -> tuple[str, str | None, str | No
 
     return None
 
+
 PEX_PREFIX = "pex"  # callback: pex|<batch_id>|<action>
+
 
 class PrintExFSM(StatesGroup):
     winner = State()
     price = State()
     link = State()
 
+
 def _pex_cb(batch_id: int, action: str) -> str:
     return f"{PEX_PREFIX}|{int(batch_id)}|{action}"
 
-def _safe_user_mention(user_id: int | None, username: str | None, *, title: str | None = None) -> str:
+
+def _safe_user_mention(
+    user_id: int | None, username: str | None, *, title: str | None = None
+) -> str:
     """
     Формирует упоминание для parse_mode=HTML:
     - если есть username -> возвращает @username (ровно один @)
@@ -249,10 +262,14 @@ def _safe_user_mention(user_id: int | None, username: str | None, *, title: str 
 
     return "—"
 
+
 async def _build_print_ex_view(batch_id: int) -> tuple[str, InlineKeyboardMarkup]:
     batch = await get_exchange_batch_by_id(int(batch_id))
     if not batch:
-        return (f"⚠️ Заявка биржи не найдена: <code>{batch_id}</code>", InlineKeyboardMarkup(inline_keyboard=[]))
+        return (
+            f"⚠️ Заявка биржи не найдена: <code>{batch_id}</code>",
+            InlineKeyboardMarkup(inline_keyboard=[]),
+        )
 
     items = await get_exchange_items_by_batch_id(int(batch_id))
 
@@ -287,7 +304,9 @@ async def _build_print_ex_view(batch_id: int) -> tuple[str, InlineKeyboardMarkup
 
     if items:
         for it in items:
-            nm = f"{(it.get('hero_name') or '').strip()} — {(it.get('card_name') or '').strip()}".strip(" —")
+            nm = f"{(it.get('hero_name') or '').strip()} — {(it.get('card_name') or '').strip()}".strip(
+                " —"
+            )
             qty = int(it.get("qty") or 1)
             lines.append(f"• {nm} ×{qty}  (<code>card_id={it.get('card_id')}</code>)")
     else:
@@ -301,24 +320,37 @@ async def _build_print_ex_view(batch_id: int) -> tuple[str, InlineKeyboardMarkup
         f"Отправлено: {sent}",
     ]
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="📨 Отправить обоим", callback_data=_pex_cb(batch_id, "send_both")),
-        ],
-        [
-            InlineKeyboardButton(text="👤 Сменить победителя", callback_data=_pex_cb(batch_id, "set_winner")),
-            InlineKeyboardButton(text="💰 Сменить цену", callback_data=_pex_cb(batch_id, "set_price")),
-        ],
-        [
-            InlineKeyboardButton(text="🔗 Сменить ссылку", callback_data=_pex_cb(batch_id, "set_link")),
-            InlineKeyboardButton(text="♻️ Сброс", callback_data=_pex_cb(batch_id, "reset")),
-        ],
-        [
-            InlineKeyboardButton(text="🧙 Мастер", callback_data=_pex_cb(batch_id, "wizard")),
-            InlineKeyboardButton(text="🔄 Обновить", callback_data=_pex_cb(batch_id, "refresh")),
-        ],
-    ])
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📨 Отправить обоим", callback_data=_pex_cb(batch_id, "send_both")
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👤 Сменить победителя", callback_data=_pex_cb(batch_id, "set_winner")
+                ),
+                InlineKeyboardButton(
+                    text="💰 Сменить цену", callback_data=_pex_cb(batch_id, "set_price")
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔗 Сменить ссылку", callback_data=_pex_cb(batch_id, "set_link")
+                ),
+                InlineKeyboardButton(text="♻️ Сброс", callback_data=_pex_cb(batch_id, "reset")),
+            ],
+            [
+                InlineKeyboardButton(text="🧙 Мастер", callback_data=_pex_cb(batch_id, "wizard")),
+                InlineKeyboardButton(
+                    text="🔄 Обновить", callback_data=_pex_cb(batch_id, "refresh")
+                ),
+            ],
+        ]
+    )
     return ("\n".join(lines), kb)
+
 
 async def _safe_edit(message: Message, text: str, reply_markup: InlineKeyboardMarkup) -> None:
     try:
@@ -328,12 +360,14 @@ async def _safe_edit(message: Message, text: str, reply_markup: InlineKeyboardMa
             return
         raise
 
+
 HOWMAX_TEXT = (
     "Регистрируетесь в боте <b>@RomanticClubBot</b>, нажимаете кнопку <b>Старт</b> и ждёте результат.\n"
     "Вам придут данные владельца/покупателя.\n"
     "Если возникнет ошибка, с вами свяжется админ.\n"
     "Обычно срок ожидания <b>одни сутки</b>."
 )
+
 
 def _pick_media_file(message: types.Message):
     """
@@ -367,6 +401,7 @@ def _pick_media_file(message: types.Message):
         return "sticker", message.sticker
 
     return None, None
+
 
 router = Router(name=__name__)
 
@@ -477,7 +512,9 @@ async def cmd_fileid(message: types.Message):
     src = message.reply_to_message or message
     fid = extract_media_file_id(src)
     if not fid:
-        await message.answer("Нет медиа в сообщении (пришли/перешли видео или ответь /fileid на видео).")
+        await message.answer(
+            "Нет медиа в сообщении (пришли/перешли видео или ответь /fileid на видео)."
+        )
         return
     await message.answer(f"file_id:\n<code>{fid}</code>", parse_mode="HTML")
 
@@ -542,13 +579,17 @@ async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
         return
 
     if action in {"set_winner", "set_price", "set_link", "wizard"}:
-        await state.update_data(pex_batch_id=batch_id, pex_chat_id=call.message.chat.id,
-                                pex_msg_id=call.message.message_id)
+        await state.update_data(
+            pex_batch_id=batch_id,
+            pex_chat_id=call.message.chat.id,
+            pex_msg_id=call.message.message_id,
+        )
 
         if action in {"set_winner", "wizard"}:
             await state.set_state(PrintExFSM.winner)
             await call.message.answer(
-                "Пришли <b>победителя</b>: <code>user_id</code> или <code>@username</code> (можно форвард).")
+                "Пришли <b>победителя</b>: <code>user_id</code> или <code>@username</code> (можно форвард)."
+            )
             await call.answer()
             return
 
@@ -655,7 +696,9 @@ async def cb_print_ex(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
                 show_alert=True,
             )
         else:
-            await call.answer("Не удалось отправить владельцу. Лот закрыт, проверь вручную.", show_alert=True)
+            await call.answer(
+                "Не удалось отправить владельцу. Лот закрыт, проверь вручную.", show_alert=True
+            )
 
         text, kb = await _build_print_ex_view(batch_id)
         await _safe_edit(call.message, text, kb)
@@ -696,7 +739,9 @@ async def pex_set_winner(message: Message, state: FSMContext, bot: Bot) -> None:
             winner_id = int(t)
 
     if not winner_id:
-        await message.answer("⚠️ Не понял победителя. Пришли <code>user_id</code>, <code>@username</code> или форвард.")
+        await message.answer(
+            "⚠️ Не понял победителя. Пришли <code>user_id</code>, <code>@username</code> или форвард."
+        )
         return
 
     await set_exchange_manual_winner(batch_id, winner_id, winner_un, admin_id)
@@ -870,7 +915,9 @@ async def ex1_delete_ask(call: CallbackQuery):
     batch_id = int(split_callback_data(call.data or "", "|", 1)[1])
     await call.answer()
     try:
-        await call.message.edit_reply_markup(reply_markup=build_exchange_one_delete_confirmation(batch_id))
+        await call.message.edit_reply_markup(
+            reply_markup=build_exchange_one_delete_confirmation(batch_id)
+        )
     except Exception:
         pass
 
@@ -889,7 +936,9 @@ async def ex1_delete_no(call: CallbackQuery):
 
     await call.answer("Ок, не удаляем")
     try:
-        await call.message.edit_reply_markup(reply_markup=build_exchange_one_keyboard(batch_id, has_proof=has_proof))
+        await call.message.edit_reply_markup(
+            reply_markup=build_exchange_one_keyboard(batch_id, has_proof=has_proof)
+        )
     except Exception:
         pass
 
