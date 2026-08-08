@@ -24,7 +24,7 @@ class WebAppSettings:
         environ: Mapping[str, str] | None = None,
         *,
         project_root: str | Path | None = None,
-    ) -> "WebAppSettings":
+    ) -> WebAppSettings:
         env = os.environ if environ is None else environ
         issues: list[ConfigurationIssue] = []
 
