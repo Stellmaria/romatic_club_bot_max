@@ -1,0 +1,54 @@
+name: Quality Autofix
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  autofix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.11.16"
+      - name: Install hashed development graph
+        run: uv pip install --system --require-hashes --no-deps -r requirements/dev.lock
+      - name: Format and autofix changed Python files
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          merge_base="$(git merge-base origin/main HEAD)"
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMR "${merge_base}...HEAD" -- '*.py')
+          if (( ${#files[@]} == 0 )); then
+            exit 0
+          fi
+          python -m black "${files[@]}"
+          python -m ruff check --fix --select E,F,I,B,BLE,ASYNC,S,SIM,UP,C4,PIE,RUF,C90,ARG --ignore S101,S603,S607 "${files[@]}"
+      - name: Commit autofixes when needed
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if git diff --quiet -- '*.py'; then
+            echo "No Python autofixes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- '*.py'
+          git commit -m "Apply changed-file quality autofixes"
+          git push origin "HEAD:${BRANCH}"
