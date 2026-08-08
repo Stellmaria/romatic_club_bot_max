@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Romantic Club</title>
+    <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ROMANTIC CLUB</p>
+          <h1>Профиль</h1>
+        </div>
+        <div id="avatar" class="avatar" aria-hidden="true">RC</div>
+      </header>
+
+      <section id="loading" class="panel status-panel">
+        <div class="spinner" aria-hidden="true"></div>
+        <div>
+          <strong>Загружаем профиль</strong>
+          <p>Telegram проверяет, кто именно открыл приложение.</p>
+        </div>
+      </section>
+
+      <section id="error" class="panel status-panel hidden" role="alert">
+        <div>
+          <strong>Не удалось открыть профиль</strong>
+          <p id="error-message">Откройте приложение из Telegram-бота.</p>
+        </div>
+        <button id="retry" class="button" type="button">Повторить</button>
+      </section>
+
+      <section id="profile" class="hidden">
+        <article class="panel hero-card">
+          <div>
+            <p class="muted">Пользователь</p>
+            <h2 id="full-name">...</h2>
+            <p id="username" class="username"></p>
+          </div>
+          <span id="premium" class="badge hidden">Premium</span>
+        </article>
+
+        <div class="section-title">
+          <h3>Разделы</h3>
+          <span>Первый технический прототип</span>
+        </div>
+
+        <div class="action-grid">
+          <button class="action-card" type="button" disabled>
+            <span class="action-icon">◇</span>
+            <strong>Коллекция</strong>
+            <span>Скоро</span>
+          </button>
+          <button class="action-card" type="button" disabled>
+            <span class="action-icon">↗</span>
+            <strong>Аукцион</strong>
+            <span>Скоро</span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Основная навигация">
+      <button class="nav-item active" type="button" aria-current="page">Профиль</button>
+      <button class="nav-item" type="button" disabled>Коллекция</button>
+      <button class="nav-item" type="button" disabled>Аукцион</button>
+    </nav>
+
+    <script type="module" src="/static/main.js"></script>
+  </body>
+</html>
