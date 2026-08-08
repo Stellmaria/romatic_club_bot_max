@@ -37,7 +37,9 @@ class MiniAppSettings:
         if parsed.scheme.casefold() != "https" or not parsed.hostname:
             raise MiniAppConfigurationError("WEBAPP_PUBLIC_URL: must be an absolute HTTPS URL")
         if parsed.username is not None or parsed.password is not None:
-            raise MiniAppConfigurationError("WEBAPP_PUBLIC_URL: must not contain embedded credentials")
+            raise MiniAppConfigurationError(
+                "WEBAPP_PUBLIC_URL: must not contain embedded credentials"
+            )
         if parsed.fragment:
             raise MiniAppConfigurationError("WEBAPP_PUBLIC_URL: must not contain a URL fragment")
         return cls(public_url=public_url)

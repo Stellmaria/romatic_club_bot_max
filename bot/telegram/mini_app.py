@@ -1,4 +1,3 @@
-# ruff: noqa: RUF001
 """Telegram Bot API integration for the Mini App launch button."""
 
 from __future__ import annotations
