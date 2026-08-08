@@ -9,12 +9,14 @@ from pathlib import Path
 
 from bot.core.settings import ConfigurationError, ConfigurationIssue, DatabaseSettings
 
+DEFAULT_WEBAPP_HOST = "0.0.0.0"  # noqa: S104 - container listener behind the host proxy
+
 
 @dataclass(frozen=True, slots=True)
 class WebAppSettings:
     bot_token: str
     database: DatabaseSettings
-    host: str = "0.0.0.0"
+    host: str = DEFAULT_WEBAPP_HOST
     port: int = 8080
     auth_max_age_seconds: int = 3600
 
@@ -32,7 +34,7 @@ class WebAppSettings:
         if not bot_token:
             issues.append(ConfigurationIssue("BOT_TOKEN", "is required"))
 
-        host = str(env.get("WEBAPP_HOST", "0.0.0.0")).strip() or "0.0.0.0"
+        host = str(env.get("WEBAPP_HOST", DEFAULT_WEBAPP_HOST)).strip() or DEFAULT_WEBAPP_HOST
         port = _read_positive_int(env, "WEBAPP_PORT", 8080, issues, maximum=65535)
         auth_max_age_seconds = _read_positive_int(
             env,
